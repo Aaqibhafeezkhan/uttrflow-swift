@@ -73,8 +73,12 @@ public struct SystemFileSystem: FileSystemProbing {
     public func kind(atPath path: String) -> PathKind {
         guard let volume = Self.remoteVolume(of: path) else { return probe(path) }
         guard !slow.isSlow(volume, at: now()) else { return .unknown }
-        // A worker still running past its own deadline is not restarted; only the one that started it may end it.
-        guard inFlight.begin(volume) else { return .unknown }
+        // A worker still out is not doubled until its claim lapses, so a hung stat never outlasts the cooldown.
+        let moment = now()
+        guard let claim = inFlight.begin(volume, at: moment, lapsingAfter: Self.slowVolumeLifetimeInSeconds)
+        else {
+            return .unknown
+        }
         let probe = self.probe
         let inFlight = self.inFlight
         guard
@@ -82,7 +86,7 @@ public struct SystemFileSystem: FileSystemProbing {
                 budget,
                 {
                     let kind = probe(path)
-                    inFlight.end(volume)
+                    inFlight.end(volume, claim: claim)
                     return kind
                 })
         else {
@@ -163,20 +167,24 @@ private final class SlowVolumes: Sendable {
     }
 }
 
-/// The volumes with a probe out right now, each claimed by the one worker allowed to run it.
+/// The volumes with a probe out right now, each claim lapsing after a set time so a stat that never returns cannot hold it.
 private final class InFlightVolumes: Sendable {
-    private let volumes = Mutex<Set<String>>([])
+    private let claims = Mutex<(next: Int, held: [String: (id: Int, since: Date)])>((0, [:]))
 
-    /// Claims this volume for one probe, answering whether it was free to claim; only that call may later end it.
-    func begin(_ volume: String) -> Bool {
-        volumes.withLock {
-            guard !$0.contains(volume) else { return false }
-            $0.insert(volume)
-            return true
+    /// Claims this volume for one probe when it is free or its claim has lapsed, answering the claim that may later end it.
+    func begin(_ volume: String, at moment: Date, lapsingAfter lifetime: Double) -> Int? {
+        claims.withLock {
+            if let held = $0.held[volume], moment.timeIntervalSince(held.since) < lifetime { return nil }
+            $0.next += 1
+            $0.held[volume] = ($0.next, moment)
+            return $0.next
         }
     }
 
-    func end(_ volume: String) {
-        volumes.withLock { _ = $0.remove(volume) }
+    /// Releases the volume only while this claim is still the one holding it.
+    func end(_ volume: String, claim: Int) {
+        claims.withLock {
+            if $0.held[volume]?.id == claim { $0.held[volume] = nil }
+        }
     }
 }
