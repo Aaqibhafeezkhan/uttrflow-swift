@@ -507,10 +507,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         presentOnboarding(skippingWelcome: false)
     }
 
-    /// Builds the flow fresh each time, because a finished one would open on its last page.
+    /// Brings forward the flow already open, else builds a fresh one so a finished flow never reopens on its last page.
     private func presentOnboarding(skippingWelcome: Bool, askingToSignIn: Bool = false) {
-        let onboarding = OnboardingWindowController(
-            settingsStore: settingsStore, installer: speechInstall, account: account)
+        let (onboarding, isNew) = OnboardingWindowController.reusing(onboarding) {
+            OnboardingWindowController(
+                settingsStore: settingsStore, installer: speechInstall, account: account)
+        }
+        guard isNew else {
+            onboarding.present(skippingWelcome: skippingWelcome, askingToSignIn: askingToSignIn)
+            return
+        }
         self.onboarding = onboarding
         onboarding.onFinish = { [weak self] _ in
             guard let self else { return }
