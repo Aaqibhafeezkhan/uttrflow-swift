@@ -9,6 +9,7 @@ import Synchronization
 final class FakeMicrophoneSource: MicrophoneSource {
     private struct State {
         var handler: (@Sendable ([Float]) -> Void)?
+        var handedOut: [@Sendable ([Float]) -> Void] = []
         var interrupted: (@Sendable (CaptureInterruption) -> Void)?
         var startCount = 0
         var stopCount = 0
@@ -31,6 +32,7 @@ final class FakeMicrophoneSource: MicrophoneSource {
             state.startCount += 1
             if state.startError == nil {
                 state.handler = onSamples
+                state.handedOut.append(onSamples)
                 state.interrupted = onInterruption
             }
             return state.startError
@@ -71,6 +73,11 @@ final class FakeMicrophoneSource: MicrophoneSource {
     /// Delivers samples the way a real tap would, from outside the engine's actor.
     func emit(_ samples: [Float]) {
         state.withLock(\.handler)?(samples)
+    }
+
+    /// Calls the sink a given start handed over, as a render callback already in flight at teardown does.
+    func emitLate(_ samples: [Float], toStart index: Int) {
+        state.withLock { $0.handedOut[index] }(samples)
     }
 
     var isDelivering: Bool { state.withLock { $0.handler != nil } }
