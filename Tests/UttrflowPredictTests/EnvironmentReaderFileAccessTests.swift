@@ -70,4 +70,15 @@ struct EnvironmentReaderFileAccessTests {
     @Test func aRemoteHomeIsNeverReadForAliases() async {
         #expect(await reader(guardedSystem()).values(of: .alias, in: "/tmp") == [])
     }
+
+    @Test func branchesAreReadThroughTheFilesystemAndHeldBetweenRefreshes() async {
+        let disk = FakeDisk(directories: ["/p/.git/refs/heads"], files: ["/p/.git/HEAD"])
+        let reader = reader(disk)
+        _ = await reader.values(of: .branch, in: "/p")
+        let first = disk.operations.filter { if case .stat = $0 { true } else { false } }.count
+        _ = await reader.values(of: .branch, in: "/p")
+        let second = disk.operations.filter { if case .stat = $0 { true } else { false } }.count
+        #expect(first > 0)
+        #expect(second == first)
+    }
 }
