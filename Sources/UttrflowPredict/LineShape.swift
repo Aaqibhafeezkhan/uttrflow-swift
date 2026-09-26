@@ -10,6 +10,8 @@ enum ArgumentKind: Equatable, Sendable {
     case file
     /// A branch of the repository here.
     case branch
+    /// A branch of the repository here, or a file here, as git's history and diff verbs take either.
+    case branchOrFile
     /// Anything: a flag, a pattern, a message, a host, a word the command reads as text.
     case free
 }
@@ -81,8 +83,11 @@ enum CommandGrammar {
 
     /// git's verbs that take a branch, or a path where the branch would go.
     static let gitBranchVerbs: Set<String> = [
-        "checkout", "switch", "merge", "rebase", "branch", "cherry-pick", "log", "diff", "reset",
+        "checkout", "switch", "merge", "rebase", "branch", "cherry-pick",
     ]
+
+    /// git's verbs that take a branch or a bare file with equal right.
+    static let gitBranchOrFileVerbs: Set<String> = ["log", "diff", "reset"]
 
     /// git's verbs that take paths.
     static let gitFileVerbs: Set<String> = ["add", "rm", "mv", "restore"]
@@ -121,6 +126,7 @@ enum CommandGrammar {
         guard let verb = arguments.first else { return .subcommand(of: command) }
         if command == "git" {
             if gitBranchVerbs.contains(verb) { return .branch }
+            if gitBranchOrFileVerbs.contains(verb) { return .branchOrFile }
             return gitFileVerbs.contains(verb) ? .file : .free
         }
         // A package manager's `run` takes the project's own scripts, which the project file names.
