@@ -65,6 +65,22 @@ public enum DestructiveCommand {
         return .none
     }
 
+    /// The first kubectl argument that is neither a global flag nor the value a flag takes.
+    private static func kubectlVerb(_ lowered: [String]) -> String? {
+        let valued: Set = [
+            "-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user", "-s", "--server",
+            "--token", "--as", "--as-group", "--as-uid", "--request-timeout", "-v", "--v", "--cache-dir",
+            "--certificate-authority", "--client-certificate", "--client-key", "--tls-server-name",
+            "--password", "--username", "--profile", "--profile-output", "--log-file", "--vmodule",
+        ]
+        var rest = lowered[...]
+        while let word = rest.popFirst() {
+            guard word.hasPrefix("-") else { return word }
+            if valued.contains(word), !rest.isEmpty { rest.removeFirst() }
+        }
+        return nil
+    }
+
     /// A parsed command word as the program it names, lowercased.
     private static func programName(_ word: String) -> String {
         (word.split(separator: "/").last.map(String.init) ?? word).lowercased()
@@ -95,7 +111,7 @@ public enum DestructiveCommand {
                 return true
             }
         case "kubectl":
-            if lowered.first == "delete" { return true }
+            if kubectlVerb(lowered) == "delete" { return true }
         case "terraform", "tofu":
             if lowered.contains("destroy") || lowered.contains("-destroy") { return true }
         case "crontab":
