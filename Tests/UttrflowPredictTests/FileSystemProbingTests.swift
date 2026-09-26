@@ -170,4 +170,21 @@ struct SystemFileSystemTests {
         _ = cached.kind(atPath: "/a")
         #expect(disk.operations.last == .stat("/a"))
     }
+
+    @Test("A directory listing is believed for its lifetime, per limit, and asked again after it.")
+    func cachedListing() {
+        let clock = HandClock()
+        let disk = FakeDisk(directories: ["/a"], texts: ["/a/t": "text"])
+        let cached = CachedFileSystem(disk, now: { clock.now })
+        #expect(cached.names(inDirectory: "/a", limit: 10) == ["t"])
+        #expect(cached.names(inDirectory: "/a", limit: 10) == ["t"])
+        #expect(disk.operations == [.list("/a")])
+        #expect(cached.names(inDirectory: "/a", limit: 0) == nil)
+        #expect(disk.operations == [.list("/a"), .list("/a")])
+        clock.advance(by: CachedFileSystem.lifetimeInSeconds)
+        _ = cached.names(inDirectory: "/a", limit: 10)
+        #expect(disk.operations.count == 3)
+        _ = cached.kind(atPath: "/a")
+        #expect(disk.operations.last == .stat("/a"))
+    }
 }
