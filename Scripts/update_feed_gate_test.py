@@ -7,10 +7,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import json
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GATE = os.path.join(HERE, "update_feed_gate.py")
+CASES = os.path.join(HERE, "update_feed_cases.json")
 KEY = "apWgly8fYgdo1U2MUj56SuqUqZ4QHv5GRZIbuLT0PGE="
 
 
@@ -41,6 +43,16 @@ class FeedGateTests(unittest.TestCase):
                 run = self.run_gate("classify", url)
                 self.assertEqual(run.returncode, 0, run.stderr)
                 self.assertEqual(run.stdout.strip(), expected)
+
+    def test_agrees_with_the_table_the_app_is_tested_against(self):
+        with open(CASES, encoding="utf-8") as handle:
+            cases = json.load(handle)
+        for url in cases["accepted"]:
+            with self.subTest(url=url):
+                self.assertEqual(self.run_gate("classify", url).returncode, 0)
+        for url in cases["refused"]:
+            with self.subTest(url=url):
+                self.assertNotEqual(self.run_gate("classify", url).returncode, 0)
 
     def test_refuses_lookalikes_and_malformed_feeds(self):
         for url in [
