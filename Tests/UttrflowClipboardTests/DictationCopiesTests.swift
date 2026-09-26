@@ -110,7 +110,7 @@ struct DictationCopiesTests {
         #expect(decoded.dictatedText == "a")
     }
 
-    @Test("the same words dictated twice are one clip that either dictation deletes")
+    @Test("the same words dictated twice are one clip that goes only with both dictations")
     func repeatKeepsBothLinks() async throws {
         let folder = try TemporaryFolder()
         let first = UUID()
@@ -122,8 +122,13 @@ struct DictationCopiesTests {
         let merged = try #require(await folder.store.clips(keeping: folder.retention).first)
         #expect(merged.dictations == [first, second])
 
-        _ = try await folder.store.deleteCopies(
+        let left = try await folder.store.deleteCopies(
             ofDictation: first, saying: nil, keeping: folder.retention)
+        #expect(left.map(\.id) == [merged.id])
+        #expect(left.first?.dictations == [second])
+
+        _ = try await folder.store.deleteCopies(
+            ofDictation: second, saying: nil, keeping: folder.retention)
         #expect(await folder.store.clips(keeping: folder.retention).isEmpty)
     }
 
