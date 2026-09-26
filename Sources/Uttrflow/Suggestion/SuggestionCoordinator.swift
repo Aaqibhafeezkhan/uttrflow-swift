@@ -464,7 +464,8 @@ final class SuggestionCoordinator {
             )
             // A prose pause is answered the moment it is long enough, rather than at whatever tick comes next.
             if silence == .writingFluently {
-                wake(.tick, afterMilliseconds: Self.hesitationWake(sinceKeystroke: lastKeystroke, now: Date()))
+                let delay = Self.hesitationWake(sinceKeystroke: lastKeystroke, now: Date())
+                wake(.tick, afterMilliseconds: delay)
             }
         }
         draw(update, in: snapshot)
