@@ -28,10 +28,21 @@ private actor FlakySink: CaptureSink {
     private(set) var superseded: [(text: String, replacement: String)] = []
     private var recordFailures: Int
     private var supersedeFailures: Int
+    private var acceptFailures: Int
+    private(set) var accepted: [String] = []
 
-    init(recordFailures: Int = 0, supersedeFailures: Int = 0) {
+    init(recordFailures: Int = 0, supersedeFailures: Int = 0, acceptFailures: Int = 0) {
         self.recordFailures = recordFailures
         self.supersedeFailures = supersedeFailures
+        self.acceptFailures = acceptFailures
+    }
+
+    func recordAccepted(_ text: String, in surface: Surface) throws {
+        if acceptFailures > 0 {
+            acceptFailures -= 1
+            throw FlakySinkError.transient
+        }
+        accepted.append(text)
     }
 
     func record(
@@ -572,6 +583,52 @@ struct CaptureSessionTransientFailureTests {
         #expect(outcome == .recorded("git push"))
         #expect(await sink.recorded == ["git pu", "git push"])
         #expect(await sink.superseded.map(\.text) == ["git pu"])
+    }
+
+    @Test("A failed acceptance write is retried by the next event, once.")
+    func failedAcceptanceIsRetried() async throws {
+        let scratch = Scratch()
+        let sink = FlakySink(recordFailures: 1)
+        let session = try await session(scratch, sink, allowing: ["com.example.terminal"])
+        await #expect(throws: FlakySinkError.self) {
+            _ = try await session.accepted("git status", in: terminal, at: start)
+        }
+        #expect(await session.unwrittenAcceptanceCount() == 1)
+        _ = try await session.handle(.tick(at: start.addingTimeInterval(1)), in: terminal)
+        #expect(await sink.recorded == ["git status"])
+        #expect(await sink.accepted == ["git status"])
+        #expect(await session.unwrittenAcceptanceCount() == 0)
+    }
+
+    @Test("A failed acceptance count is retried without recording its line twice.")
+    func failedCountIsRetriedAlone() async throws {
+        let scratch = Scratch()
+        let sink = FlakySink(acceptFailures: 2)
+        let session = try await session(scratch, sink, allowing: ["com.example.terminal"])
+        await #expect(throws: FlakySinkError.self) {
+            _ = try await session.accepted("git status", in: terminal, at: start)
+        }
+        _ = try await session.handle(.tick(at: start.addingTimeInterval(1)), in: terminal)
+        #expect(await session.unwrittenAcceptanceCount() == 1)
+        #expect(
+            try await session.accepted("git push", in: terminal, at: start.addingTimeInterval(2))
+                == .recorded("git push"))
+        #expect(await sink.recorded == ["git status", "git push"])
+        #expect(await sink.accepted == ["git status", "git push"])
+    }
+
+    @Test("Held acceptances are bounded, and forgetting an application drops its own.")
+    func heldAcceptancesAreBoundedAndForgotten() async throws {
+        let scratch = Scratch()
+        let limit = CaptureSession.unwrittenAcceptanceLimit
+        let sink = FlakySink(acceptFailures: 10 * limit)
+        let session = try await session(scratch, sink, allowing: ["com.example.terminal"])
+        for index in 0..<(limit + 3) {
+            _ = try? await session.accepted("line \(index)", in: terminal, at: start)
+        }
+        #expect(await session.unwrittenAcceptanceCount() == limit)
+        await session.forgetLearned(from: "com.example.terminal")
+        #expect(await session.unwrittenAcceptanceCount() == 0)
     }
 }
 

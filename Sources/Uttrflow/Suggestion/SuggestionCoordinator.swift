@@ -828,7 +828,12 @@ final class SuggestionCoordinator {
             return
         }
         guard let reading else { return }
-        _ = try? await capture.accepted(text, in: reading, at: Date())
+        do {
+            _ = try await capture.accepted(text, in: reading, at: Date())
+        } catch {
+            // The session holds the acceptance and retries it before the next event.
+            Self.log.error("An accepted suggestion's corpus write failed and is held for a retry")
+        }
     }
 
     // MARK: Consent
