@@ -213,6 +213,22 @@ struct AVAudioCaptureEngineTests {
         #expect(source.stopCount == 1)
     }
 
+    @Test("drops a block from a cancelled recording that lands after the next one starts")
+    func lateBlockFromCancelledRecordingIsDropped() async throws {
+        let source = FakeMicrophoneSource()
+        let engine = AVAudioCaptureEngine(source: source)
+        try await engine.start()
+        source.emit([0.9, 0.9])
+        await engine.cancel()
+        try await engine.start()
+        source.emitLate([0.9, 0.9, 0.9], toStart: 0)
+        source.emit([0.1])
+
+        let audio = try await engine.stop()
+
+        #expect(audio.samples == [0.1])
+    }
+
     @Test("does nothing when cancelled while idle")
     func cancelWhenIdleIsSafe() async {
         let source = FakeMicrophoneSource()
