@@ -498,9 +498,12 @@ struct DiagnosticsSummaryTests {
     /// Somebody who opens this page to be told nothing is wrong should be told, not left to check.
     @Test("says so plainly when there is nothing to do")
     func allClear() {
-        let page = DiagnosticsFixture.page(permissions: [
-            .microphone: .granted, .accessibility: .granted,
-        ])
+        let page = DiagnosticsFixture.page(
+            availability: Dictionary(
+                uniqueKeysWithValues: TransformerKind.allCases.map { ($0, true) }),
+            model: DiagnosticsModelPresence(
+                isInstalled: true, bytesOnDisk: 1_000, isMultilingual: true),
+            permissions: [.microphone: .granted, .accessibility: .granted])
 
         #expect(!page.summary.needsAttention)
         #expect(page.summary.text == "Everything Uttrflow needs is in place.")
@@ -511,5 +514,44 @@ struct DiagnosticsSummaryTests {
     @Test("an unchecked permission is not a problem")
     func unknownIsNotAttention() {
         #expect(!DiagnosticsFixture.page().summary.needsAttention)
+    }
+
+    /// #1668: a check that has not answered was read as everything being in place.
+    @Test("an unanswered check is named rather than called all clear")
+    func unknownIsNotAllClear() {
+        let page = DiagnosticsFixture.page(
+            availability: Dictionary(
+                uniqueKeysWithValues: TransformerKind.allCases.map { ($0, true) }),
+            permissions: [.microphone: .granted, .accessibility: .granted])
+
+        #expect(page.storage.first?.detail == "Not checked yet")
+        #expect(page.summary.text == "Still checking: Speech model.")
+        #expect(!page.summary.needsAttention)
+    }
+
+    @Test("a missing speech model and the summary agree")
+    func missingModelReachesTheSummary() {
+        let page = DiagnosticsFixture.page(
+            availability: Dictionary(
+                uniqueKeysWithValues: TransformerKind.allCases.map { ($0, true) }),
+            model: DiagnosticsModelPresence(
+                isInstalled: false, bytesOnDisk: nil, isMultilingual: true),
+            permissions: [.microphone: .granted, .accessibility: .granted])
+
+        #expect(page.summary.needsAttention)
+        #expect(page.summary.text == "Speech model: Not downloaded")
+    }
+
+    @Test("a missing speech model is no problem for the system recogniser")
+    func missingModelWithSystemSpeech() {
+        let page = DiagnosticsFixture.page(
+            engines: EngineConfiguration(speech: .appleSpeech, transformerPreference: [.rules]),
+            availability: [.rules: true],
+            model: DiagnosticsModelPresence(
+                isInstalled: false, bytesOnDisk: nil, isMultilingual: true),
+            permissions: [.microphone: .granted, .accessibility: .granted])
+
+        #expect(page.storage.first?.state == .good)
+        #expect(!page.summary.needsAttention)
     }
 }

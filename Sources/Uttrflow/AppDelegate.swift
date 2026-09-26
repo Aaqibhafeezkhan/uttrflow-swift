@@ -111,6 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let pressureSource = MemoryPressureSource()
     /// Which clean-up engines answered that they could run; internal so a test can read it back.
     private(set) var transformerAvailability: [TransformerKind: Bool] = [:]
+    /// What the store last said about the speech model on disk; internal so a test can read it.
+    private(set) var speechModelPresence: DiagnosticsModelPresence?
 
     /// How far along that fetch is; internal so a test can read back what it did.
     private(set) var suggestionModel: SuggestionModelReadiness = .notAsked {
@@ -248,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         pressureSource.start { [weak self] in self?.memoryPressureChanged(to: $0) }
         loadSpeechModel()
         probeTransformers()
+        probeSpeechModel()
         refreshAccount()
         presentOnboardingIfNeeded()
         // Shown at launch, since a menu-bar icon alone is an interface most people never find.
@@ -322,6 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func repairSpeechModel() {
         try? modelStore.remove(.default)
         speechReadiness = .notInstalled
+        probeSpeechModel()
         refreshSpeechModelSurfaces()
         show(.onboarding)
     }
@@ -348,6 +352,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Loads the model once its download ends, whether or not a window is still showing it.
     private func speechModelDownloadEnded() {
         if case .downloading = speechReadiness { speechReadiness = .notInstalled }
+        probeSpeechModel()
         loadSpeechModelIfItArrived()
         refreshSpeechModelSurfaces()
     }
@@ -410,6 +415,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 .readyTransformers
             transformerAvailability = Dictionary(
                 uniqueKeysWithValues: TransformerKind.allCases.map { ($0, ready.contains($0)) })
+            refreshMainWindow()
+        }
+    }
+
+    /// Reads the speech model's files off the main actor, so Diagnostics can say whether it is there.
+    @discardableResult
+    func probeSpeechModel() -> Task<Void, Never> {
+        let store = modelStore
+        return Task { [weak self] in
+            let presence = await Task.detached(priority: .utility) {
+                let model = SpeechModel.default
+                let installed = store.isInstalled(model)
+                return DiagnosticsModelPresence(
+                    isInstalled: installed, bytesOnDisk: installed ? store.bytesOnDisk(model) : nil,
+                    isMultilingual: model.isMultilingual)
+            }.value
+            guard let self else { return }
+            speechModelPresence = presence
             refreshMainWindow()
         }
     }
@@ -1843,7 +1866,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for: DiagnosticsSnapshot(
                     engines: settings.engines, speechInUse: speechInUse,
                     transformerAvailability: transformerAvailability,
-                    permissions: knownPermissions,
+                    speechModel: speechModelPresence, permissions: knownPermissions,
                     measurements: measurements, cleaning: lastCleaning)),
             account: accountPage(at: now))
     }
