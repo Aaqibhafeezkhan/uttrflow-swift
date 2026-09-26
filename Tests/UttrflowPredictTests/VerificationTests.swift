@@ -188,7 +188,7 @@ struct GeneratedAttestationTests {
             ])
     }
 
-    @Test("git's history and diff verbs check a bare word against branches and files; a branch-only verb against branches.")
+    @Test("git log, diff and reset look a bare word up as a branch or a file; checkout as a branch.")
     func historyVerbsTakeFiles() {
         #expect(asked("git log READM") == [lookup("READM", [.branch, .file])])
         #expect(asked("git diff Package.swift") == [lookup("Package.swift", [.branch, .file])])

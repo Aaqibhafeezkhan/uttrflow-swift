@@ -82,7 +82,9 @@ enum CommandGrammar {
     }
 
     /// git's verbs that take a branch, or a path where the branch would go.
-    static let gitBranchVerbs: Set<String> = ["checkout", "switch", "merge", "rebase", "branch", "cherry-pick"]
+    static let gitBranchVerbs: Set<String> = [
+        "checkout", "switch", "merge", "rebase", "branch", "cherry-pick",
+    ]
 
     /// git's verbs that take a branch or a bare file with equal right.
     static let gitBranchOrFileVerbs: Set<String> = ["log", "diff", "reset"]
