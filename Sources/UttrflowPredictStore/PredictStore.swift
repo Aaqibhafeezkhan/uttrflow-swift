@@ -255,7 +255,7 @@ public actor PredictStore: PredictionStore {
             candidates.append(
                 Candidate(
                     text: text, source: .succession, evidence: evidence,
-                    isIrreversible: DestructiveCommand.matches(text)))
+                    isIrreversible: DestructiveCommand.matches(text, failClosedOnUnresolved: true)))
         }
         return candidates
     }
@@ -322,7 +322,7 @@ public actor PredictStore: PredictionStore {
                     rejected: row.integer(3), selfSourced: row.integer(4),
                     lastUsed: Date(timeIntervalSince1970: row.double(5))),
                 editDistance: distance,
-                isIrreversible: DestructiveCommand.matches(text))
+                isIrreversible: DestructiveCommand.matches(text, failClosedOnUnresolved: true))
         }
         return Self.strongest(rows.compactMap { $0 })
     }
@@ -622,7 +622,7 @@ public actor PredictStore: PredictionStore {
                     rejected: row.integer(3), selfSourced: row.integer(4),
                     lastUsed: Date(timeIntervalSince1970: row.double(5))),
                 editDistance: distance,
-                isIrreversible: DestructiveCommand.matches(row.text(0)))
+                isIrreversible: DestructiveCommand.matches(row.text(0), failClosedOnUnresolved: true))
         }
     }
 
