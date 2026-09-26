@@ -5,7 +5,8 @@ public enum DestructiveCommand {
         // A fork bomb carries no ordinary tokens, so it is matched on the whitespace-stripped text.
         if text.lowercased().filter({ !$0.isWhitespace }).contains(":(){:|:&};:") { return true }
         let lower = text.lowercased()
-        if lower.contains("of=/dev/") || lower.contains("/dev/sd") || lower.contains("/dev/disk") {
+        if lower.contains("of=/dev/") || lower.contains("/dev/sd") || lower.contains("/dev/disk")
+            || lower.contains("/dev/rdisk") {
             return true
         }
         guard let clauses = ShellWords.commands(in: text, home: "") else { return failClosedOnUnresolved }
