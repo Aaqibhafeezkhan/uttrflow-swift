@@ -136,6 +136,17 @@ public enum FocusedFieldReader {
         guard isWanted() else { return nil }
         let flipped = cachedPrimaryScreenMaxY.withLock { $0 }
         let marked = CompositionProbe.markedText(of: field)
+        // Checked before every remaining question, so a superseded read stops where it is.
+        let tail: (document: String?, caret: CGRect?, window: CGRect?, frame: CGRect?, title: String?)
+        do {
+            tail = (
+                try unlessSuperseded(isWanted) { document(of: field) },
+                try unlessSuperseded(isWanted) { range.flatMap { caret(field, at: $0) } },
+                try unlessSuperseded(isWanted) { windowFrame(of: field) },
+                try unlessSuperseded(isWanted) { fieldFrame(of: field) },
+                try unlessSuperseded(isWanted) { windowTitle(of: field) }
+            )
+        } catch { return nil }
 
         return FocusedFieldSnapshot(
             bundleIdentifier: app.bundleIdentifier,
@@ -145,12 +156,12 @@ public enum FocusedFieldReader {
             identifier: identifier,
             placeholder: placeholder,
             accessibilityDescription: description,
-            document: document(of: field),
+            document: tail.document,
             value: secure ? nil : value,
             selection: range.map { NSRange(location: $0.location, length: $0.length) },
-            caret: range.flatMap { caret(field, at: $0) }.map { flip($0, below: flipped) },
-            window: windowFrame(of: field).map { flip($0, below: flipped) },
-            field: fieldFrame(of: field).map { flip($0, below: flipped) },
+            caret: tail.caret.map { flip($0, below: flipped) },
+            window: tail.window.map { flip($0, below: flipped) },
+            field: tail.frame.map { flip($0, below: flipped) },
             pointSize: style?.size,
             fontFamily: style?.family,
             textColor: style?.color,
@@ -159,7 +170,7 @@ public enum FocusedFieldReader {
                 markedText: marked, inputSource: CompositionProbe.inputSourceKind()),
             markedText: marked,
             readMicroseconds: Int((DispatchTime.now().uptimeNanoseconds - started) / 1000),
-            windowTitle: windowTitle(of: field)
+            windowTitle: tail.title
         )
     }
 
