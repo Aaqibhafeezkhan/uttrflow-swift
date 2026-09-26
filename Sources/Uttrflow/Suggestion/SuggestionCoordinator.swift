@@ -251,6 +251,7 @@ final class SuggestionCoordinator {
         self.isDictating = isDictating
         guard isDictating else { return }
         again = nil
+        turns.abandon()
         withdraw()
     }
 
