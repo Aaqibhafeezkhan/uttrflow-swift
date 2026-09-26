@@ -241,6 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         seedTheDictionary()
         sweepExpired()
         wireInterface()
+        CGEventKeystrokeSender.startObservingLayout()
         startWatchingForTheShortcut()
         startWatchingTheClipboard()
         startCompletingWhatIsTyped()
