@@ -6,7 +6,8 @@ public enum DestructiveCommand {
         if text.lowercased().filter({ !$0.isWhitespace }).contains(":(){:|:&};:") { return true }
         let lower = text.lowercased()
         if lower.contains("of=/dev/") || lower.contains("/dev/sd") || lower.contains("/dev/disk")
-            || lower.contains("/dev/rdisk") {
+            || lower.contains("/dev/rdisk")
+        {
             return true
         }
         guard let clauses = ShellWords.commands(in: text, home: "") else { return failClosedOnUnresolved }
