@@ -157,7 +157,7 @@ mid-dictation (#887). The system-wide focus query itself runs under the system d
 Every one of those calls blocks the thread that sends it for as long as the target takes to
 answer. Swift's cooperative pool has about one thread per core, so a call made from `async`
 code would hold a pool thread for up to 2 s per message while every other actor in the
-process waited for one. Insertion, paste confirmation and the typed route's check therefore
+process waited for one. Insertion, paste confirmation, suggestion acceptance and the typed route's check therefore
 send them through `AccessibilityThread`, a concurrent dispatch queue of their own, and the
 awaiting task resumes when the answer comes back. A task cancelled before its message leaves
 the queue sends nothing and takes a safe fallback — "secure" for the concealment question,

@@ -43,7 +43,11 @@ public struct TextInsertionCoordinator: TextInserting {
         switch outcome {
         case .succeeded(let attempt, _):
             // Asked again once the words are written, so a switch into a secure field during the fallback counts.
-            guard !attempt.intoSecureField, focus?.focusedFieldIsSecure() == true else { return attempt }
+            guard !attempt.intoSecureField else { return attempt }
+            let nowSecure = await AccessibilityThread.run(orElse: true) {
+                focus?.focusedFieldIsSecure() == true
+            }
+            guard nowSecure else { return attempt }
             return InsertionAttempt(
                 attempt.method, arrival: attempt.arrival, destination: attempt.destination,
                 intoSecureField: true)
