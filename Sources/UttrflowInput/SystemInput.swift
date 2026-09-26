@@ -239,7 +239,7 @@ public struct CGEventTypist: KeystrokeTyping {
     }
 }
 
-/// The focused text field, found through the Accessibility API against a real window.
+/// The focused text field, found through the Accessibility API; its methods block, so async code calls them via `AccessibilityThread`.
 public struct AXAccessibilityFocus: AccessibilityFocus {
     public init() {}
 

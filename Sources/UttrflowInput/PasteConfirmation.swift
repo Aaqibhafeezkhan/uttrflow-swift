@@ -49,7 +49,7 @@ public struct PasteConfirmation: Sendable {
         guard !Task.isCancelled else { return .cancelled(.zero) }
         let wanted = Self.wanted(from: text)
         // A field that will not answer now will not answer in a second either, so nothing is waited for.
-        guard !wanted.isEmpty, focus.tail(upTo: Self.readLength) != .unreadable else { return .notReported }
+        guard !wanted.isEmpty, await read() != .unreadable else { return .notReported }
         let priorText = Self.priorText(matching: wanted, before: before)
         // Set once the caret has read as anything but the pre-paste text, so a later match is trusted even if it settles back on it.
         var hasChangedSincePaste = priorText == nil
@@ -59,7 +59,9 @@ public struct PasteConfirmation: Sendable {
             // A cancelled sleep returns at once, so without this the loop reads the field as fast as it can.
             do { try await clock.sleep(for: interval) } catch { return .cancelled(elapsed()) }
             guard !Task.isCancelled else { return .cancelled(elapsed()) }
-            guard case .text(let seen) = focus.tail(upTo: Self.readLength) else { return .notReported }
+            let read = await read()
+            guard !Task.isCancelled else { return .cancelled(elapsed()) }
+            guard case .text(let seen) = read else { return .notReported }
             // Read from the clock rather than tallied from the sleeps, so each read is charged to the budget.
             waited = elapsed()
             if seen != priorText { hasChangedSincePaste = true }
@@ -67,6 +69,12 @@ public struct PasteConfirmation: Sendable {
             if Self.collapsed(seen).hasSuffix(wanted), hasChangedSincePaste { return .landed(waited) }
         }
         return .gaveUp(waited)
+    }
+
+    /// One read of the caret, sent from the Accessibility queue rather than the caller's thread.
+    private func read() async -> FieldTail {
+        let focus = focus
+        return await AccessibilityThread.run(orElse: .unreadable) { focus.tail(upTo: Self.readLength) }
     }
 
     /// The pre-paste tail, kept only when it already carried the words this call is waiting for.

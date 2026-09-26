@@ -13,17 +13,20 @@ public struct AccessibilityTextInsertionEngine: TextInsertionEngine {
     public func canInsert() async -> Bool {
         // Uttrflow's own field cannot be the destination; the search field, the snippet editor and the rest are never it.
         guard !focus.isSelfFrontmost() else { return false }
-        return focus.focusedTextField() != nil
+        let focus = focus
+        return await AccessibilityThread.run(orElse: false) { focus.focusedTextField() != nil }
     }
 
     /// Answers `.notReported`: the field verifies the write and does not say whether it could.
     public func insert(_ text: String) async throws(TextInsertionError) -> InsertionArrival {
-        guard let field = focus.focusedTextField() else { throw .noFocusedTextField }
+        let focus = focus
+        guard let field = await AccessibilityThread.run(orElse: nil, { focus.focusedTextField() })
+        else { throw .noFocusedTextField }
         // Asked immediately before the write, so a stage that timed out cannot land words seconds late.
         guard !Task.isCancelled else {
             throw .insertionRejected(description: TextInsertion.dictationEnded)
         }
-        try field.replaceSelection(with: text)
+        try await AccessibilityThread.run { () throws(TextInsertionError) in try field.replaceSelection(with: text) }
         return .notReported
     }
 }
@@ -33,7 +36,11 @@ extension AccessibilityTextInsertionEngine: CompletionWriting {
 
     /// One write, so the field's own undo sees one edit rather than a delete and a typing run.
     public func write(_ text: String, replacing replaced: String) async throws(TextInsertionError) {
-        guard let field = focus.focusedTextField() else { throw .noFocusedTextField }
-        try field.replaceSelection(replacing: replaced, with: text)
+        let focus = focus
+        guard let field = await AccessibilityThread.run(orElse: nil, { focus.focusedTextField() })
+        else { throw .noFocusedTextField }
+        try await AccessibilityThread.run { () throws(TextInsertionError) in
+            try field.replaceSelection(replacing: replaced, with: text)
+        }
     }
 }
