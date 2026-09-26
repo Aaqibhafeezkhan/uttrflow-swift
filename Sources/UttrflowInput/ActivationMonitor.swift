@@ -10,6 +10,8 @@ public final class ActivationMonitor: HotkeyMonitoring {
     private let continuation: AsyncStream<HotkeyEvent>.Continuation
     private let source: any KeyboardEventSource
     private let recogniser = Mutex<HotkeyRecogniser?>(nil)
+    /// Counts starts, so a stop that began before one cannot clear the recogniser it installed.
+    private let generation = Atomic<Int>(0)
     /// Runs on the source's thread once a stroke has left the lock, so a test can hold it there.
     private let strokeLeftLock: @Sendable () -> Void
     /// Reads the real keyboard state, so a release the tap never delivers is still noticed.
@@ -46,7 +48,10 @@ public final class ActivationMonitor: HotkeyMonitoring {
         guard binding.isDeliverable else {
             throw .shortcutUnavailable
         }
-        recogniser.withLock { $0 = HotkeyRecogniser(binding: binding) }
+        recogniser.withLock { current in
+            generation.add(1, ordering: .relaxed)
+            current = HotkeyRecogniser(binding: binding)
+        }
         let continuation = continuation
         do {
             try source.start(
@@ -72,10 +77,12 @@ public final class ActivationMonitor: HotkeyMonitoring {
     }
 
     public func stop() {
+        let began = recogniser.withLock { _ in generation.load(ordering: .relaxed) }
         source.stop()
         stopReconciling()
         // A hold interrupted by stopping is a release, or the microphone stays open.
         recogniser.withLock { current in
+            guard generation.load(ordering: .relaxed) == began else { return }
             if let owed = current?.finish() { continuation.yield(owed) }
             current = nil
         }
