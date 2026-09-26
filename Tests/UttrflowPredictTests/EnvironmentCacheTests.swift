@@ -96,7 +96,8 @@ struct EnvironmentSlowReadTests {
         await index.settle()
         let landed = asked.addingTimeInterval(slowness)
         let justBeforeExpiry = landed.addingTimeInterval(EnvironmentIndex.lifetimeInSeconds - 0.1)
-        #expect(await index.values(of: .directory, in: "/slow", now: landed.addingTimeInterval(0.1)) == ["src"])
+        let justAfterLanding = landed.addingTimeInterval(0.1)
+        #expect(await index.values(of: .directory, in: "/slow", now: justAfterLanding) == ["src"])
         #expect(await index.values(of: .directory, in: "/slow", now: justBeforeExpiry) == ["src"])
         await index.settle()
 

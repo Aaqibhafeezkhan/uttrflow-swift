@@ -120,8 +120,8 @@ public actor EnvironmentIndex {
     /// Asks the machine once per key, so a burst of keystrokes cannot start a burst of reads.
     private func refresh(_ key: Key, now: Date) {
         guard refreshing[key] == nil else { return }
-        let started = seconds()
         refreshing[key] = Task {
+            let started = seconds()
             let values = await reader.values(of: key.kind, in: key.directory)
             let landed = now.addingTimeInterval(max(0, seconds() - started))
             record(key, values: values, now: landed)
