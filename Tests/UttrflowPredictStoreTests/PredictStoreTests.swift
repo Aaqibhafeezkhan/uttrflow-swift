@@ -850,3 +850,25 @@ struct BorrowedFeedbackTests {
         #expect(try await store.entryCount() == 1)
     }
 }
+
+@Suite("Recovering from a corrupt corpus")
+struct CorruptCorpusTests {
+    @Test("a file that is not a database is set aside, not deleted, and a fresh corpus opens")
+    func corruptFileIsSetAside() async throws {
+        let folder = URL(filePath: NSTemporaryDirectory())
+            .appending(path: "uttrflow-corrupt-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appending(path: "predict.v1.sqlite")
+        let bytes = Data(repeating: 0xA5, count: 4_096)
+        try bytes.write(to: file)
+
+        let opened = try PredictStore(path: file.path(percentEncoded: false))
+        _ = try await opened.candidates(for: terminal, matching: "")
+
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false))
+        let aside = try #require(names.first { $0.hasPrefix("predict.v1.sqlite.unreadable-") })
+        #expect(try Data(contentsOf: folder.appending(path: aside)) == bytes)
+        #expect(FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
+    }
+}

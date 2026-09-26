@@ -40,14 +40,25 @@ public actor PredictStore: PredictionStore {
             return database
         } catch {
             guard error == .corrupt else { throw error }
-            try? FileManager.default.removeItem(atPath: path)
-            for suffix in ["-wal", "-shm"] {
-                try? FileManager.default.removeItem(atPath: path + suffix)
-            }
+            setAsideCorrupt(at: path)
             let replacement = try Database(path: path)
             try Schema.migrate(replacement)
             secureFiles(at: path)
             return replacement
+        }
+    }
+
+    /// Moves a corrupt database and its sidecars aside under the JSON stores' convention, deleting only what cannot move.
+    private static func setAsideCorrupt(at path: String) {
+        let now = Date()
+        for suffix in ["", "-wal", "-shm"] {
+            let url = URL(filePath: path + suffix)
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+                continue
+            }
+            if LocalStore.setAside(url, now: now) == nil {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 
