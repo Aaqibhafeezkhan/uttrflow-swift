@@ -21,6 +21,8 @@ struct DestructiveCommandTests {
             "TRUNCATE TABLE orders",
             "dd if=/dev/zero of=/dev/disk2",
             "mkfs.ext4 /dev/sdb",
+            "cat ubuntu.img > /dev/rdisk4",
+            "asr restore --source a.dmg --target /dev/rdisk2s1",
             "shutdown -h now",
             "reboot",
             ":(){ :|:& };:",
