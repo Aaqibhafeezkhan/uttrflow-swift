@@ -86,6 +86,8 @@ final class SuggestionCoordinator {
     private var handed: (line: String, reading: FieldReading)?
     /// The last field read, so the highlight can move without reading anything again.
     private var lastSnapshot: FocusedFieldSnapshot?
+    /// The line the accept key takes as last armed by a draw, so a later answer never inherits that claim.
+    private var armedOffer: String?
     private var lastKeystroke = Date.distantPast
     /// One turn at a time, with a turn that never returns left behind so the loop cannot die with it.
     private var turns = TurnGate()
@@ -496,6 +498,12 @@ final class SuggestionCoordinator {
         _ update: SuggestionUpdate, for snapshot: FocusedFieldSnapshot, turn number: Int
     ) async {
         let keystrokesSeen = session.keystrokes
+        // The session already holds this answer, so the key armed for the drawn one is let go until this one is drawn.
+        if !Self.keepsClaimWhileReading(armed: armedOffer, next: update.suggestion) {
+            interceptor.arm([])
+            panel.hide()
+            armedOffer = nil
+        }
         guard let fresh = await FocusedFieldReader.read(), turns.isCurrent(number),
             ModelPass.isFresh(
                 keystrokesBefore: keystrokesSeen, keystrokesNow: session.keystrokes,
@@ -505,6 +513,11 @@ final class SuggestionCoordinator {
         else { return }
         lastSnapshot = fresh
         draw(update, in: fresh)
+    }
+
+    /// Whether the key armed for the drawn line may stay armed while an answer offering `next` waits for its field read.
+    nonisolated static func keepsClaimWhileReading(armed: String?, next: Suggestion) -> Bool {
+        armed == next.accepting
     }
 
     /// Asks the model for a suggestion the corpus never held, from the field read live, held to the machine's values where it has them, and draws it.
@@ -727,6 +740,7 @@ final class SuggestionCoordinator {
     private func draw(_ step: SuggestionStep) {
         guard !isStopped, case .settled(let update) = step else { return }
         interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
         panel.hide()
         lastReading = nil
         lastSnapshot = nil
@@ -741,6 +755,7 @@ final class SuggestionCoordinator {
             return
         }
         interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
         // Nothing is drawn off the caret's line, so a field that reports no inline placement is left alone.
         guard update.suggestion != .silent, let snapshot, snapshot.placement == .inlineGhost,
             let caret = snapshot.caret
