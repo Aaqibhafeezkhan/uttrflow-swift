@@ -9,14 +9,18 @@ Calendar versioning, in `Resources/Uttrflow-Info.plist`, edited by hand:
 
 | Key | Example | What it is |
 | --- | --- | --- |
-| `CFBundleShortVersionString` | `2026.9.14` | The version people see: the day the release is cut, `YEAR.MONTH.DAY`, no leading zeros. |
-| `CFBundleVersion` | `9` | The build counter. Goes up by one every release; the updater compares this, not the date. |
+| `CFBundleShortVersionString` | `26.0926.0` | The version people see: `YY.MMDD.REVISION` — two-digit year, month and day, then the release number that day from 0. |
+| `CFBundleVersion` | `10` | The build counter. Goes up by one every release; the updater compares this, not the date. |
 
-Bump both in the commit that cuts the release. The tag is `v` and the version, `v2026.9.14`,
-and a candidate for it is `v2026.9.14-rc.1`. A second release on the same day adds a fourth
-number, `2026.9.14.1`; that is the one case outside Apple's three-integer form, and the
-counter still orders it. No leading zeros, because the release workflow compares the tag to
-the plist as text and `2026.09.14` is a different string.
+Bump both in the commit that cuts the release. The tag is `v` and the version, `v26.0926.0`,
+and a candidate for it is `v26.0926.0-rc.1`. A second release on the same day is
+`v26.0926.1`. Month before day, with the leading zero kept, so versions sort in date order
+within a year (`0110` for 1 October is above `0926`); the release workflow compares the tag
+to the plist as text, so write the plist exactly as the tag.
+
+**Earlier schemes.** `2026.9.14` (`YEAR.MONTH.DAY`) was used before this one. A `26.x`
+version is numerically below it, which is harmless for updates because Sparkle orders by
+`CFBundleVersion`, and that counter keeps rising across every change of scheme.
 
 Releases up to `0.5.0` used semantic versioning. Every date version is larger in its first
 number, so nothing that orders versions can place `2026.9.14` below `0.5.0` — and Sparkle
