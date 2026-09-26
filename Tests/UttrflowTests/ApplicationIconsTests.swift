@@ -16,6 +16,10 @@ struct ApplicationIconsTests {
         var installed: [String] = []
     }
 
+    private final class Box {
+        var image: NSImage?
+    }
+
     private func icons(
         identified: [String: NSImage] = [:], running: [String: NSImage] = [:],
         installed: [String: NSImage] = [:]
@@ -139,13 +143,13 @@ struct ApplicationIconsTests {
     /// An app installed or launched after a miss gets its real icon once the window is brought up again.
     @Test("asks again after forgetting, and sees an app that has appeared since")
     func forgetsAMiss() {
-        var appeared: NSImage?
+        let appeared = Box()
         let source = ApplicationIconSource(
-            identified: { _ in nil }, running: { _ in appeared }, installed: { _ in nil })
+            identified: { _ in nil }, running: { _ in appeared.image }, installed: { _ in nil })
         let icons = ApplicationIcons(source: source)
 
         #expect(icons.icon(for: app("Ghost")) == nil)
-        appeared = image(width: runningIcon)
+        appeared.image = image(width: runningIcon)
         #expect(icons.icon(for: app("Ghost")) == nil, "still remembered until forgotten")
         icons.forget()
 
