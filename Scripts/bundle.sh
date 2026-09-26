@@ -752,7 +752,7 @@ if [[ -n "$FEED_URL" ]]; then
             printf '  would strand installed copies on an address only the release Mac can serve.'
         )"
     fi
-    [[ -n "$PUBLIC_KEY" && "$PUBLIC_KEY" != *" "* ]] || fail "$(
+    python3 "$SCRIPT_DIR/update_feed_gate.py" check-key "$PUBLIC_KEY" >/dev/null 2>&1 || fail "$(
         printf 'SUFeedURL is set and SUPublicEDKey is not a key.\n'
         printf '  An update feed with nothing to verify downloads against installs\n'
         printf '  whatever it is handed. Run generate_keys and paste the public half\n'

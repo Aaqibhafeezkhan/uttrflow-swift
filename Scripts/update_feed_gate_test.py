@@ -52,6 +52,25 @@ class FeedGateTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertEqual(self.run_gate("classify", url).returncode, 1)
 
+    def test_refuses_placeholder_keys(self):
+        for key in [
+            "",
+            "not a key",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            KEY[:-8] + "=",
+            KEY + "AAAA",
+            "YOUR_PUBLIC_KEY_HERE",
+        ]:
+            with self.subTest(key=key):
+                self.assertEqual(self.run_gate("check-key", key).returncode, 1)
+                plist = self.write_plist(
+                    SUFeedURL="https://example.com/appcast.xml",
+                    SUPublicEDKey=key,
+                    SUVerifyUpdateBeforeExtraction=True,
+                )
+                self.assertEqual(self.run_gate("check-plist", plist).returncode, 1)
+        self.assertEqual(self.run_gate("check-key", KEY).returncode, 0)
+
     def test_local_feeds_are_allowed_for_rehearsal_but_not_publication(self):
         plist = self.write_plist(
             SUFeedURL="http://[::1]/appcast.xml",
