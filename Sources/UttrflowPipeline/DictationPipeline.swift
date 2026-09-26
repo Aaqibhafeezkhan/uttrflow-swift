@@ -639,7 +639,7 @@ public actor DictationPipeline {
         guard
             let arrival = await insert(
                 expanded.text, cleanedBy: whole.cleaned.producedBy, changes: changes,
-                delivery: delivery)
+                delivery: delivery, generation: mine)
         else { return }
 
         // An unconfirmed paste is not proof the words reached the user, so nothing is learnt from it yet.
@@ -819,7 +819,8 @@ public actor DictationPipeline {
 
     /// Puts the finished text where the user was typing, answering how it arrived, or nil on failure.
     private func insert(
-        _ text: String, cleanedBy: TransformerKind, changes: AppliedChanges, delivery: Delivery
+        _ text: String, cleanedBy: TransformerKind, changes: AppliedChanges, delivery: Delivery,
+        generation mine: Int
     ) async -> InsertionArrival? {
         let inserter = delivery == .copy ? clipboard : self.inserter
         // Said before the words are handed over, because the app takes its own time to show them.
@@ -830,6 +831,8 @@ public actor DictationPipeline {
                     try await inserter.insert(text)
                 }
             }
+            // A cancel during the write already ended the dictation, so nothing more is shown or learnt.
+            guard !wasCancelled(mine) else { return nil }
             // Either way the dictation has to end, so the next one can begin.
             guard let attempt = inserted else {
                 throw TextInsertionError.insertionTimedOut
@@ -850,6 +853,7 @@ public actor DictationPipeline {
                         intoSecureField: destinationIsSecure)))
             return attempt.arrival
         } catch {
+            guard !wasCancelled(mine) else { return nil }
             // The words survive the failure: the interface can still offer them.
             await fail(DictationFailure(error, transcript: text))
             return nil
