@@ -127,6 +127,19 @@ struct SettingsTests {
         #expect(!restored.installsUpdatesAutomatically)
     }
 
+    /// Usage statistics are shared unless the user says otherwise, and saying so is kept.
+    @Test("shares usage statistics by default, and keeps the opt-out across a save and a load")
+    func usageStatisticsOptOutSticks() throws {
+        #expect(Settings.default.sharesUsageStatistics)
+        let older = try JSONDecoder().decode(Settings.self, from: Data(#"{"opensAtLogin":false}"#.utf8))
+        #expect(older.sharesUsageStatistics)
+
+        let restored = try JSONDecoder().decode(
+            Settings.self, from: JSONEncoder().encode(Settings(sharesUsageStatistics: false))
+        )
+        #expect(!restored.sharesUsageStatistics)
+    }
+
     /// Crash reports stay off for anyone who never chose, and on for anyone who did.
     @Test("crash reports are off by default and keep the user's choice")
     func crashReportsAreOptIn() throws {

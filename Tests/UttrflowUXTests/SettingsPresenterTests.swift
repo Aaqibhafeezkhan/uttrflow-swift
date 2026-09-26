@@ -430,6 +430,17 @@ struct SettingsPrivacyPaneTests {
         #expect(periods.map(\.id) == ["transcripts"])
     }
 
+    @Test("offers the usage statistics switch, on by default, saying what is sent")
+    func offersTheUsageStatisticsSwitch() throws {
+        let row = try #require(privacy().row(SettingsToggleField.sharesUsageStatistics.rawValue))
+        #expect(row.control == .toggle(field: .sharesUsageStatistics, isOn: true))
+        #expect(row.isEnabled)
+        #expect(row.explanation?.contains("never what you dictate") == true)
+
+        let updated = try SettingsEditor.apply(.toggle(.sharesUsageStatistics, isOn: false), to: .default)
+        #expect(!updated.sharesUsageStatistics)
+    }
+
     @Test("every row on this tab can be operated")
     func privacyRowsAreAlwaysOperable() {
         #expect(privacy().everyRow.allSatisfy { $0.isEnabled })

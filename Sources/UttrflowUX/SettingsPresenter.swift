@@ -60,7 +60,7 @@ public enum SettingsPresenter {
         case .languages: languages(settings, capabilities)
         case .dictation: dictation(settings, capabilities, personalisation)
         case .suggestions: suggestions(settings, personalisation, capabilities, moment)
-        case .privacy: privacy(settings, personalisation)
+        case .privacy: privacy(settings, capabilities, personalisation)
         }
     }
 
@@ -568,7 +568,8 @@ public enum SettingsPresenter {
 
     /// Privacy: the promise, the retention period, and what signing out does not take.
     private static func privacy(
-        _ settings: Settings, _ personalisation: SettingsPersonalisation
+        _ settings: Settings, _ capabilities: SettingsCapabilities,
+        _ personalisation: SettingsPersonalisation
     ) -> SettingsPane {
         SettingsPane(
             tab: .privacy,
@@ -582,6 +583,17 @@ public enum SettingsPresenter {
                     id: "retention",
                     title: nil,
                     rows: [retentionRow(settings)]),
+                SettingsGroup(
+                    id: "usage",
+                    title: nil,
+                    rows: [
+                        toggleRow(
+                            .sharesUsageStatistics,
+                            label: "Share anonymous usage statistics",
+                            explanation:
+                                "Only counts and timings are sent, never what you dictate.",
+                            settings, capabilities)
+                    ]),
                 SettingsGroup(
                     id: "diagnostics",
                     title: nil,
@@ -790,6 +802,7 @@ public enum SettingsPresenter {
         case .playsSoundWhenRecordingStarts: settings.playsSoundWhenRecordingStarts
         case .opensAtLogin: settings.opensAtLogin
         case .installsUpdatesAutomatically: settings.installsUpdatesAutomatically
+        case .sharesUsageStatistics: settings.sharesUsageStatistics
         case .sendsCrashReports: settings.sendsCrashReports
         case .suggestionsEnabled: settings.suggestions.isEnabled
         case .quietSuggestions: settings.suggestions.isQuiet

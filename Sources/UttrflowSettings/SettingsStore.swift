@@ -67,6 +67,8 @@ public struct Settings: Sendable, Equatable, Codable {
     /// Whether a found update installs itself or waits to be asked; `UpdateGate` picks the moment.
     public var installsUpdatesAutomatically: Bool
 
+    /// Whether anonymous counts and timings are sent; never what was dictated. See `Docs/account-telemetry.md`.
+    public var sharesUsageStatistics: Bool
     /// Whether crash and hang reports go to Uttrflow; off until the user turns it on. See `Docs/crash-reporting.md`.
     public var sendsCrashReports: Bool
 
@@ -100,6 +102,7 @@ public struct Settings: Sendable, Equatable, Codable {
         playsSoundWhenRecordingStarts: Bool = true,
         opensAtLogin: Bool = true,
         installsUpdatesAutomatically: Bool = true,
+        sharesUsageStatistics: Bool = true,
         sendsCrashReports: Bool = false,
         appearance: AppAppearance = .dark,
         transcriptRetentionDays: Int = Settings.defaultRetentionDays,
@@ -122,6 +125,7 @@ public struct Settings: Sendable, Equatable, Codable {
         self.playsSoundWhenRecordingStarts = playsSoundWhenRecordingStarts
         self.opensAtLogin = opensAtLogin
         self.installsUpdatesAutomatically = installsUpdatesAutomatically
+        self.sharesUsageStatistics = sharesUsageStatistics
         self.sendsCrashReports = sendsCrashReports
         self.appearance = appearance
         self.transcriptRetentionDays = transcriptRetentionDays
@@ -161,6 +165,7 @@ extension Settings {
         case playsSoundWhenRecordingStarts
         case opensAtLogin
         case installsUpdatesAutomatically
+        case sharesUsageStatistics
         case sendsCrashReports
         case appearance
         case transcriptRetentionDays
@@ -211,6 +216,9 @@ extension Settings {
             installsUpdatesAutomatically: container.value(
                 forKey: .installsUpdatesAutomatically,
                 default: fallback.installsUpdatesAutomatically
+            ),
+            sharesUsageStatistics: container.value(
+                forKey: .sharesUsageStatistics, default: fallback.sharesUsageStatistics
             ),
             sendsCrashReports: container.value(
                 forKey: .sendsCrashReports, default: fallback.sendsCrashReports),
