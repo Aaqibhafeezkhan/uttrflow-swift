@@ -76,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var recordingStopGesture: StopGesture = .letGo
 
     private var pipeline: DictationPipeline?
+    /// The pipeline's recogniser, held so memory pressure can let it go between dictations.
+    private var speechEngine: BackedSpeechEngine?
     private var controller: DictationController<ContinuousClock>?
     private var stateTask: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
@@ -646,12 +648,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// Lets the recogniser go under memory pressure unless a dictation is under way; the next key-down loads it again.
+    private func releaseSpeechModelIfIdle() {
+        guard case .idle = lastDictationState, let speechEngine else { return }
+        Task { await speechEngine.release() }
+    }
+
     /// Releases the suggestion model when memory is pressed, and loads it again once calm has lasted. See `Docs/performance.md`.
     func memoryPressureChanged(to level: MemoryPressureLevel) {
         pressureReload?.cancel()
         pressureReload = nil
         switch level {
         case .warning, .critical:
+            releaseSpeechModelIfIdle()
             guard settings.suggestions.isEnabled, isModelPreparing else { return }
             memoryPressure.released(at: .now)
             releaseTheModel()
@@ -727,8 +736,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// The recogniser of `kind`, over the downloaded model.
     private func makeSpeechEngine(_ kind: SpeechEngineKind) -> any SpeechEngine {
         let model = SpeechModel.default
-        return SpeechEngineFactory.make(
-            kind: kind, model: model, modelFolder: modelStore.location(of: model))
+        let engine = SpeechEngineFactory.make(
+            kind: kind, model: model, modelFolder: modelStore.location(of: model),
+            idleAfter: BackedSpeechEngine.idleRelease)
+        speechEngine = engine
+        return engine
     }
 
     /// Hands the pipeline the recogniser just chosen, which it takes up once no dictation is under way.
