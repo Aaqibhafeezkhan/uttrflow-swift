@@ -358,8 +358,9 @@ struct SurroundingsTests {
     func joinersSurvive() {
         let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"
         #expect(Surroundings.cleaned(family) == family)
-        #expect(Surroundings.cleaned("\u{645}\u{6CC}\u{200C}\u{631}\u{648}\u{645}") == "\u{645}\u{6CC}\u{200C}\u{631}\u{648}\u{645}")
-        #expect(Surroundings.cleaned("\u{200E}\u{645}\u{6CC}\u{200C}\u{631}\u{200F}") == "\u{645}\u{6CC}\u{200C}\u{631}")
+        let word = "\u{645}\u{6CC}\u{200C}\u{631}\u{648}\u{645}"
+        #expect(Surroundings.cleaned(word) == word)
+        #expect(Surroundings.cleaned("\u{200E}" + word + "\u{200F}") == word)
     }
 
     @Test("An element with no parent at all has no surroundings.")
