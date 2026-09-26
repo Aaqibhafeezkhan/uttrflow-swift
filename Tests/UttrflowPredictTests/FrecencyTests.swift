@@ -82,7 +82,8 @@ struct FrecencyTests {
         var lowest = Double.infinity
         for accepted in 0...12 {
             for rejected in 0...12 {
-                let entry = Entry(text: "x", count: 3, accepted: accepted, rejected: rejected, lastUsed: moment)
+                let entry = Entry(
+                    text: "x", count: 3, accepted: accepted, rejected: rejected, lastUsed: moment)
                 lowest = min(lowest, Frecency.acceptance(entry))
             }
         }
