@@ -330,3 +330,90 @@ private actor StretchedCappedBackend: TranscriptionBackend {
 
     var calls: [Call] { state.withLock(\.calls) }
 }
+
+/// A recogniser whose first window collapses to one segment ending at 30 s with its words stopping at 27 s.
+private actor CollapsedWindowBackend: TranscriptionBackend {
+    let minimumDuration: Duration = .zero
+    private let state = Mutex<[Int]>([])
+
+    func load() async throws(SpeechEngineError) {}
+
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?
+    ) async throws(SpeechEngineError) -> RawTranscript {
+        try await transcribe(samples, languageHint: languageHint, biasedTowards: [])
+    }
+
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?, biasedTowards vocabulary: [String]
+    ) async throws(SpeechEngineError) -> RawTranscript {
+        let first = state.withLock { calls in
+            calls.append(samples.count)
+            return calls.count == 1
+        }
+        let end = Double(samples.count) / 16_000.0 - 0.3
+        guard first else {
+            return RawTranscript(
+                text: " across the boundary and after",
+                segments: [
+                    RawSegment(
+                        text: " across the boundary and after", start: 0, end: end,
+                        words: [RawWord(text: " across", start: 0.2, end: end, probability: 0.9)])
+                ], tokensUsed: 40)
+        }
+        return RawTranscript(
+            text: " opening words after",
+            segments: [
+                RawSegment(
+                    text: " opening words", start: 0, end: 30,
+                    words: [RawWord(text: " opening", start: 0.2, end: 27, probability: 0.9)]),
+                RawSegment(
+                    text: " after", start: 30, end: end,
+                    words: [RawWord(text: " after", start: 31, end: end, probability: 0.9)]),
+            ], tokensUsed: 60)
+    }
+
+    var calls: [Int] { state.withLock { $0 } }
+}
+
+@Suite("A window that collapsed to one segment")
+struct CollapsedWindowTests {
+    @Test("the words dropped at the window boundary are decoded again from the last word heard")
+    func collapsedWindowIsRedecoded() async throws {
+        let totalSamples = 53 * 16_000
+        let backend = CollapsedWindowBackend()
+        let samples = Array(repeating: Float(0.1), count: totalSamples)
+
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .english, vocabulary: ["Uttrflow"], using: backend)
+
+        let calls = await backend.calls
+        #expect(calls.count == 2)
+        #expect(calls[1] == totalSamples - 27 * 16_000)
+        #expect(
+            raw.text.split(separator: " ").joined(separator: " ")
+                == "opening words across the boundary and after")
+        #expect(raw.segments.count == 2)
+        #expect(raw.segments.last?.start == 27)
+    }
+
+    @Test("a segment that ends at a window with its words running to the end is left alone")
+    func fullWindowIsKept() {
+        let segments = [
+            RawSegment(
+                text: "a", start: 0, end: 30,
+                words: [RawWord(text: "a", start: 0, end: 29.6, probability: 0.9)])
+        ]
+        #expect(CappedDecodeRetry.collapsedWindow(in: segments, sliceSeconds: 53) == nil)
+    }
+
+    @Test("a collapsed window at the end of the audio has nothing after it to lose")
+    func collapseAtAudioEndIsKept() {
+        let segments = [
+            RawSegment(
+                text: "a", start: 0, end: 30,
+                words: [RawWord(text: "a", start: 0, end: 20, probability: 0.9)])
+        ]
+        #expect(CappedDecodeRetry.collapsedWindow(in: segments, sliceSeconds: 30.5) == nil)
+    }
+}
