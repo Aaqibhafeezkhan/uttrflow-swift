@@ -76,7 +76,11 @@ private enum RescanningShellPrompt {
             let wasQuoted = quote != nil
             defer { unquotedAt = unquotedAt || (!wasQuoted && character == "@") }
             if let open = quote {
-                if character == open { quote = nil }
+                if character == open {
+                    quote = nil
+                } else if open == "\"", character == "\\" {
+                    index += 1
+                }
             } else if character == "'" || character == "\"" {
                 quote = character
             } else if character == "\\" {
