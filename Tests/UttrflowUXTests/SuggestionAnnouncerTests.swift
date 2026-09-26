@@ -100,7 +100,9 @@ struct SuggestionAnnouncerTests {
     func nothingIsSilentAndResets() {
         var announcer = SuggestionAnnouncer()
         _ = announcer.announcement(for: SuggestionPresentation(.certain("Sydney")))
-        #expect(announcer.announcement(for: SuggestionPresentation(.minimised)) == SuggestionPresentation.dotLabel)
+        #expect(
+            announcer.announcement(for: SuggestionPresentation(.minimised)) == SuggestionPresentation.dotLabel
+        )
         #expect(announcer.announcement(for: SuggestionPresentation(.certain("Sydney"))) != nil)
         #expect(announcer.announcement(for: SuggestionPresentation(.silent)) == nil)
         #expect(announcer.announcement(for: SuggestionPresentation(.certain("Sydney"))) != nil)
