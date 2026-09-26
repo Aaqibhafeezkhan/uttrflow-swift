@@ -21,9 +21,13 @@ struct UpdateActivityWiringTests {
         #expect(installed)
     }
 
-    @Test("an update staged while busy waits for quiet, then installs a minute later", arguments: [
-        UpdateActivity(isDictating: true), UpdateActivity(isPanelOpen: true), UpdateActivity(isOnboarding: true),
-    ])
+    @Test(
+        "an update staged while busy waits for quiet, then installs a minute later",
+        arguments: [
+            UpdateActivity(isDictating: true),
+            UpdateActivity(isPanelOpen: true),
+            UpdateActivity(isOnboarding: true),
+        ])
     func stagedWhileBusyInstallsOnceQuiet(busy: UpdateActivity) {
         let now = ActivityBox(busy)
         var installed = false
