@@ -200,4 +200,35 @@ struct PanelSpotsTests {
         #expect(PanelSpots(propertyList: damaged) == PanelSpots(origins: [1: CGPoint(x: 12, y: 303)]))
         #expect(PanelSpots(propertyList: nil) == PanelSpots())
     }
+
+    @Test("remembering past the cap forgets the least recently used display")
+    func evictsLeastRecentlyUsed() {
+        var spots = PanelSpots()
+        for display in UInt32(1)...UInt32(PanelSpots.limit) {
+            spots.remember(CGPoint(x: Double(display), y: 0), on: display)
+        }
+        spots.remember(CGPoint(x: 99, y: 0), on: 1)
+        spots.remember(CGPoint(x: 100, y: 0), on: 100)
+
+        #expect(spots.origins.count == PanelSpots.limit)
+        #expect(spots.origins[2] == nil, "display 2 was the least recently used")
+        #expect(spots.origins[1] == CGPoint(x: 99, y: 0))
+        #expect(spots.origins[100] == CGPoint(x: 100, y: 0))
+        #expect(PanelSpots(propertyList: spots.propertyList) == spots)
+    }
+
+    @Test("an oversized stored list is trimmed to the cap, keeping the most recent")
+    func trimsStoredList() {
+        var stored: [String: [Double]] = [:]
+        for display in 1...(PanelSpots.limit + 3) {
+            stored[String(display)] = [1, 2, Double(display)]
+        }
+        stored["500"] = [1, 2]
+
+        let spots = PanelSpots(propertyList: stored)
+
+        #expect(spots.origins.count == PanelSpots.limit)
+        #expect(spots.origins[500] == nil, "an unranked entry counts as oldest")
+        #expect(spots.recency.last == UInt32(PanelSpots.limit + 3))
+    }
 }
