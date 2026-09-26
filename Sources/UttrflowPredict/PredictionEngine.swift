@@ -22,10 +22,25 @@ public enum PredictionEngine {
     public static func decision(
         from candidates: [Candidate], in context: PredictionContext, now: Date
     ) -> (suggestion: Suggestion, silence: Quieting.Reason?) {
-        if let refused = Quieting.reason(context) { return (.silent, refused) }
-        guard !context.isMinimised else { return (.minimised, .minimised) }
+        let ranked = ranked(from: candidates, in: context, now: now)
+        return (ranked.suggestion, ranked.silence)
+    }
+
+    /// The decision with the ranking it was read from, nil only when the context refused before ranking.
+    static func ranked(
+        from candidates: [Candidate], in context: PredictionContext, now: Date
+    ) -> (suggestion: Suggestion, silence: Quieting.Reason?, ranking: Ranking?) {
+        if let refused = Quieting.reason(context) { return (.silent, refused, nil) }
+        guard !context.isMinimised else { return (.minimised, .minimised, nil) }
 
         let ranking = Ranking(candidates, now: now)
+        let decided = decision(from: ranking)
+        return (decided.suggestion, decided.silence, ranking)
+    }
+
+    /// What to draw from an already built ranking, once the context has allowed speaking.
+    private static func decision(from ranking: Ranking) -> (suggestion: Suggestion, silence: Quieting.Reason?)
+    {
         guard let leader = ranking.candidates.first else { return (.silent, .nothingOffered) }
         guard ranking.support >= supportFloor else { return (.silent, .evidenceTooThin) }
 
