@@ -57,7 +57,9 @@ struct DestructiveCommandTests {
             "git push -d origin feature", "git branch -D feature", "git branch -dD x",
             "git branch --delete --force feature", "git stash drop", "git stash clear", "git checkout -- .",
             "git checkout .", "git restore Sources", "git restore --staged --worktree x", "git clean --force",
-            "git clean -xdF", "diskutil eraseDisk APFS Disk disk4", "docker system prune -a",
+            "git clean -xdF", "diskutil eraseDisk APFS Disk disk4", "diskutil apfs deleteVolume disk1s5",
+            "diskutil apfs deleteContainer disk1", "diskutil apfs eraseVolume disk1s5",
+            "docker system prune -a",
             "docker volume rm data", "kubectl delete pod api", "terraform destroy",
             "terraform apply -destroy",
             "crontab -r", "mv secrets.txt /dev/null", "mkfs.apfs /dev/disk4",
@@ -103,7 +105,7 @@ struct DestructiveCommandTests {
             "git stash pop",
             "git checkout main", "git push origin main", "find . -name '*.swift'", "docker rm api",
             "kubectl get pods", "terraform plan", "crontab -l", "mv a b", "sudo", "xargs", "FOO=1",
-            "diskutil list", "git clean -n",
+            "diskutil list", "diskutil apfs list", "git clean -n",
         ])
     func leavesLookalikesAlone(_ line: String) {
         #expect(!DestructiveCommand.matches(line), "\(line) should be ordinary")

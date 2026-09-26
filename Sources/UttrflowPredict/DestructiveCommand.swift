@@ -104,7 +104,10 @@ public enum DestructiveCommand {
                 return true
             }
         case "diskutil":
-            let verbs = ["erase", "zerodisk", "randomdisk", "securerase", "partitiondisk", "reformat"]
+            let verbs = [
+                "erase", "zerodisk", "randomdisk", "securerase", "partitiondisk", "reformat", "deletevolume",
+                "deletecontainer",
+            ]
             if lowered.contains(where: { word in verbs.contains(where: word.hasPrefix) }) { return true }
         case "docker", "podman":
             if lowered.contains("prune") || (lowered.first == "volume" && lowered.dropFirst().first == "rm") {
