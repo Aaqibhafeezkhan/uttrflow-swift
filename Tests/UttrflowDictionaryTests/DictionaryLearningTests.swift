@@ -111,18 +111,21 @@ struct DictionaryLearningTests {
         #expect(await store.allEntries().map(\.word) == ["pgvector"])
     }
 
-    /// A word the user typed in and then deleted is theirs to change their mind about.
-    @Test("deleting a word you added yourself does not refuse it")
-    func deletingAnAddedWordDoesNotRefuseIt() async throws {
+    /// A word the user typed in and then deleted stays deleted until they type it in again.
+    @Test("deleting a word you added yourself refuses it, and typing it in again still works")
+    func deletingAnAddedWordRefusesIt() async throws {
         let sandbox = Sandbox()
         let store = PersonalDictionaryStore(file: sandbox.file)
         try await store.add(word: "pgvector", pronunciation: "", at: epoch)
         try await store.remove(#require(await store.allEntries().first).id)
 
-        for _ in 1...LearnableWords.sightingsBeforeLearning {
+        for _ in 1...(LearnableWords.sightingsBeforeLearning * 2) {
             try await dictate(into: store, saying: "the pgvector migration", titled: "pgvector — notes")
         }
-        #expect(await store.allEntries().map(\.word) == ["pgvector"])
+        #expect(await store.allEntries().isEmpty)
+
+        try await store.add(word: "pgvector", pronunciation: "", at: epoch)
+        #expect(await store.allEntries().map(\.origin) == [.added])
     }
 
     /// The one path where the user is telling us; one dictation is enough because it is deliberate.

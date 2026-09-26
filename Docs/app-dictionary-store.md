@@ -93,11 +93,12 @@ dictionary a word. Only the store's answer is current.
 ## Removing, and the three resets
 
 **One word.** Removing an identifier that is not there is not an error: the caller asked for it to
-be gone, and it is. Removing a word Uttrflow inferred also refuses it in the sighting ledger. It is
-still in the window title and still being said, so clearing the tally alone would count it back up
-to the threshold — three dictations later the deleted word reappears, which is the app arguing with
-the person using it. Only inferred words are refused: a word the user typed in and then deleted is
-theirs to change their mind about, and nothing would re-learn it anyway.
+be gone, and it is. Removing any word also refuses it in the sighting ledger. It is still in the
+window title and still being said, so clearing the tally alone would count it back up to the
+threshold — three dictations later the deleted word reappears, which is the app arguing with the
+person using it. That holds for a word the user typed in as much as one Uttrflow inferred: the
+sighting path does not care how a word first arrived, only whether it is on disk and refused. The
+refusal binds only inference — typing the word in again adds it as before.
 
 **Everything.** `removeEverything()` is the blunt instrument and takes the user's own words too.
 `removeLearned()` is almost always the one they wanted.
