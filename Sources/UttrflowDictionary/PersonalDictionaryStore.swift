@@ -144,8 +144,8 @@ public actor PersonalDictionaryStore {
     public func remove(_ id: UUID) throws(DictionaryStoreError) -> [DictionaryEntry] {
         let existing = load()
         let kept = existing.filter { $0.id != id }
-        // A word Uttrflow inferred and the user then deleted must not simply be counted up again.
-        if let gone = existing.first(where: { $0.id == id }), gone.origin != .added {
+        // A deleted word must not simply be counted up again, whoever first put it there.
+        if let gone = existing.first(where: { $0.id == id }) {
             sightings.refuse(gone.word)
         }
         try persist(kept)
