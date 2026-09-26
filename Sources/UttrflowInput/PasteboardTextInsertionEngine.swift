@@ -49,6 +49,8 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
         } else {
             pasteboard.setText(text, richText: richText)
         }
+        // A write that did not stick would paste whatever the clipboard held before, so the next route takes over.
+        guard pasteboard.text() == text else { throw .clipboardUnavailable }
         // Read before the paste is posted, so an unchanged caret cannot be read back as a fresh landing.
         let before = focus.tail(upTo: PasteConfirmation.readLength)
         // Thrown onwards with the words left on the clipboard: the floor below would only put them back.

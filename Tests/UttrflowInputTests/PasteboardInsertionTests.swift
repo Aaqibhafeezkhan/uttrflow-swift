@@ -247,6 +247,19 @@ struct PasteboardTextInsertionEngineTests {
         #expect(pasteboard.text() == "dictated words", "the dictation must outlive the failure")
     }
 
+    @Test("refuses to paste when the clipboard write does not stick")
+    func refusesToPasteAnUnheldWrite() async {
+        let pasteboard = FakePasteboard(text: "stale words", acceptsWrites: false)
+        let keystrokes = FakeKeystrokeSender()
+        let sut = engine(pasteboard, keystrokes)
+
+        await #expect(throws: TextInsertionError.clipboardUnavailable) {
+            try await sut.insert("dictated words")
+        }
+
+        #expect(keystrokes.pasteCount == 0, "a paste now would put the stale clipboard into the field")
+    }
+
     @Test("copies an empty transcript without inventing anything")
     func emptyText() async throws {
         let pasteboard = FakePasteboard(text: "previous")
