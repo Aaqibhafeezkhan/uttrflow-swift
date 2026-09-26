@@ -54,8 +54,7 @@ public enum FocusedFieldReader {
         cachedPrimaryScreenMaxY.withLock { $0 = maxY }
     }
 
-    /// The frontmost application's identity, read on the main thread the one place `NSWorkspace` allows.
-    /// `nil` when Uttrflow's own window is frontmost, so its own AX tree is never walked off the main actor.
+    /// The frontmost application's identity, or `nil` when it is Uttrflow, whose AX tree must not be walked off the main actor.
     @MainActor
     public static func frontmostApp() -> FrontmostApp? {
         guard let app = NSWorkspace.shared.frontmostApplication,
