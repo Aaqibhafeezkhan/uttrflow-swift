@@ -12,8 +12,8 @@ in any agent's memory belonged to the private one and does not exist here.**
 **One long-lived branch, `main`, always releasable. A release is a tag, not a branch.**
 
 ```
-branch / fork  ──PR──>  main  ──tag v2026.9.14-rc.1──>  prerelease  (soak)
-   (CI runs)          (CI runs)  ──tag v2026.9.14────>  release
+branch / fork  ──PR──>  main  ──tag v26.0926.0-rc.1──>  prerelease  (soak)
+   (CI runs)          (CI runs)  ──tag v26.0926.0────>  release
 ```
 
 1. **Cut every branch from `origin/main`.** Short-lived. A branch that lives for weeks is a
@@ -42,7 +42,7 @@ branch / fork  ──PR──>  main  ──tag v2026.9.14-rc.1──>  prerelea
 
 **Releases stay batched and infrequent.** That has not changed; only the mechanism has.
 `main` accumulates merged work, and the operator decides when a commit on it becomes
-`v2026.9.14`. See `RELEASING.md`.
+`v26.0926.0`. See `RELEASING.md`.
 
 **Why there is no staging branch, since an agent reasoning from first principles will
 propose reinstating one.** The gate belongs on the pull request, not after it. A staging
@@ -455,9 +455,10 @@ make dmg           # the disk image
 make publish       # to the public downloads repository, using this Mac's gh login
 ```
 
-Versioning is **calendar**, `YEAR.MONTH.DAY` with no leading zeros (`2026.9.14`), hand-edited
-in `Resources/Uttrflow-Info.plist`; a second release that day is `2026.9.14.1`. Releases up to
-0.5.0 were semver. `CFBundleVersion` is what the updater compares, so it goes up by one every
+Versioning is **`YY.MMDD.REVISION`** (`26.0926.0`; tag `v26.0926.0`), hand-edited in
+`Resources/Uttrflow-Info.plist`; a second release that day is `26.0926.1`. Month before day,
+leading zero kept, so versions sort in date order. `2026.9.14` (`YEAR.MONTH.DAY`) and, before
+it, semver up to 0.5.0 are retired. See `Docs/releasing.md`. `CFBundleVersion` is what the updater compares, so it goes up by one every
 release. The five-part `YEAR.MONTH.DAY.HOUR.PATCH` scheme stays rejected, as `Docs/releasing.md` says.
 
 Downloads go to the public **uttrflow/releases** repository. Source repositories stay
@@ -470,9 +471,9 @@ checked it against the plist — and a hand-run publish uses `v<version>` from t
 Signed or not, the release is a full release, so `/releases/latest/download/` resolves to
 the newest build and the download button never has to change.
 
-**A tag with anything after the version is a prerelease**: `v2026.9.14-rc.1` publishes as one,
+**A tag with anything after the version is a prerelease**: `v26.0926.0-rc.1` publishes as one,
 GitHub keeps it out of `/latest/`, and `publish.sh` leaves `latest.json` and `appcast.xml`
-untouched so neither the site nor the updater offers it. That is the soak. `v2026.9.14`
+untouched so neither the site nor the updater offers it. That is the soak. `v26.0926.0`
 releases it.
 
 `latest.json` records `gatekeeper`, and the site shows or hides the `xattr` instruction
