@@ -595,6 +595,7 @@ public actor DictationPipeline {
         }
         if let failure {
             await tally.report(to: metrics)
+            guard !wasCancelled(mine) else { return }
             await fail(failure)
             return
         }
