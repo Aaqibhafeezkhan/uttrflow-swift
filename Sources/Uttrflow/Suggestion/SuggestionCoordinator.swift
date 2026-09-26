@@ -167,8 +167,7 @@ final class SuggestionCoordinator {
     /// Drops the verdicts and model answers this loop keeps, which may name a forgotten line.
     private func forgetWhatThisLoopRemembers() async {
         await verifier.forgetEverything()
-        lastGenerated = nil
-        lastEmpty = nil
+        modelPass.freshStart(surfaceChanged: true, lineIsEmpty: true)
     }
 
     /// Arms the tap and starts watching, or says why it cannot.
