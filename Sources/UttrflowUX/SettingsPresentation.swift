@@ -168,6 +168,7 @@ public enum SettingsToggleField: String, Sendable, Equatable, CaseIterable {
     case playsSoundWhenRecordingStarts
     case opensAtLogin
     case installsUpdatesAutomatically
+    case sendsCrashReports
     case suggestionsEnabled
     case quietSuggestions
 }

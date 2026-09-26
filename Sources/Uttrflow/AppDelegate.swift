@@ -7,6 +7,7 @@ import UttrflowAudio
 import UttrflowClipboard
 import UttrflowContext
 import UttrflowCore
+import UttrflowDiagnostics
 import UttrflowDictionary
 import UttrflowHistory
 import UttrflowInput
@@ -52,6 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Held, because the menu asks whether the model is ready every time it is drawn.
     private let modelStore = FileSystemSpeechModelStore.whisperKit()
 
+    /// Crash and hang reports, sent only while the user has them switched on.
+    private let crashReports = CrashReporter(
+        info: Bundle.main.infoDictionary ?? [:], sdk: LiveCrashReportingSDK())
     /// Keeps the pipeline's stage timings for the session, which is what the diagnostics page reports on.
     private let diagnostics = DiagnosticsRecorder()
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
@@ -243,6 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Reconciled at launch too: the login item can be removed without telling the app.
         applyAppearance()
         applyLaunchAtLogin()
+        crashReports.follow(isEnabled: settings.sendsCrashReports)
         buildPipeline()
         seedTheDictionary()
         sweepExpired()
@@ -2237,6 +2242,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // As above: a switch that drew itself and changed nothing.
         if updated.installsUpdatesAutomatically != previous.installsUpdatesAutomatically {
             updates.setInstallsAutomatically(updated.installsUpdatesAutomatically)
+        }
+        if updated.sendsCrashReports != previous.sendsCrashReports {
+            crashReports.follow(isEnabled: updated.sendsCrashReports)
         }
         // A freshly built cleaner, so the next dictation runs the choices just made.
         if updated.cleaning != previous.cleaning || updated.destinations != previous.destinations
