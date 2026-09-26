@@ -181,6 +181,32 @@ struct CappedDecodeRetryTests {
         #expect(raw.text.contains("first batch"))
     }
 
+    @Test("a decode still capped when the retries run out is reported as unresolved")
+    func cappedPastRetryBudgetIsUnresolved() async throws {
+        let totalSamples = 200 * 16_000
+        let backend = AlwaysCappedFakeBackend(samples: totalSamples, cappedEnd: 14.0)
+        let samples = Array(repeating: Float(0.1), count: totalSamples)
+
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .hindi, vocabulary: [], using: backend)
+
+        let calls = await backend.calls
+        #expect(calls.count == CappedDecodeRetry.maxRetries)
+        #expect(raw.effort.capUnresolved)
+    }
+
+    @Test("a capped decode that retries to a clean finish is not reported as unresolved")
+    func cappedThenFinishedIsResolved() async throws {
+        let totalSamples = 30 * 16_000
+        let backend = StretchedCappedBackend(samples: totalSamples, fragmentWord: "ह")
+        let samples = Array(repeating: Float(0.1), count: totalSamples)
+
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .hindi, vocabulary: [], using: backend)
+
+        #expect(!raw.effort.capUnresolved)
+    }
+
     @Test(
         "a token-capped decode that stretched the last fragment word to the audio end still triggers a tail retry"
     )
