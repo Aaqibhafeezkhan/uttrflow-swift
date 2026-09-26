@@ -525,6 +525,39 @@ struct MacContextEngineTests {
         #expect(context.applicationName == "Slack", "Slack activated last, without a context read in between")
     }
 
+    @Test("keeps an activation seen during a read over that read's older answer")
+    func activationDuringReadOutlivesTheRead() async {
+        let xcode = FrontmostApplication(
+            name: "Xcode", bundleIdentifier: "com.apple.dt.Xcode", processIdentifier: 28_165)
+        let started = Gate()
+        let release = Gate()
+        let answer = Mutex(xcode)
+        let report = Mutex<(@Sendable (FrontmostApplication) -> Void)?>(nil)
+        let engine = makeEngine(
+            frontmost: {
+                let current = answer.withLock { $0 }
+                guard current == xcode else { return current }
+                await started.open()
+                await release.wait()
+                return current
+            },
+            observeActivations: { callback in
+                report.withLock { $0 = callback }
+                return ()
+            }
+        )
+
+        async let first = engine.currentContext()
+        await started.wait()
+        report.withLock { $0 }?(slack)
+        await release.open()
+        _ = await first
+        answer.withLock { $0 = uttrflow }
+        let context = await engine.currentContext()
+
+        #expect(context.applicationName == "Slack", "Slack activated after the Xcode read began")
+    }
+
     @Test("never files Uttrflow's own activation under the application behind it")
     func neverRemembersItsOwnActivation() async {
         let report = Mutex<(@Sendable (FrontmostApplication) -> Void)?>(nil)
