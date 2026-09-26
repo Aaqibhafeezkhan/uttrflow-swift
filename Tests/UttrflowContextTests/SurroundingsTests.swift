@@ -354,6 +354,15 @@ struct SurroundingsTests {
         #expect(Surroundings.trimmed("\n\tHi there\r\n") == "Hi there")
     }
 
+    @Test("Zero-width joiners survive, since they join an emoji or keep two letters apart.")
+    func joinersSurvive() {
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"
+        #expect(Surroundings.cleaned(family) == family)
+        let word = "\u{645}\u{6CC}\u{200C}\u{631}\u{648}\u{645}"
+        #expect(Surroundings.cleaned(word) == word)
+        #expect(Surroundings.cleaned("\u{200E}" + word + "\u{200F}") == word)
+    }
+
     @Test("An element with no parent at all has no surroundings.")
     func anOrphanHasNoSurroundings() {
         let read = Surroundings.collect(around: compose, in: FakeTree(root: compose), windowTitle: "t")
