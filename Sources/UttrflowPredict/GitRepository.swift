@@ -170,7 +170,9 @@ struct GitRepository: Sendable {
     /// Whether exactly one loose object begins with this hex id; a packed object is not read, so it is not vouched for.
     func hasLooseObject(abbreviated id: String) -> Bool {
         let hex = id.lowercased()
-        guard (Self.shortestObjectID...64).contains(hex.count), hex.allSatisfy(\.isHexDigit) else { return false }
+        guard (Self.shortestObjectID...64).contains(hex.count), hex.allSatisfy(\.isHexDigit) else {
+            return false
+        }
         let folder = TerminalPath.joined(commonDirectory, "objects/" + hex.prefix(2))
         guard let names = files.names(inDirectory: folder, limit: Self.looseFolderLimit) else { return false }
         let rest = hex.dropFirst(2)
