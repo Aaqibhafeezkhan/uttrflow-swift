@@ -23,8 +23,23 @@ enum PictureFlavour {
         if CGImageSourceGetType(source) == UTType.png.identifier as CFString {
             return fromPNG(data)
         }
-        guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        guard let image = upright(from: source) else { return nil }
         return png(of: image)
+    }
+
+    /// The first image turned the way its orientation tag says it is shown, at full size.
+    private static func upright(from source: CGImageSource) -> CGImage? {
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let orientation = properties?[kCGImagePropertyOrientation] as? UInt32 ?? 1
+        guard orientation != 1, let size = pixelSize(of: source) else {
+            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(size.width, size.height),
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     /// A decoded picture encoded once as PNG, sized from the image itself.
