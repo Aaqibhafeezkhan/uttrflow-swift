@@ -95,6 +95,10 @@ EXCLUDED_FILES = {
         "of its own — when an update may install is UpdateGate, and which feed may be read is "
         "UpdateFeed, both tested"
     ),
+    "UttrflowDiagnostics/SentrySDK+Live.swift": (
+        "starts and closes the Sentry SDK, which installs a process-wide crash handler a test "
+        "cannot; the options and the scrubbing it hands over are CrashReporter, which is tested"
+    ),
     "Uttrflow/Onboarding/OnboardingAccountLayer.swift": "wiring only; pairs the backend with the store that believes its key",
     "Uttrflow/Onboarding/NetworkReachability+System.swift": "watches the real network path",
     "Uttrflow/Onboarding/OnboardingView.swift": "SwiftUI, drawn from a tested presentation",

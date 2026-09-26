@@ -583,6 +583,16 @@ public enum SettingsPresenter {
                     title: nil,
                     rows: [retentionRow(settings)]),
                 SettingsGroup(
+                    id: "diagnostics",
+                    title: nil,
+                    rows: [
+                        toggleRow(
+                            .sendsCrashReports,
+                            label: "Send crash reports",
+                            explanation: SettingsPresenter.crashReportsExplanation,
+                            settings, .everything)
+                    ]),
+                SettingsGroup(
                     id: "reset",
                     title: nil,
                     rows: [resetRow(personalisation)]),
@@ -591,6 +601,11 @@ public enum SettingsPresenter {
                 symbolName: "person.crop.circle",
                 message: SettingsPresenter.signingOutKeepsEverything))
     }
+
+    /// What a crash report carries, in the words the row shows. See `Docs/crash-reporting.md`.
+    static let crashReportsExplanation =
+        "When Uttrflow crashes or freezes, sends where in its code it happened, the app and macOS "
+        + "versions, and nothing you dictated, copied or opened. Off until you turn it on."
 
     /// Says that signing out is not a reset. See `Docs/ux-settings-model.md`.
     static let signingOutKeepsEverything =
@@ -775,6 +790,7 @@ public enum SettingsPresenter {
         case .playsSoundWhenRecordingStarts: settings.playsSoundWhenRecordingStarts
         case .opensAtLogin: settings.opensAtLogin
         case .installsUpdatesAutomatically: settings.installsUpdatesAutomatically
+        case .sendsCrashReports: settings.sendsCrashReports
         case .suggestionsEnabled: settings.suggestions.isEnabled
         case .quietSuggestions: settings.suggestions.isQuiet
         }

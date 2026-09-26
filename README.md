@@ -424,6 +424,14 @@ Audio, transcripts, dictionary contents, window titles and application names hav
 to go. There is no opt-out switch, because there is nothing yet to opt out of. Before
 anything is ever sent there will be one, and a way to read exactly what was sent.
 
+**Crash reports are off unless you turn them on.** Settings → Privacy → *Send crash
+reports* is the one exception to the paragraph above, and it starts off. When it is on, a
+crash or a freeze is reported to Sentry, the error tracker the project uses: the app and
+macOS versions, the Mac model and architecture, the exception, and the stack as binary
+names and addresses. No user or host name, no file paths (each is cut to its file name), no
+breadcrumbs, and nothing you dictated or copied. Builds made from source carry no reporting
+key and never send anything. [Docs/crash-reporting.md](Docs/crash-reporting.md) has the details.
+
 The app is not hermetic and does not claim to be: it downloads a speech model on first run,
 roughly 646 MB, and signs you in once. After that it dictates with no network at all. A
 cloud clean-up engine exists behind the `UTTRFLOW_CLOUD` compilation flag and is **not** in
