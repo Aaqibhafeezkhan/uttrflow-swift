@@ -136,6 +136,22 @@ struct ApplicationIconsTests {
         #expect(counter.installed == ["Ghost"])
     }
 
+    /// An app installed or launched after a miss gets its real icon once the window is brought up again.
+    @Test("asks again after forgetting, and sees an app that has appeared since")
+    func forgetsAMiss() {
+        var appeared: NSImage?
+        let source = ApplicationIconSource(
+            identified: { _ in nil }, running: { _ in appeared }, installed: { _ in nil })
+        let icons = ApplicationIcons(source: source)
+
+        #expect(icons.icon(for: app("Ghost")) == nil)
+        appeared = image(width: runningIcon)
+        #expect(icons.icon(for: app("Ghost")) == nil, "still remembered until forgotten")
+        icons.forget()
+
+        #expect(icons.icon(for: app("Ghost"))?.size.width == runningIcon)
+    }
+
     @Test("does not go looking for an app with no name")
     func ignoresAnEmptyName() {
         let (icons, counter) = icons()
