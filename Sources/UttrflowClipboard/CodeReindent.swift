@@ -171,9 +171,7 @@ public enum CodeReindent {
         return count
     }
 
-    /// Whether this is a makefile, where a leading tab is grammar; tab-bodied Python is refused with it.
-    ///
-    /// Walks back past comment and blank lines, since a rule header still governs its recipe across them.
+    /// Whether this is a makefile, where a leading tab is grammar; walks back past comment and blank lines to the rule header.
     private static func looksLikeMakefile(_ lines: [String]) -> Bool {
         var lastMeaningful: String?
         for line in lines {
