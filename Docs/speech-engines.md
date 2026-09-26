@@ -340,3 +340,9 @@ call had been replaced by another's.
   single segment with no inner timestamps, so the window ended at its fixed 30 seconds and the
   four words spoken across that boundary were lost. That is the decoder's segmentation under a
   long prompt, not the alignment.
+- `CappedDecodeRetry.collapsedWindow` catches that shape: a segment that ends at a 30-second
+  window (or spans a whole one) while its last word ends more than a second before it, with audio
+  still after it. The segments after it are dropped and the audio is decoded again from that last
+  word, so the boundary words are recovered at the cost of one extra decode of the remainder,
+  paid only when a window collapses (#1567). Unit-tested against a fake recogniser; the cost on
+  the 53-second clip has not been re-measured on real audio.

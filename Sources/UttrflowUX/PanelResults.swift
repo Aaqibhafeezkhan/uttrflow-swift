@@ -89,13 +89,16 @@ extension PanelSnapshot {
                 ? .alias
                 : Self.field(
                     matching: needle, in: clip, locale: locale,
-                    searchingText: ruledIn?.contains(clip.id) ?? true)
+                    searchingText: (ruledIn?.contains(clip.id) ?? true) && !isMasked(clip))
             guard let matched else { return nil }
             return PanelMatch(
                 position: position,
                 result: PanelResult(clip: clip, match: matched, isExactAlias: isExact))
         }
     }
+
+    /// Whether a clip is a secret still hidden, whose text is never searched. See `Docs/panel.md`.
+    func isMasked(_ clip: Clip) -> Bool { clip.kind == .secret && !revealed.contains(clip.id) }
 
     /// The matches in the order they are drawn, and how many of each kind the cap left out.
     func ranked(_ matches: [PanelMatch]) -> ([PanelResult], [PanelMatchField: Int]) {
@@ -109,17 +112,14 @@ extension PanelSnapshot {
         return Self.capping(ordered) { row in
             // A collection named exactly is asked for whole; there is nothing more to type to narrow it.
             row.match == .category
-                && row.clip.category?.compare(
-                    needle, options: [.caseInsensitive, .diacriticInsensitive], locale: self.locale)
-                    == .orderedSame
+                && row.clip.category?.equals(needle, ignoringCaseAndAccentsIn: self.locale) == true
         }
     }
 
     /// Whether a clip's whole text, trimmed, is the query, ignoring case and accents.
     static func isWhole(_ needle: String, of clip: Clip, locale: Locale) -> Bool {
-        clip.text.trimmingCharacters(in: .whitespacesAndNewlines).compare(
-            needle, options: [.caseInsensitive, .diacriticInsensitive], locale: locale)
-            == .orderedSame
+        clip.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .equals(needle, ignoringCaseAndAccentsIn: locale)
     }
 
     /// Match field, then exact alias or whole text, then pinned, then arrival order, so groups are contiguous for ↓.

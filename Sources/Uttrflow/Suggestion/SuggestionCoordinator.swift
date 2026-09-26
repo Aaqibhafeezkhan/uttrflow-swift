@@ -45,7 +45,7 @@ final class SuggestionCoordinator {
     private static let log = Logger(subsystem: "com.uttrflow.Uttrflow", category: "predict")
 
     private let store: PredictStore
-    private let capture: CaptureSession
+    let capture: CaptureSession
     private let panel = SuggestionPanelController.shared
     private let interceptor = KeyInterceptor()
     private let acceptor: SuggestionAcceptor
@@ -65,6 +65,8 @@ final class SuggestionCoordinator {
     private var lastEmpty: (surface: Surface, typed: String)?
     /// A turn booked for the moment a rule stops refusing, so a prose pause is answered then, not at the next tick.
     private var pendingWake: Task<Void, Never>?
+    /// The turn in flight, cancelled by the next keystroke so its scoring stops rather than running past the line it was for.
+    private var running: Task<Void, Never>?
     /// How long a burst of keystrokes must pause before the model is asked about its last prefix.
     nonisolated static let generationDebounceInMilliseconds = 120
     /// How much of the text before the caret's line the model is shown, enough for the sentence or command before it.
@@ -84,6 +86,8 @@ final class SuggestionCoordinator {
     private var ticking = SuggestionTicking()
     private var swallowed: Task<Void, Never>?
     private var lastReading: FieldReading?
+    /// The line capture was last handed as a keystroke, and the field it was in, so a Return can catch up what it displaced.
+    private var handed: (line: String, reading: FieldReading)?
     /// The last field read, so the highlight can move without reading anything again.
     private var lastSnapshot: FocusedFieldSnapshot?
     private var lastKeystroke = Date.distantPast
@@ -123,7 +127,7 @@ final class SuggestionCoordinator {
                 path: CapturePreferencesFile.defaultFile(in: container).path(percentEncoded: false)),
             // A line that was never sent was not a value: a shell and a chat composer learn on Return alone.
             policy: .whereReturnSends)
-        acceptor = SuggestionAcceptor(completion: TextInsertion.completion())
+        acceptor = SuggestionAcceptor(completion: TextInsertion.completion(), focus: AXAccessibilityFocus())
     }
 
     isolated deinit {
@@ -148,6 +152,27 @@ final class SuggestionCoordinator {
     /// Forgets every answer about which applications may be learned from, which a reset asks for.
     func forgetEveryAnswer() async throws {
         try await capture.forgetEveryAnswer()
+    }
+
+    /// Forgets what one application taught, on disk and in every copy this loop holds.
+    func forgetSuggestions(from bundleIdentifier: String) async throws {
+        await capture.forgetLearned(from: bundleIdentifier)
+        await forgetWhatThisLoopRemembers()
+        try await store.forget(bundleIdentifier: bundleIdentifier)
+    }
+
+    /// Forgets every line and answer, on disk and in every copy this loop holds.
+    func forgetEverySuggestion() async throws {
+        try await capture.forgetEverythingLearned()
+        await forgetWhatThisLoopRemembers()
+        try await store.forgetEverything()
+    }
+
+    /// Drops the verdicts and model answers this loop keeps, which may name a forgotten line.
+    private func forgetWhatThisLoopRemembers() async {
+        await verifier.forgetEverything()
+        lastGenerated = nil
+        lastEmpty = nil
     }
 
     /// Arms the tap and starts watching, or says why it cannot.
@@ -177,6 +202,7 @@ final class SuggestionCoordinator {
         swallowed = nil
         generating?.cancel()
         pendingWake?.cancel()
+        running?.cancel()
         ticker?.invalidate()
         ticker = nil
         ticking = SuggestionTicking()
@@ -236,6 +262,7 @@ final class SuggestionCoordinator {
         session.invalidate()
         generating?.cancel()
         pendingWake?.cancel()
+        running?.cancel()
         interceptor.arm([])
         panel.hide()
     }
@@ -284,8 +311,6 @@ final class SuggestionCoordinator {
 
     /// One key pressed in another application, which is the only thing that moves the caret for us.
     private func keyPressed(_ key: Key) {
-        // Keys arriving while we insert are our own, so they neither reset the pause clock nor wake a turn.
-        guard !isInserting else { return }
         noteActivity()
         lastKeystroke = Date()
         // Counted in the session, so a Tab pressed before the next read cannot take an offer for the old line.
@@ -322,6 +347,7 @@ final class SuggestionCoordinator {
         case .stalled(let turn):
             Self.log.error("STALL a turn ran past \(TurnGate.stallSeconds)s and is left behind")
             generating?.cancel()
+            running?.cancel()
             start(turn, because: reason)
         case .free(let turn):
             start(turn, because: reason)
@@ -330,7 +356,7 @@ final class SuggestionCoordinator {
 
     /// Runs the turn the gate admitted and reports its end under the same number.
     private func start(_ turn: Int, because reason: SuggestionReason) {
-        Task { [weak self] in
+        running = Task { [weak self] in
             await self?.turn(turn, because: reason)
             self?.finished(turn)
         }
@@ -451,8 +477,8 @@ final class SuggestionCoordinator {
             )
             // A prose pause is answered the moment it is long enough, rather than at whatever tick comes next.
             if silence == .writingFluently {
-                let waited = Int(started.timeIntervalSince(lastKeystroke) * 1000)
-                wake(.tick, afterMilliseconds: Quieting.proseHesitationInMilliseconds - waited + 20)
+                let delay = Self.hesitationWake(sinceKeystroke: lastKeystroke, now: Date())
+                wake(.tick, afterMilliseconds: delay)
             }
         }
         draw(update, in: snapshot)
@@ -562,6 +588,8 @@ final class SuggestionCoordinator {
             lastGenerated = (query.surface, query.typed, [leader] + others)
             return await drawFresh(expanded, for: snapshot, turn: number)
         }
+        // Quiet never shows the list, so no model pass is spent building one.
+        guard !preferences.isQuiet else { return }
         let more = Task { [generator, store, contextCache] in
             let situation = await Self.situation(
                 of: snapshot, for: query, store: store, cache: contextCache, turn: number)
@@ -599,6 +627,12 @@ final class SuggestionCoordinator {
             )
         }
         return standing
+    }
+
+    /// Milliseconds until the prose pause after the latest keystroke is long enough, counted from now rather than from the turn's start.
+    nonisolated static func hesitationWake(sinceKeystroke keystroke: Date, now: Date) -> Int {
+        let passed = Int(now.timeIntervalSince(keystroke) * 1000)
+        return max(0, Quieting.proseHesitationInMilliseconds - passed) + 20
     }
 
     /// What is left of the debounce for a key pressed at `keystroke`, which is nothing once the pause is long enough.
@@ -666,8 +700,19 @@ final class SuggestionCoordinator {
         if case .applicationChanged = reason, let leaving = lastReading, leaving != reading {
             _ = try? await capture.handle(.applicationDeactivated(at: moment), in: leaving)
         }
-        let event = reason.event(holding: snapshot.learnableLine, at: moment)
-        guard let outcome = try? await capture.handle(event, in: reading) else { return }
+        let line = snapshot.learnableLine
+        let events: [CaptureEvent]
+        if case .returnPressed = reason {
+            let prior = handed.flatMap { $0.reading == reading ? $0.line : nil } ?? ""
+            events = ReturnCatchUp.events(read: line, handed: prior, at: moment)
+            handed = nil
+        } else {
+            events = [reason.event(holding: line, at: moment)]
+            if case .keystroke = events[0] { handed = (line, reading) }
+        }
+        var outcome: CaptureOutcome?
+        for event in events { outcome = try? await capture.handle(event, in: reading) }
+        guard let outcome else { return }
         guard case .refused(let refusal) = outcome, refusal.asksTheUser else { return }
         // The Suggestions screen has already said yes to this application, so the capture store is told so.
         Task { [capture] in try? await capture.record(.allowed, for: snapshot.bundleIdentifier) }
@@ -748,9 +793,11 @@ final class SuggestionCoordinator {
                 wake(.tick, afterMilliseconds: 80)
             case .redraw(let update):
                 draw(update, in: lastSnapshot)
-            case .nothing:
-                break
+            case .giveBack(let refused):
+                KeyStrokeReturn.post(refused)
             }
+            // The keys pressed since this one reach the application only now, after anything it inserted.
+            interceptor.releaseHeldKeys()
             // ⌥⎋ turns the feature off everywhere; persist it so the switch agrees and a later enable rebuilds this.
             if !session.isEnabled {
                 if let onTurnedOffEverywhere { onTurnedOffEverywhere() } else { stop() }
@@ -783,7 +830,7 @@ final class SuggestionCoordinator {
         switch action {
         case .accept: "accept"
         case .redraw: "redraw"
-        case .nothing: "nothing"
+        case .giveBack: "giveBack"
         }
     }
 

@@ -48,6 +48,15 @@ struct RecordingTests {
         #expect(found.first?.evidence?.count == 1)
     }
 
+    @Test("A line whose command substitution cannot be read is marked irreversible.")
+    func unreadableSubstitutionIsIrreversible() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record("rm -rf $(find . -name node_modules)", in: terminal, at: moment)
+        let found = try await store.candidates(for: terminal, matching: "rm -rf")
+        #expect(found.map(\.isIrreversible) == [true])
+    }
+
     @Test("the corpus database is kept out of backups")
     func databaseIsExcludedFromBackup() async throws {
         let corpus = Corpus()
@@ -425,6 +434,19 @@ struct ForgettingTests {
         try await PredictStore(path: corpus.path).forgetEverything()
         #expect(try await first.entryCount() == 0)
         #expect(try await first.entryCountsByApplication().isEmpty)
+    }
+
+    @Test("Forgetting succeeds while another connection holds a read open.")
+    func forgetsBesideAnOpenReader() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record("git push", in: terminal, at: moment)
+        let reader = try Database(path: corpus.path)
+        try reader.execute("BEGIN")
+        _ = try reader.rows("SELECT COUNT(*) FROM entry", { _ in }) { $0.integer(0) }
+        try await store.forgetEverything()
+        #expect(try await store.entryCount() == 0)
+        try reader.execute("COMMIT")
     }
 
     @Test("Forgetting from a field never typed in is not an error.")

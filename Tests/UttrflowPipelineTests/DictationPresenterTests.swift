@@ -150,7 +150,7 @@ struct RecordingInstructionTests {
             let dock = DictationPresenter.dock(
                 for: .recording, advice: .approaching(remaining: .seconds(30)),
                 stopGesture: gesture)
-            // Both halves, so the prefix alone cannot pass while the countdown drops from the spoken line.
+            // Both halves are checked so the prefix alone never hides a missing countdown.
             #expect(dock.secondaryLine != nil, "\(gesture) lost the countdown line")
             #expect(
                 dock.accessibilityLabel.contains(dock.secondaryLine ?? ""),

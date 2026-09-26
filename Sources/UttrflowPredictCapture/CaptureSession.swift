@@ -43,18 +43,23 @@ public actor CaptureSession {
     /// Takes one event in one field and answers with what it came to.
     public func handle(_ event: CaptureEvent, in reading: FieldReading) async throws -> CaptureOutcome {
         // The application leaving is the one still focused here, whatever field the caller last read in it.
-        if case .applicationDeactivated = event, focused != reading {
+        if case .applicationDeactivated = event, !isFocused(reading) {
             defer { focused = nil }
             return try await flush(with: event)
         }
-        if focused != reading {
-            _ = try await flush(with: .focusLeft(at: event.moment))
-            focused = reading
-        }
+        if !isFocused(reading) { _ = try await flush(with: .focusLeft(at: event.moment)) }
+        focused = reading
         guard let surface = reading.surface,
             let commit = detector.receive(event, admitting: { policy.admits($0, in: reading) })
         else { return .nothing }
         return try await write(commit, from: reading, in: surface, at: event.moment)
+    }
+
+    /// Whether this reading is the focused field, judged by the surface it names so a window's title marks do not end it.
+    private func isFocused(_ reading: FieldReading) -> Bool {
+        guard let focused else { return false }
+        guard let surface = reading.surface, let known = focused.surface else { return focused == reading }
+        return surface == known && focused.isSecure == reading.isSecure
     }
 
     /// Records a completion the person took, through the same refusals as anything they typed.
@@ -69,6 +74,7 @@ public actor CaptureSession {
         try await sink.record(text, in: surface, after: lastRecorded[surface], selfSourced: true, at: moment)
         try await sink.recordAccepted(text, in: surface)
         lastRecorded[surface] = text
+        if isFocused(reading) { detector.accepted(text) }
         return .recorded(text)
     }
 
@@ -87,6 +93,20 @@ public actor CaptureSession {
         try preferencesFile.remove()
     }
 
+    /// Forgets what this session holds about one application, so its next line does not follow a forgotten one.
+    public func forgetLearned(from bundleIdentifier: String) {
+        let application = Surface(bundleIdentifier: bundleIdentifier, role: "").bundleIdentifier
+        lastRecorded = lastRecorded.filter { $0.key.bundleIdentifier != application }
+        if focused?.surface?.bundleIdentifier == application { detector.reset() }
+    }
+
+    /// Forgets every line and answer this session holds, in memory and on disk.
+    public func forgetEverythingLearned() throws {
+        lastRecorded = [:]
+        detector.reset()
+        try forgetEveryAnswer()
+    }
+
     /// Seeds a terminal from the shell's history, once, and only because the user asked for it.
     public func importShellHistory(
         forHomeDirectory home: String, into surface: Surface, at moment: Date
@@ -98,7 +118,7 @@ public actor CaptureSession {
             let commands = ShellHistory.read(atPath: path)
             guard !commands.isEmpty else { continue }
             var stored = 0
-            for command in commands where !DestructiveCommand.matches(command) {
+            for command in commands where !DestructiveCommand.matches(command, failClosedOnUnresolved: true) {
                 try await sink.record(
                     command, in: surface, after: nil, selfSourced: false, at: moment)
                 stored += 1
@@ -124,10 +144,14 @@ public actor CaptureSession {
         if let refusal = CaptureGate.refusal(
             toRecord: commit.text, from: reading, given: preferences)
         {
+            // Forgotten, so a refused value is never later handed to the sink as the one replaced.
+            detector.forgetLastIdleCommit()
             return .refused(refusal)
         }
         do {
-            if let superseded = commit.supersedes {
+            if let superseded = commit.supersedes,
+                CaptureGate.refusal(toRecord: superseded, from: reading, given: preferences) == nil
+            {
                 try await sink.supersede(superseded, with: commit.text, in: surface)
             }
             try await sink.record(

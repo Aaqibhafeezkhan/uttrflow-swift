@@ -102,14 +102,14 @@ struct DictationPageTests {
         #expect(page.rows.first?.detail == "2 words")
     }
 
-    @Test("every row offers copy, insert again and flag, in that order")
+    @Test("every row offers copy, copy to paste elsewhere and flag, in that order")
     func rowActions() {
         let entry = HistoryFixture.entry("Say it again")
         let row = HistoryFixture.dictation(entries: [entry]).rows[0]
 
-        #expect(row.actions.map(\.title) == ["Copy", "Insert Again", "Flag"])
+        #expect(row.actions.map(\.title) == ["Copy", "Copy to Paste Elsewhere", "Flag"])
         #expect(row.actions[0].intent == .copy("Say it again"))
-        #expect(row.actions[1].intent == .insert("Say it again"))
+        #expect(row.actions[1].intent == .copy("Say it again"))
         #expect(row.actions[2].intent == .flagDictation(entry.id))
         #expect(row.more.map(\.intent) == [.forgetDictation(entry.id)])
         #expect(row.more[0].isDestructive)
@@ -236,11 +236,11 @@ struct DictationFlagTests {
     @Test("the button says what it will do and shows what it has done")
     func flagReadsItsState() {
         let plain = HistoryFixture.dictation(entries: [HistoryFixture.entry()])
-        #expect(plain.rows[0].actions.map(\.title) == ["Copy", "Insert Again", "Flag"])
+        #expect(plain.rows[0].actions.map(\.title) == ["Copy", "Copy to Paste Elsewhere", "Flag"])
 
         let flagged = HistoryFixture.dictation(
             entries: [HistoryFixture.entry(isFlagged: true)])
-        #expect(flagged.rows[0].actions.map(\.title) == ["Copy", "Insert Again", "Unflag"])
+        #expect(flagged.rows[0].actions.map(\.title) == ["Copy", "Copy to Paste Elsewhere", "Unflag"])
         #expect(flagged.rows[0].actions.last?.symbolName == "flag.fill")
     }
 
@@ -327,18 +327,44 @@ struct DictationFiguresTests {
         #expect(figure?.comment == "days in a row")
     }
 
-    /// A run reaching retention's own edge proves older days were deleted, not merely never dictated.
-    @Test("a streak that fills the whole retention window says so")
+    /// A run reaching past retention's edge proves older days were deleted, not merely never dictated.
+    @Test("a streak that runs past the retention window says so")
     func streakAtTheEdgeOfRetention() {
         var settings = Settings.default
         settings.transcriptRetentionDays = 2
         let page = HistoryFixture.dictation(
             entries: [
                 HistoryFixture.entry("today"), HistoryFixture.entry("yesterday", daysAgo: 1),
+                HistoryFixture.entry("past the window", minutesAgo: 60, daysAgo: 2),
             ], settings: settings)
         let figure = page.figures.first { $0.caption == "Day streak" }
         #expect(figure?.value == "2")
         #expect(figure?.comment == "at least — anything older has been deleted")
+    }
+
+    /// A new install's whole life that happens to fill the window has had nothing deleted.
+    @Test("a streak that exactly fills the window with nothing older says nothing about deletion")
+    func streakFillingTheWindowIsNotADeletion() {
+        let page = HistoryFixture.dictation(
+            entries: (0..<Settings.default.transcriptRetentionDays).map {
+                HistoryFixture.entry("day \($0)", daysAgo: $0)
+            })
+        let figure = page.figures.first { $0.caption == "Day streak" }
+        #expect(figure?.value == "\(Settings.default.transcriptRetentionDays)")
+        #expect(figure?.comment == "days in a row")
+    }
+
+    /// A deleted entry separated from the run by a silent day does not extend it.
+    @Test("a deletion beyond a gap does not make the streak 'at least'")
+    func deletionBeyondAGapIsNotTheRun() {
+        var settings = Settings.default
+        settings.transcriptRetentionDays = 2
+        let page = HistoryFixture.dictation(
+            entries: [
+                HistoryFixture.entry("today"), HistoryFixture.entry("yesterday", daysAgo: 1),
+                HistoryFixture.entry("long gone", daysAgo: 4),
+            ], settings: settings)
+        #expect(page.figures.first { $0.caption == "Day streak" }?.comment == "days in a row")
     }
 
     /// One day is not a streak, and calling it one makes every other number less believable.

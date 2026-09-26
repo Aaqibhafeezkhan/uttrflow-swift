@@ -92,7 +92,11 @@ public final class MacContextEngine: ContextEngine, Sendable {
         // Every stored property now has a value, so `self` is safe to capture from here on.
         let token = observeActivations { [weak self] application in
             guard let self, !self.isOurselves(application) else { return }
-            self.memory.withLock { $0.appBehind = application }
+            self.memory.withLock { memory in
+                // Supersedes any read still in flight, so its older answer is not kept.
+                memory.requestNumber &+= 1
+                memory.appBehind = application
+            }
         }
         activationToken.withLock { $0 = token }
     }

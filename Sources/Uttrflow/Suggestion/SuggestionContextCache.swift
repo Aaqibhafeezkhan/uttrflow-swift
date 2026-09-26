@@ -11,6 +11,7 @@ actor SuggestionContextCache {
 
     private var built: (turn: Int, situation: GenerationSituation)?
     private var walked: (key: String, surroundings: Surroundings, at: ContinuousClock.Instant)?
+    private var walking: (key: String, walk: Task<Surroundings?, Never>)?
 
     /// What this turn was already told, when it has been told anything.
     func situation(forTurn turn: Int) -> GenerationSituation? {
@@ -22,16 +23,23 @@ actor SuggestionContextCache {
         built = (turn, situation)
     }
 
-    /// The window's surroundings, walked only when this window has not been walked lately.
+    /// The window's surroundings, walked only when this window has not been walked lately and is not being walked now.
     func surroundings(
         for key: String, now: ContinuousClock.Instant = ContinuousClock().now,
-        reading walk: @Sendable () async -> Surroundings?
+        reading walk: @escaping @Sendable () async -> Surroundings?
     ) async -> Surroundings? {
         if let walked, walked.key == key, now - walked.at < Self.surroundingsLifetime {
             return walked.surroundings
         }
+        if let walking, walking.key == key {
+            return await walking.walk.value
+        }
+        let task = Task { await walk() }
+        walking = (key, task)
+        let fresh = await task.value
+        if walking?.key == key { walking = nil }
         // A walk that timed out is not kept: the next pass should try the window again.
-        guard let fresh = await walk() else { return nil }
+        guard let fresh else { return nil }
         walked = (key, fresh, now)
         return fresh
     }

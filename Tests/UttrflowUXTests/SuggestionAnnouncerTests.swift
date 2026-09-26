@@ -41,7 +41,7 @@ struct SuggestionAnnouncerTests {
                 == "AI suggestion: ls -l. Right Arrow to accept.")
     }
 
-    @Test("A redraw of the same offer, or typing into it, is not announced again")
+    @Test("A redraw of the same offer, or typing that keeps its cost, is not announced again")
     func aRedrawIsSilent() {
         var announcer = SuggestionAnnouncer()
         #expect(announcer.announcement(for: SuggestionPresentation(.certain("Sydney"))) != nil)
@@ -52,7 +52,18 @@ struct SuggestionAnnouncerTests {
                 != nil)
         #expect(
             announcer.announcement(for: SuggestionPresentation(.certain("git commit -m"), typed: "gti co"))
-                == nil)
+                == "AI suggestion: git commit -m. Tab to accept, replacing 5 characters.")
+    }
+
+    @Test("The same leader is announced again when taking it would replace a different amount")
+    func aChangedCostIsAnnounced() {
+        var announcer = SuggestionAnnouncer()
+        #expect(
+            announcer.announcement(for: SuggestionPresentation(.certain("git commit -m"), typed: "git"))
+                != nil)
+        #expect(
+            announcer.announcement(for: SuggestionPresentation(.certain("git commit -m"), typed: "gti c"))
+                == "AI suggestion: git commit -m. Tab to accept, replacing 4 characters.")
     }
 
     @Test("A different offer is announced")

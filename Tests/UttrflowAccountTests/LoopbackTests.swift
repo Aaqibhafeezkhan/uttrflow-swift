@@ -4,6 +4,7 @@ import Foundation
 import Network
 import Synchronization
 import Testing
+import UttrflowCore
 
 @testable import UttrflowAccount
 
@@ -234,6 +235,71 @@ struct LoopbackListenerTests {
         await listener.close()
     }
 
+    /// Sends `path` one byte at a time with a short delay, so no single TCP read carries the whole request.
+    private func getSplitByteByByte(_ path: String, port: UInt16) async -> String {
+        await withCheckedContinuation { continuation in
+            let once = Mutex(false)
+            let finish: @Sendable (String) -> Void = { text in
+                guard
+                    once.withLock({ used in
+                        defer { used = true }; return !used
+                    })
+                else { return }
+                continuation.resume(returning: text)
+            }
+            let connection = NWConnection(
+                host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port) ?? .any, using: .tcp)
+            let collected = Mutex(Data())
+            @Sendable func read() {
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) {
+                    data, _, isComplete, error in
+                    if let data { collected.withLock { $0.append(data) } }
+                    if isComplete || error != nil {
+                        connection.cancel()
+                        finish(String(decoding: collected.withLock { $0 }, as: UTF8.self))
+                    } else {
+                        read()
+                    }
+                }
+            }
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    let request = Array("GET \(path) HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".utf8)
+                    // The first byte alone must not already look like a complete request to the listener.
+                    connection.send(
+                        content: Data([request[0]]),
+                        completion: .contentProcessed { _ in
+                            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                                connection.send(
+                                    content: Data(request.dropFirst()),
+                                    completion: .contentProcessed { _ in read() })
+                            }
+                        })
+                case .failed, .cancelled:
+                    finish(String(decoding: collected.withLock { $0 }, as: UTF8.self))
+                default:
+                    break
+                }
+            }
+            connection.start(queue: .global())
+        }
+    }
+
+    /// A request line split across two TCP reads is still recognised once the rest of it arrives.
+    @Test("accumulates a request line that arrives in more than one TCP read")
+    func aSplitRequestLineIsStillRecognised() async throws {
+        let (listener, port) = try await bound()
+
+        let answer = await getSplitByteByByte("/callback?code=the-code&state=\(Self.state)", port: port)
+        #expect(answer.hasPrefix("HTTP/1.1 200"))
+        #expect(answer.contains("Signed in"))
+
+        let callback = try await listener.awaitCallback()
+        #expect(callback == LoopbackCallback(code: "the-code", state: Self.state))
+        await listener.close()
+    }
+
     /// With no expected state nothing matches, so a listener that was never bound hands nothing on.
     @Test("matches nothing when no state is expected")
     func noExpectedStateMatchesNothing() {
@@ -244,5 +310,107 @@ struct LoopbackListenerTests {
         #expect(
             !SystemLoopbackListener.answers(
                 callback, expecting: "s", received: LoopbackCallback(code: "other", state: "s")))
+    }
+}
+
+/// Cancelling a browser sign-in ends the wait on the real listener and gives its port back.
+@Suite("Cancelling a browser sign-in", .timeLimit(.minutes(1)))
+struct LoopbackCancellationTests {
+    /// A real listener that counts how often it was closed.
+    private final class CountingListener: LoopbackListening {
+        /// The listener doing the work.
+        let inner = SystemLoopbackListener()
+        /// How many times `close()` ran.
+        private let closes = Mutex(0)
+
+        var timesClosed: Int { closes.withLock { $0 } }
+
+        func bind(expecting state: String) async throws(AccountError) -> URL {
+            try await inner.bind(expecting: state)
+        }
+
+        func awaitCallback() async throws(AccountError) -> LoopbackCallback {
+            try await inner.awaitCallback()
+        }
+
+        func close() async {
+            closes.withLock { $0 += 1 }
+            await inner.close()
+        }
+
+        /// Returns once `close()` has run, or after two seconds.
+        func waitUntilClosed() async {
+            for _ in 0..<200 where timesClosed == 0 {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+    }
+
+    /// Whether `task` ended with the listener's no-answer refusal.
+    private func endedWithRefusal<Value: Sendable>(_ task: Task<Value, any Error>) async -> Bool {
+        do {
+            _ = try await task.value
+            return false
+        } catch AccountError.providerRefused {
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// The service under test, signing in through `listener` against a backend that is never reached.
+    private func service(_ listener: CountingListener) -> HTTPAuthenticationService {
+        HTTPAuthenticationService(
+            baseURL: Stub.baseURL, transport: StubTransport { _, _ in nil }, tokens: InMemoryTokenStore(),
+            device: nil, verifier: Fixture.verifier, makeListener: { listener })
+    }
+
+    @Test("refuses a wait begun in a task that is already cancelled")
+    func anAlreadyCancelledWaitEnds() async throws {
+        let listener = SystemLoopbackListener()
+        _ = try await listener.bind(expecting: "the-state")
+        let waiter = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await listener.awaitCallback()
+        }
+        #expect(await endedWithRefusal(waiter))
+        await listener.close()
+    }
+
+    @Test("refuses a wait that is cancelled while it is waiting")
+    func aWaitingWaitEndsOnCancel() async throws {
+        let listener = SystemLoopbackListener()
+        _ = try await listener.bind(expecting: "the-state")
+        let waiter = Task { try await listener.awaitCallback() }
+        try await Task.sleep(for: .milliseconds(100))
+        waiter.cancel()
+        #expect(await endedWithRefusal(waiter))
+    }
+
+    @Test("ends a sign-in cancelled before it waits, and closes its listener")
+    func anAlreadyCancelledSignInEnds() async throws {
+        let listener = CountingListener()
+        let backend = service(listener)
+        let challenge = try await backend.beginSignIn(with: .google)
+        let signIn = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await backend.completeSignIn(challenge)
+        }
+        #expect(await endedWithRefusal(signIn))
+        await listener.waitUntilClosed()
+        #expect(listener.timesClosed > 0)
+    }
+
+    @Test("ends a sign-in cancelled while it waits for the browser, and closes its listener")
+    func aWaitingSignInEndsOnCancel() async throws {
+        let listener = CountingListener()
+        let backend = service(listener)
+        let challenge = try await backend.beginSignIn(with: .google)
+        let signIn = Task { try await backend.completeSignIn(challenge) }
+        try await Task.sleep(for: .milliseconds(100))
+        signIn.cancel()
+        #expect(await endedWithRefusal(signIn))
+        await listener.waitUntilClosed()
+        #expect(listener.timesClosed > 0)
     }
 }

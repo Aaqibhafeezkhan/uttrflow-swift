@@ -17,7 +17,8 @@ enum SuggestionMoment {
             subrole: snapshot.subrole, identifier: snapshot.identifier,
             placeholder: snapshot.placeholder,
             accessibilityDescription: snapshot.accessibilityDescription, document: snapshot.document,
-            windowTitle: snapshot.windowTitle, applicationName: snapshot.applicationName)
+            windowTitle: snapshot.windowTitle, applicationName: snapshot.applicationName,
+            isKnownSecure: snapshot.isSecure)
     }
 
     /// Everything about this moment that can silence a suggestion, given how long since the last keystroke.
@@ -53,6 +54,7 @@ enum SuggestionMoment {
             document: snapshot.document,
             preceding: snapshot.preceding(maxLength: precedingContextLength),
             windowTitle: around?.windowTitle, surroundings: around?.text, recentLines: recent,
+            timedTurnLines: around?.timedTurnLines ?? 0,
             isMultiline: snapshot.role == FocusedFieldSnapshot.proseRole
                 || snapshot.value?.contains(where: \.isNewline) == true)
     }

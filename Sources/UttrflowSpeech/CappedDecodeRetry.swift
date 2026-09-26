@@ -9,6 +9,10 @@ public enum CappedDecodeRetry {
     public static let tokenCapThreshold = 215
     /// A word longer than this is taken to be the fragment the recogniser stretched to fill the rest of the audio after the decoder stopped mid-word; the previous word's end is where the real decode stopped.
     public static let fragmentWordDuration: Duration = .milliseconds(900)
+    /// The recogniser's fixed window; a segment that ends at one without inner timestamps is where a window collapsed.
+    public static let windowSeconds = 30.0
+    /// Silence between a collapsed segment's last word and its end past which words are taken to have been dropped.
+    public static let collapsedGapSeconds = 1.0
 
     /// Decodes `samples` with `backend`, retrying the tail when the decoder's token cap stops a decode early.
     public static func transcribe(
@@ -36,10 +40,17 @@ public enum CappedDecodeRetry {
             totalEffort = totalEffort.adding(result.effort)
             totalTokensUsed += result.tokensUsed
 
-            if !result.text.isEmpty {
-                accumulatedText += (accumulatedText.isEmpty ? "" : " ") + result.text
+            let sliceDuration = Duration.seconds(Double(remaining.count) / sampleRate)
+            let collapse = collapsedWindow(in: result.segments, sliceSeconds: sliceDuration.inSeconds)
+            let kept = collapse.map { Array(result.segments[...$0.index]) } ?? result.segments
+            let text =
+                collapse == nil
+                ? result.text
+                : kept.map { $0.text.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+            if !text.isEmpty {
+                accumulatedText += (accumulatedText.isEmpty ? "" : " ") + text
             }
-            let shifted = result.segments.map { segment in
+            let shifted = kept.map { segment in
                 RawSegment(
                     text: segment.text,
                     start: segment.start + sliceStartSeconds,
@@ -54,16 +65,21 @@ public enum CappedDecodeRetry {
             }
             accumulatedSegments.append(contentsOf: shifted)
 
-            // The decoder reports its consumed positions: once that passes the cap, more words are still in the audio.
-            let sliceDuration = Duration.seconds(Double(remaining.count) / sampleRate)
             // The token count is the reliable signal — a recogniser that reports it has run out of room at ~223 positions. A backend that does not report tokens falls back to the segment-end heuristic.
             let hitCap =
                 result.tokensUsed > 0
                 ? result.tokensUsed >= tokenCapThreshold
                 : result.appearsCapped(audioDuration: sliceDuration)
-            guard hitCap else { break }
-            // The recogniser may stretch the final fragment word to the audio end; trust the last *normal* word as where it actually stopped.
-            guard let cutoff = cappedCutoffSeconds(in: result.segments) else { break }
+            // A collapsed window is checked first because the segments after it were already dropped above.
+            let cutoff: Double
+            if let collapse {
+                cutoff = collapse.lastWordEnd
+            } else {
+                guard hitCap else { break }
+                // The recogniser may stretch the final fragment word to the audio end; trust the last *normal* word as where it actually stopped.
+                guard let capped = cappedCutoffSeconds(in: result.segments) else { break }
+                cutoff = capped
+            }
             let consumedSamples = Int((cutoff * sampleRate).rounded(.down))
             guard consumedSamples > 0, consumedSamples < remaining.count else { break }
             remaining = Array(remaining[consumedSamples...])
@@ -78,6 +94,23 @@ public enum CappedDecodeRetry {
             effort: totalEffort,
             tokensUsed: totalTokensUsed
         )
+    }
+
+    /// The first segment that ran to the end of a fixed window with its words stopping well short of it, while audio continues past. See `Docs/speech-engines.md`.
+    static func collapsedWindow(
+        in segments: [RawSegment], sliceSeconds: Double
+    ) -> (index: Int, lastWordEnd: Double)? {
+        for (index, segment) in segments.enumerated() {
+            guard let lastWordEnd = segment.words?.last?.end, lastWordEnd > 0 else { continue }
+            let windows = (segment.end / windowSeconds).rounded()
+            let endsAtWindow = windows >= 1 && abs(segment.end - windows * windowSeconds) <= 0.1
+            let spansWindow = segment.end - segment.start >= windowSeconds - 0.5
+            guard endsAtWindow || spansWindow else { continue }
+            guard segment.end - lastWordEnd > collapsedGapSeconds else { continue }
+            guard sliceSeconds - segment.end > collapsedGapSeconds else { continue }
+            return (index, lastWordEnd)
+        }
+        return nil
     }
 
     /// Where in the recogniser's view the decoder actually stopped, in seconds from the start of the slice, ignoring any final fragment word it stretched past the cap.
