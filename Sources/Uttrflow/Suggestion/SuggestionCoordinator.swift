@@ -65,6 +65,8 @@ final class SuggestionCoordinator {
     private var lastEmpty: (surface: Surface, typed: String)?
     /// A turn booked for the moment a rule stops refusing, so a prose pause is answered then, not at the next tick.
     private var pendingWake: Task<Void, Never>?
+    /// The restart booked after macOS disabled the tap, cancelled by `stop()` so a turned-off tap stays off.
+    let tapRest = TapRest()
     /// The turn in flight, cancelled by the next keystroke so its scoring stops rather than running past the line it was for.
     private var running: Task<Void, Never>?
     /// How long a burst of keystrokes must pause before the model is asked about its last prefix.
@@ -176,6 +178,7 @@ final class SuggestionCoordinator {
     /// Arms the tap and starts watching, or says why it cannot.
     func start() {
         isStopped = false
+        tapRest.cancel()
         do {
             try interceptor.start()
         } catch {
@@ -192,6 +195,7 @@ final class SuggestionCoordinator {
     /// Takes the surface away, disarms the tap and stops watching.
     func stop() {
         isStopped = true
+        tapRest.cancel()
         session.invalidate()
         interceptor.arm([])
         interceptor.stop()
@@ -793,9 +797,8 @@ final class SuggestionCoordinator {
         interceptor.arm([])
         interceptor.stop()
         panel.hide()
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(Self.tapRestSeconds))
-            guard let self else { return }
+        tapRest.schedule(after: .seconds(Self.tapRestSeconds)) { [weak self] in
+            guard let self, !isStopped else { return }
             do {
                 try interceptor.start()
                 Self.log.error("the tap is back after resting \(Self.tapRestSeconds)s")
