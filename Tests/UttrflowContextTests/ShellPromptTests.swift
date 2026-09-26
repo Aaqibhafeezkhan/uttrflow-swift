@@ -107,6 +107,15 @@ struct ShellPromptTests {
         #expect(ShellPrompt.input(in: "user@host:~/dir$ echo hi # note") == "echo hi # note")
     }
 
+    @Test("An at sign earlier in a command does not make its trailing comment a root prompt.")
+    func anEarlierAtSignLeavesACommentAlone() {
+        let quoted = #"git commit -m "fix bug reported by foo@example.com" # needs review"#
+        #expect(ShellPrompt.input(in: quoted) == quoted)
+        #expect(ShellPrompt.input(in: "ssh user@host # jump box") == "ssh user@host # jump box")
+        #expect(
+            ShellPrompt.input(in: "[root@host ~]# ssh user@host # jump box") == "ssh user@host # jump box")
+    }
+
     @Test("An escaped quote does not open one, so a later prompt character is still seen.")
     func anEscapedQuoteOpensNothing() {
         #expect(ShellPrompt.input(in: #"user\@host:~/dir$ ls"#) == "ls")
