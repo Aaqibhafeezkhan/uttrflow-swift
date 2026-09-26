@@ -178,6 +178,33 @@ struct HTTPAuthenticationServiceTests {
         #expect(abandoned.wasClosed)
     }
 
+    /// A challenge from a replaced attempt must not consume the attempt that replaced it.
+    @Test("keeps the current attempt when completed with a stale challenge")
+    func aStaleChallengeLeavesTheCurrentAttempt() async throws {
+        let draws = Mutex(0)
+        let counting: @Sendable (Int) -> Data = { count in
+            Data(repeating: draws.withLock { $0 += 1; return UInt8($0) }, count: count)
+        }
+        let second = StubLoopbackListener(
+            returning: LoopbackCallback(
+                code: "the-code", state: PKCEPair.base64URL(Data(repeating: 4, count: 24))))
+        let listeners = Mutex([StubLoopbackListener(returning: nil), second])
+        let backend = HTTPAuthenticationService(
+            baseURL: Stub.baseURL, transport: signingIn(), tokens: InMemoryTokenStore(),
+            verifier: Fixture.verifier,
+            makeListener: { listeners.withLock { $0.removeFirst() } },
+            randomBytes: counting,
+            now: { Fixture.noon })
+
+        let stale = try await backend.beginSignIn(with: .google)
+        let current = try await backend.beginSignIn(with: .google)
+        await #expect(throws: AccountError.self) { try await backend.completeSignIn(stale) }
+
+        #expect(!second.wasClosed)
+        let profile = try await backend.completeSignIn(current)
+        #expect(profile.account == signedIn.account)
+    }
+
     @Test("sends the machine's own description, when it has one")
     func registersTheDevice() async throws {
         let transport = signingIn()

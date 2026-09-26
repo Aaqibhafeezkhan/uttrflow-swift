@@ -206,7 +206,13 @@ public final class HTTPAuthenticationService: AuthenticationService {
 
     /// Waits however long the person takes to sign in; cancelling the task closes the port and abandons it.
     public func completeSignIn(_ challenge: SignInChallenge) async throws(AccountError) -> Profile {
-        guard let attempt = pending.take(\.self), attempt.state == challenge.state else {
+        let matched = pending.withLock { current -> Pending? in
+            guard let attempt = current, attempt.state == challenge.state else { return nil }
+            current = nil
+            return attempt
+        }
+        // A stale challenge leaves the attempt that is pending in place, still able to finish.
+        guard let attempt = matched else {
             throw .providerRefused(description: "that sign-in does not answer this attempt")
         }
 
