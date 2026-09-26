@@ -80,40 +80,55 @@ public actor PersonalDictionaryStore {
                 firstSeen: moment))
     }
 
-    /// Writes the words this build ships knowing, once ever; a word the user then deletes stays deleted.
+    /// Writes each word this build ships knowing, once ever; a word the user then deletes stays deleted.
     @discardableResult
     public func seedShippedWords(at moment: Date) throws(DictionaryStoreError) -> [DictionaryEntry] {
-        guard try seededVersion() < ShippedWords.version else { return [] }
+        try seed(ShippedWords.entries(at: moment))
+    }
+
+    /// Seeds the given shipped entries, skipping any spelling this dictionary was offered before.
+    func seed(_ shipped: [DictionaryEntry]) throws(DictionaryStoreError) -> [DictionaryEntry] {
+        let offered = try offeredSpellings()
+        let unoffered = shipped.filter { !offered.contains($0.word.lowercased()) }
+        guard !unoffered.isEmpty else { return [] }
         let existing = load()
         let known = Set(existing.map { $0.word.lowercased() })
-        let seeded = ShippedWords.entries(at: moment).filter { !known.contains($0.word.lowercased()) }
+        let seeded = unoffered.filter { !known.contains($0.word.lowercased()) }
         // Recorded only once the words are on disk, so a failed write is retried; a retry skips any word already there.
         if !seeded.isEmpty { try persist(existing + seeded) }
-        try recordSeeded()
+        try recordOffered(offered.union(shipped.map { $0.word.lowercased() }))
         return seeded
     }
 
+    /// The seed record: the list version last applied, and every shipped spelling ever offered.
+    private struct SeedRecord: Codable {
+        let version: Int
+        let offered: [String]?
+    }
+
     /// A missing record is new; an unreadable one is not evidence that a deleted word may return.
-    private func seededVersion() throws(DictionaryStoreError) -> Int {
+    private func offeredSpellings() throws(DictionaryStoreError) -> Set<String> {
         let data: Data
         do {
             data = try Data(contentsOf: seedRecord)
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
-            return 0
+            return []
         } catch {
             throw .couldNotReadSeedRecord
         }
-        guard let record = try? JSONDecoder().decode([String: Int].self, from: data),
-            let version = record["version"], version >= 0
+        guard let record = try? JSONDecoder().decode(SeedRecord.self, from: data),
+            record.version >= 0
         else { throw .couldNotReadSeedRecord }
-        return version
+        if let offered = record.offered { return Set(offered.map { $0.lowercased() }) }
+        // A record written before spellings were listed names only a version, and version 1 was this list.
+        return record.version >= 1 ? ShippedWords.versionOneSpellings : []
     }
 
-    /// Notes which shipped list has been applied, which is what stops a deleted word returning.
-    private func recordSeeded() throws(DictionaryStoreError) {
+    /// Notes every shipped spelling offered so far, which is what stops a deleted word returning.
+    private func recordOffered(_ offered: Set<String>) throws(DictionaryStoreError) {
+        let record = SeedRecord(version: ShippedWords.version, offered: offered.sorted())
         do {
-            try PrivateFile.write(
-                JSONEncoder().encode(["version": ShippedWords.version]), to: seedRecord)
+            try PrivateFile.write(JSONEncoder().encode(record), to: seedRecord)
         } catch {
             throw .couldNotWrite
         }
