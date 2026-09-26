@@ -579,3 +579,25 @@ struct CaptureSessionTransientFailureTests {
 private let returnOnlyInTerminal = CommitPolicy { reason, reading in
     reason == .returnPressed || reading.bundleIdentifier != "com.example.terminal"
 }
+
+@Suite("A field's identity across readings")
+struct CaptureSessionFieldIdentityTests {
+    @Test("A title mark appearing mid-line is the same field, so nothing is committed early.")
+    func titleMarkIsNotAFocusChange() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder, allowing: ["com.example.notes"])
+        let clean = FieldReading(
+            bundleIdentifier: "com.example.notes", role: "AXTextArea", windowTitle: "Groceries")
+        let edited = FieldReading(
+            bundleIdentifier: "com.example.notes", role: "AXTextArea", windowTitle: "Groceries •")
+        #expect(clean.surface == edited.surface)
+        #expect(try await session.handle(.keystroke("buy", at: start), in: clean) == .nothing)
+        let outcome = try await session.handle(
+            .keystroke("buy milk", at: start.addingTimeInterval(1)), in: edited)
+        #expect(outcome == .nothing)
+        #expect(await recorder.texts.isEmpty)
+        let finished = try await session.handle(.returnPressed(at: start.addingTimeInterval(2)), in: edited)
+        #expect(finished == .recorded("buy milk"))
+    }
+}
