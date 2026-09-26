@@ -414,6 +414,12 @@ public final class HTTPAuthenticationService: AuthenticationService {
         return try await renew()
     }
 
+    /// A usable access token for a request outside this service, or `nil` when signed out or unreachable.
+    public func accessTokenIfSignedIn() async -> String? {
+        guard case .token(let token)? = try? await authorised() else { return nil }
+        return token
+    }
+
     /// How many callers have waited on a renewal somebody else started; read by tests.
     var renewalsJoined: Int { session.withLock { $0.joined } }
 
