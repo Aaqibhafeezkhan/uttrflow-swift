@@ -71,10 +71,6 @@ final class SuggestionCoordinator {
     private var running: Task<Void, Never>?
     /// How long a burst of keystrokes must pause before the model is asked about its last prefix.
     nonisolated static let generationDebounceInMilliseconds = 120
-    /// How much of the text before the caret's line the model is shown, enough for the sentence or command before it.
-    private static let precedingContextLength = 400
-    /// How many of this person's recent lines in the field the model is shown, enough to hear their voice in it.
-    private static let recentLinesShown = 6
 
     private var session = SuggestionSession()
     private var monitors: [Any] = []
