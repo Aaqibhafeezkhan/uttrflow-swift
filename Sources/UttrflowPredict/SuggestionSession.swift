@@ -409,6 +409,8 @@ public struct SuggestionSession: Sendable, Equatable {
         {
             let still = Array(Self.drawable([leader] + others, past: typed).dropFirst())
             if !still.isEmpty {
+                // A narrowed list moves what sits under the highlight, so the highlight goes back to the leader.
+                if still != others { selection = .untouched }
                 suggestion = .choice(leader: leader, others: still)
                 return armed(showing: suggestion, silence: nil)
             }
