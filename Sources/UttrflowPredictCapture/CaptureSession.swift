@@ -43,18 +43,23 @@ public actor CaptureSession {
     /// Takes one event in one field and answers with what it came to.
     public func handle(_ event: CaptureEvent, in reading: FieldReading) async throws -> CaptureOutcome {
         // The application leaving is the one still focused here, whatever field the caller last read in it.
-        if case .applicationDeactivated = event, focused != reading {
+        if case .applicationDeactivated = event, !isFocused(reading) {
             defer { focused = nil }
             return try await flush(with: event)
         }
-        if focused != reading {
-            _ = try await flush(with: .focusLeft(at: event.moment))
-            focused = reading
-        }
+        if !isFocused(reading) { _ = try await flush(with: .focusLeft(at: event.moment)) }
+        focused = reading
         guard let surface = reading.surface,
             let commit = detector.receive(event, admitting: { policy.admits($0, in: reading) })
         else { return .nothing }
         return try await write(commit, from: reading, in: surface, at: event.moment)
+    }
+
+    /// Whether this reading is the focused field, judged by the surface it names so a window's title marks do not end it.
+    private func isFocused(_ reading: FieldReading) -> Bool {
+        guard let focused else { return false }
+        guard let surface = reading.surface, let known = focused.surface else { return focused == reading }
+        return surface == known && focused.isSecure == reading.isSecure
     }
 
     /// Records a completion the person took, through the same refusals as anything they typed.
@@ -69,7 +74,7 @@ public actor CaptureSession {
         try await sink.record(text, in: surface, after: lastRecorded[surface], selfSourced: true, at: moment)
         try await sink.recordAccepted(text, in: surface)
         lastRecorded[surface] = text
-        if focused == reading { detector.accepted(text) }
+        if isFocused(reading) { detector.accepted(text) }
         return .recorded(text)
     }
 
