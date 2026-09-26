@@ -464,8 +464,7 @@ final class SuggestionCoordinator {
             )
             // A prose pause is answered the moment it is long enough, rather than at whatever tick comes next.
             if silence == .writingFluently {
-                let waited = Int(started.timeIntervalSince(lastKeystroke) * 1000)
-                wake(.tick, afterMilliseconds: Quieting.proseHesitationInMilliseconds - waited + 20)
+                wake(.tick, afterMilliseconds: Self.hesitationWake(sinceKeystroke: lastKeystroke, now: Date()))
             }
         }
         draw(update, in: snapshot)
@@ -614,6 +613,12 @@ final class SuggestionCoordinator {
             )
         }
         return standing
+    }
+
+    /// Milliseconds until the prose pause after the latest keystroke is long enough, counted from now rather than from the turn's start.
+    nonisolated static func hesitationWake(sinceKeystroke keystroke: Date, now: Date) -> Int {
+        let passed = Int(now.timeIntervalSince(keystroke) * 1000)
+        return max(0, Quieting.proseHesitationInMilliseconds - passed) + 20
     }
 
     /// What is left of the debounce for a key pressed at `keystroke`, which is nothing once the pause is long enough.
