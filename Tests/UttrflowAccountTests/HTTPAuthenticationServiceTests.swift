@@ -351,10 +351,15 @@ struct HTTPAuthenticationServiceTests {
             if request.url.path().hasSuffix("/me") { return BackendResponse(status: 401) }
             return Stub.json(Stub.IssuedSession())
         }
-        let service = service(transport: transport, tokens: InMemoryTokenStore(refreshToken: "r"))
+        let tokens = InMemoryTokenStore(refreshToken: "r")
+        let service = service(transport: transport, tokens: tokens)
 
         #expect(try await service.currentProfile(ifChangedFrom: nil) == .signedOut)
         #expect(transport.requests(to: "/me").count == 2)
+        #expect(tokens.refreshToken() == nil)
+        let refreshes = transport.requests(to: "/refresh").count
+        #expect(try await service.currentProfile(ifChangedFrom: nil) == .noCredential)
+        #expect(transport.requests(to: "/refresh").count == refreshes)
     }
 
     /// A refresh token the server rejects is dead; keeping it means asking the same question for ever.
