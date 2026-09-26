@@ -143,9 +143,11 @@ public enum DestructiveCommand {
 
     /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash or discarded changes.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
-        // The flag has to stand after the subcommand it belongs to, so a word quoted elsewhere is not one.
+        let head = subcommandIndex(arguments)
+        // The flags of the clause's own subcommand, so the same word as a message or path is not one.
         func flags(after subcommand: String) -> ArraySlice<String>? {
-            arguments.firstIndex(of: subcommand).map { arguments[($0 + 1)...] }
+            guard let head, arguments[head] == subcommand else { return nil }
+            return arguments[(head + 1)...]
         }
         if let flags = flags(after: "push"),
             flags.contains(where: {
@@ -179,6 +181,22 @@ public enum DestructiveCommand {
         }
         return false
     }
+
+    /// Where the subcommand stands once git's own leading options are skipped, or nil when there is none.
+    private static func subcommandIndex(_ arguments: [String]) -> Int? {
+        var index = arguments.startIndex
+        while index < arguments.endIndex {
+            let word = arguments[index]
+            guard word.hasPrefix("-") else { return index }
+            index += gitOptionsTakingValue.contains(word) ? 2 : 1
+        }
+        return nil
+    }
+
+    /// Git's leading options whose value is the next word.
+    private static let gitOptionsTakingValue: Set<String> = [
+        "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env",
+    ]
 
     /// The kinds of thing a DROP destroys, which is what makes the statement irreversible.
     private static func droppableObject(_ word: String) -> Bool {

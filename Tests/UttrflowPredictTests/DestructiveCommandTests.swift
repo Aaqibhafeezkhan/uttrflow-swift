@@ -137,6 +137,18 @@ struct DestructiveCommandTests {
         #expect(!DestructiveCommand.matches("grep truncate notes.txt"))
     }
 
+    @Test func gitJudgesOnlyTheSubcommandAtTheHeadOfTheClause() {
+        for command in [
+            "git commit -m checkout .", "git commit -m reset --hard", "git log --grep push -f",
+            "git add clean -f", "git commit -m stash drop",
+        ] {
+            #expect(!DestructiveCommand.matches(command), "\(command)")
+        }
+        for command in ["git -C repo checkout .", "git -c core.x=y reset --hard", "git --no-pager push -f"] {
+            #expect(DestructiveCommand.matches(command), "\(command)")
+        }
+    }
+
     @Test func sqlGivenToADatabaseClientIsDestructive() {
         #expect(DestructiveCommand.matches("psql -c \"DROP TABLE users;\""))
         #expect(DestructiveCommand.matches("mysql -e \"TRUNCATE logs\""))
