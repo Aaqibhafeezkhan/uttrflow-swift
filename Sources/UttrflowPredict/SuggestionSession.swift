@@ -381,12 +381,11 @@ public struct SuggestionSession: Sendable, Equatable {
         guard
             !(lowered.hasScalarPrefix(earlier) && lowered.dropFirst(earlier.count).allSatisfy(\.isWhitespace))
         else { return nil }
-        // Typing past a guess the model invented says the model was wrong, not that the field wants quiet.
-        guard !shownIsGenerated else { return nil }
         // Only an offer that completed the line can be typed past; leaving a fuzzy or corrected one, or shortening the line, says nothing.
         guard offered.lowercased().hasScalarPrefix(typed.lowercased()) else { return nil }
         rejectionsHere += 1
-        return offered
+        // A guess the model invented counts toward quieting the field, but the store is never told to blame it.
+        return shownIsGenerated ? nil : offered
     }
 
     /// The moment with the three facts only this session knows filled in.
