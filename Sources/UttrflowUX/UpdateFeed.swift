@@ -9,9 +9,10 @@ public enum UpdateFeed {
     /// Whether a feed at this URL may be read; anything not understood is refused rather than guessed at.
     public static func isAcceptable(_ url: URL) -> Bool {
         // Both are compared lower-cased: a scheme and a host are case-insensitive, and a feed is configuration.
-        guard let scheme = url.scheme?.lowercased() else { return false }
+        guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(), !host.isEmpty else {
+            return false
+        }
         if scheme == "https" { return true }
-        guard scheme == "http", let host = url.host?.lowercased() else { return false }
-        return loopbackHosts.contains(host)
+        return scheme == "http" && loopbackHosts.contains(host)
     }
 }
