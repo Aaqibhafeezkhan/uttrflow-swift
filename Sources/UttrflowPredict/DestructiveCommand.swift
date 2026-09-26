@@ -80,8 +80,9 @@ public enum DestructiveCommand {
             if matchesDestructiveGit(arguments) { return true }
         case "find":
             if lowered.contains("-delete") { return true }
-            if let exec = lowered.firstIndex(where: { $0 == "-exec" || $0 == "-execdir" }),
-                let program = lowered.dropFirst(exec + 1).first, destroyers.contains(programName(program))
+            // The command `-exec` runs is judged as its own clause, so a wrapper in front of it is read past.
+            if let exec = tokens.firstIndex(where: { ["-exec", "-execdir"].contains($0.text.lowercased()) }),
+                destroys(Array(tokens[(exec + 1)...]), failClosedOnUnresolved: failClosedOnUnresolved)
             {
                 return true
             }
@@ -111,7 +112,7 @@ public enum DestructiveCommand {
         return false
     }
 
-    /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash or discarded changes.
+    /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, a forced checkout or discarded changes.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
         // The flag has to stand after the subcommand it belongs to, so a word quoted elsewhere is not one.
         func flags(after subcommand: String) -> ArraySlice<String>? {
@@ -143,7 +144,12 @@ public enum DestructiveCommand {
             return true
         }
         if let flags = flags(after: "stash"), flags.first == "drop" || flags.first == "clear" { return true }
-        if let flags = flags(after: "checkout"), flags.contains("--") || flags.contains(".") { return true }
+        if let flags = flags(after: "checkout"),
+            flags.contains("--") || flags.contains(".") || flags.contains("--force")
+                || flags.contains(where: { $0.hasPrefix("-") && !$0.hasPrefix("--") && $0.contains("f") })
+        {
+            return true
+        }
         if let flags = flags(after: "restore"), !flags.contains("--staged") || flags.contains("--worktree") {
             return true
         }

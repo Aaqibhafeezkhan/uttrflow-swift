@@ -130,4 +130,27 @@ struct DestructiveCommandTests {
     func keepsClausesApart(_ line: String) {
         #expect(!DestructiveCommand.matches(line), "\(line) destroys nothing")
     }
+
+    /// A destroyer behind a wrapper in `find -exec`, or a forced checkout, throws work away.
+    @Test(
+        "A wrapped find -exec destroyer and a forced checkout are destructive.",
+        arguments: [
+            "find . -exec sudo rm -rf {} \\;",
+            "find . -execdir env rm -rf {} +",
+            "find /tmp -exec sudo -u root shred {} \\;",
+            "git checkout -f other-branch",
+            "git checkout --force main",
+            "git checkout -fb scratch",
+        ])
+    func catchesWrappedFindAndForcedCheckout(_ line: String) {
+        #expect(DestructiveCommand.matches(line), "\(line) destroys")
+    }
+
+    /// Reading past `-exec` or checking out a branch plainly destroys nothing.
+    @Test(
+        "A harmless find -exec and a plain checkout are not destructive.",
+        arguments: ["find . -exec sudo ls {} \\;", "git checkout feature", "git checkout -b feature"])
+    func keepsHarmlessFindAndCheckout(_ line: String) {
+        #expect(!DestructiveCommand.matches(line), "\(line) destroys nothing")
+    }
 }
