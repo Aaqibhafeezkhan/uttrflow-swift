@@ -89,6 +89,40 @@ struct TypedTextInsertionEngineTests {
         #expect(await ours.canWrite() == false)
     }
 
+    @Test("A completion refuses when Uttrflow came to the front after canWrite() said yes.")
+    func writeRefusesWhenSelfBecameFrontmost() async {
+        let focus = SwitchableFocus()
+        let typist = RecordingTypist()
+        let engine = TypedTextInsertionEngine(focus: focus, typist: typist)
+        #expect(await engine.canWrite())
+
+        focus.becomeSelfFrontmost()
+
+        await #expect(throws: TextInsertionError.noFocusedTextField) {
+            try await engine.write("mit", replacing: "co")
+        }
+        await #expect(throws: TextInsertionError.noFocusedTextField) {
+            try await engine.write("mit", replacing: "")
+        }
+        #expect(typist.deletions.isEmpty)
+        #expect(typist.text.isEmpty)
+    }
+
+    @Test("An insertion refuses when Uttrflow came to the front after canInsert() said yes.")
+    func insertRefusesWhenSelfBecameFrontmost() async {
+        let focus = SwitchableFocus()
+        let typist = RecordingTypist()
+        let engine = TypedTextInsertionEngine(focus: focus, typist: typist)
+        #expect(await engine.canInsert())
+
+        focus.becomeSelfFrontmost()
+
+        await #expect(throws: TextInsertionError.noFocusedTextField) {
+            _ = try await engine.insert("mit")
+        }
+        #expect(typist.text.isEmpty)
+    }
+
     @Test("A refusal from the typist is the engine's refusal too.")
     func refusalIsReported() async {
         let engine = TypedTextInsertionEngine(
