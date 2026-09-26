@@ -110,7 +110,7 @@ public actor Verifier {
             if forGood { await supersession?.recordSupersession(of: text, by: corrected, in: surface) }
             return .corrected(corrected)
         case .rejected:
-            await supersession?.recordRejection(of: text, in: surface)
+            if forGood { await supersession?.recordRejection(of: text, in: surface) }
             return .rejected
         case .attested, .plausible:
             return verdict

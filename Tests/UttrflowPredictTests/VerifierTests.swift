@@ -84,6 +84,25 @@ struct VerifierTests {
         #expect(verdict == .rejected)
     }
 
+    @Test("A rejected branch is not condemned for good, since it may be fetched tomorrow.")
+    func openVocabularyRejectionIsNotRecorded() async {
+        let store = RecordingSupersession()
+        let verdict = await decided(
+            "git checkout zqxjw", typed: "git checkout z", machine: [.branch: ["main"]],
+            scoring: ScriptedScoring(disliked), supersession: store)
+        #expect(verdict == .rejected)
+        #expect(await store.rejected.isEmpty)
+    }
+
+    @Test("A rejected subcommand is condemned for good, since its vocabulary is closed.")
+    func closedVocabularyRejectionIsRecorded() async {
+        let store = RecordingSupersession()
+        _ = await decided(
+            "git zqxjw", typed: "git z", machine: [.subcommand(of: "git"): ["commit"]],
+            scoring: ScriptedScoring(disliked), supersession: store)
+        #expect(await store.rejected == ["git zqxjw"])
+    }
+
     @Test("A candidate the model likes stands even where the machine cannot place it.")
     func keepsWhatTheModelLikes() async {
         let verdict = await decided(
