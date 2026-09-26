@@ -417,3 +417,69 @@ struct CollapsedWindowTests {
         #expect(CappedDecodeRetry.collapsedWindow(in: segments, sliceSeconds: 30.5) == nil)
     }
 }
+
+/// A recogniser that always returns the one transcript it was given.
+private struct FixedTranscriptBackend: TranscriptionBackend {
+    let transcript: RawTranscript
+    let minimumDuration: Duration = .zero
+
+    func load() async throws(SpeechEngineError) {}
+
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?
+    ) async throws(SpeechEngineError) -> RawTranscript { transcript }
+
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?, biasedTowards vocabulary: [String]
+    ) async throws(SpeechEngineError) -> RawTranscript { transcript }
+}
+
+@Suite("A capped decode with no point to resume from")
+struct CappedDecodeUnresolvedTests {
+    private let samples = Array(repeating: Float(0.1), count: 2 * 16_000)
+
+    @Test("a capped decode with no segments is reported as unresolved")
+    func cappedWithNoSegments() async throws {
+        let backend = FixedTranscriptBackend(
+            transcript: RawTranscript(text: "", segments: [], tokensUsed: CappedDecodeRetry.tokenCapThreshold)
+        )
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .hindi, vocabulary: [], using: backend)
+        #expect(raw.text.isEmpty)
+        #expect(raw.effort.capUnresolved)
+    }
+
+    @Test("a capped decode whose last segment ends past the slice is reported as unresolved")
+    func cappedEndingPastSlice() async throws {
+        let backend = FixedTranscriptBackend(
+            transcript: RawTranscript(
+                text: " words",
+                segments: [
+                    RawSegment(
+                        text: " words", start: 0, end: 2.5,
+                        words: [RawWord(text: " words", start: 1.8, end: 2.5, probability: 0.9)])
+                ], tokensUsed: 220))
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .hindi, vocabulary: [], using: backend)
+        #expect(raw.text == "words")
+        #expect(raw.effort.capUnresolved)
+    }
+
+    @Test("an uncapped decode is not reported as unresolved")
+    func uncappedIsResolved() async throws {
+        let backend = FixedTranscriptBackend(
+            transcript: RawTranscript(text: "", segments: [], tokensUsed: 20))
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .hindi, vocabulary: [], using: backend)
+        #expect(!raw.effort.capUnresolved)
+    }
+
+    @Test("combining efforts keeps an unresolved cap")
+    func combiningKeepsFlag() {
+        let flagged = DecodeEffort.none.markingCapUnresolved()
+        #expect(DecodeEffort.none.adding(flagged).capUnresolved)
+        #expect(DecodeEffort.none.addingRetry(flagged).capUnresolved)
+        #expect(flagged.addingRetry(.none).capUnresolved)
+        #expect(!flagged.isPlain)
+    }
+}
