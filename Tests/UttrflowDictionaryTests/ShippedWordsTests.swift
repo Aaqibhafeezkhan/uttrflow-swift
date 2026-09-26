@@ -76,6 +76,35 @@ struct ShippedWordsTests {
         #expect(try Data(contentsOf: record) == damaged)
     }
 
+    @Test("keeps a deleted shipped word deleted when a later build ships another")
+    func laterListDoesNotResurrectADeletedWord() async throws {
+        let sandbox = Sandbox()
+        let store = PersonalDictionaryStore(file: sandbox.file)
+        try await store.seedShippedWords(at: epoch)
+        let seeded = try #require(await store.allEntries().first)
+        try await store.remove(seeded.id)
+        let later = ShippedWords.entries(at: epoch) + [word("Zyphrel", from: .shipped)]
+
+        let relaunched = PersonalDictionaryStore(file: sandbox.file)
+        let added = try await relaunched.seed(later)
+
+        #expect(added.map(\.word) == ["Zyphrel"])
+        #expect(await relaunched.allEntries().map(\.word) == ["Zyphrel"])
+        #expect(try await PersonalDictionaryStore(file: sandbox.file).seed(later).isEmpty)
+    }
+
+    @Test("treats a record naming only version 1 as having offered that version's words")
+    func versionOnlyRecordCountsAsOffered() async throws {
+        let sandbox = Sandbox()
+        let record = sandbox.folder.appending(path: "dictionary.v1.seeded.json")
+        try PrivateFile.write(Data(#"{"version":1}"#.utf8), to: record)
+        let later = ShippedWords.entries(at: epoch) + [word("Zyphrel", from: .shipped)]
+
+        let added = try await PersonalDictionaryStore(file: sandbox.file).seed(later)
+
+        #expect(added.map(\.word) == ["Zyphrel"])
+    }
+
     @Test("leaves a word the user added under their own name alone")
     func doesNotDuplicateAWordAlreadyKnown() async throws {
         let sandbox = Sandbox()
