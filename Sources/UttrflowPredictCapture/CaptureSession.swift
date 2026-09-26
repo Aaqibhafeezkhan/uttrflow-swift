@@ -29,6 +29,10 @@ public actor CaptureSession {
     private var detector = CommitDetector()
     /// The last value written in each surface, which is what the next one is recorded as following.
     private var lastRecorded: [Surface: String] = [:]
+    /// Finished values whose write failed, oldest first, retried before the next event.
+    private var unwrittenCommits: [UnwrittenCommit] = []
+    /// The most finished values held for a retry, beyond which the oldest is dropped.
+    static let unwrittenCommitLimit = 32
 
     /// A session writing to this sink, remembering its answers in this file.
     public init(
@@ -42,12 +46,14 @@ public actor CaptureSession {
 
     /// Takes one event in one field and answers with what it came to.
     public func handle(_ event: CaptureEvent, in reading: FieldReading) async throws -> CaptureOutcome {
+        await retryUnwrittenCommits()
         // The application leaving is the one still focused here, whatever field the caller last read in it.
         if case .applicationDeactivated = event, !isFocused(reading) {
             defer { focused = nil }
             return try await flush(with: event)
         }
-        if !isFocused(reading) { _ = try await flush(with: .focusLeft(at: event.moment)) }
+        // A failed write here is already held for a retry, so it does not cost the new field its event.
+        if !isFocused(reading) { _ = try? await flush(with: .focusLeft(at: event.moment)) }
         focused = reading
         guard let surface = reading.surface,
             let commit = detector.receive(event, admitting: { policy.admits($0, in: reading) })
@@ -97,12 +103,14 @@ public actor CaptureSession {
     public func forgetLearned(from bundleIdentifier: String) {
         let application = Surface(bundleIdentifier: bundleIdentifier, role: "").bundleIdentifier
         lastRecorded = lastRecorded.filter { $0.key.bundleIdentifier != application }
+        unwrittenCommits.removeAll { $0.surface.bundleIdentifier == application }
         if focused?.surface?.bundleIdentifier == application { detector.reset() }
     }
 
     /// Forgets every line and answer this session holds, in memory and on disk.
     public func forgetEverythingLearned() throws {
         lastRecorded = [:]
+        unwrittenCommits = []
         detector.reset()
         try forgetEveryAnswer()
     }
@@ -148,19 +156,88 @@ public actor CaptureSession {
             detector.forgetLastIdleCommit()
             return .refused(refusal)
         }
+        let superseded = commit.supersedes.flatMap {
+            CaptureGate.refusal(toRecord: $0, from: reading, given: preferences) == nil ? $0 : nil
+        }
+        let unwritten = UnwrittenCommit(
+            text: commit.text, surface: surface, superseded: superseded, previous: lastRecorded[surface],
+            moment: moment)
         do {
-            if let superseded = commit.supersedes,
-                CaptureGate.refusal(toRecord: superseded, from: reading, given: preferences) == nil
-            {
-                try await sink.supersede(superseded, with: commit.text, in: surface)
+            try await write(unwritten)
+        } catch let failure as CommitWriteFailure {
+            if commit.reason == .wentIdle {
+                // The detector still holds an idle value, so the next tick re-emits it.
+                detector.forgetLastIdleCommit()
+            } else {
+                // A field's ending has already reset the detector, so only the held copy can bring it back.
+                lastRecorded[surface] = commit.text
+                hold(failure.remaining)
             }
-            try await sink.record(
-                commit.text, in: surface, after: lastRecorded[surface], selfSourced: false, at: moment)
-        } catch {
-            detector.forgetLastIdleCommit()
-            throw error
+            throw failure.underlying
         }
         lastRecorded[surface] = commit.text
         return .recorded(commit.text)
     }
+
+    /// How many finished values are waiting for their write to be retried.
+    public func unwrittenCommitCount() -> Int { unwrittenCommits.count }
+
+    /// Retires the superseded draft and then records the value, skipping a supersede that already landed.
+    private func write(_ unwritten: UnwrittenCommit) async throws {
+        var remaining = unwritten
+        do {
+            if let superseded = remaining.superseded {
+                try await sink.supersede(superseded, with: remaining.text, in: remaining.surface)
+                remaining.superseded = nil
+            }
+            try await sink.record(
+                remaining.text, in: remaining.surface, after: remaining.previous, selfSourced: false,
+                at: remaining.moment)
+        } catch {
+            throw CommitWriteFailure(remaining: remaining, underlying: error)
+        }
+    }
+
+    /// Keeps a failed finished value for a retry, dropping the oldest past the limit.
+    private func hold(_ unwritten: UnwrittenCommit) {
+        unwrittenCommits.append(unwritten)
+        if unwrittenCommits.count > Self.unwrittenCommitLimit { unwrittenCommits.removeFirst() }
+    }
+
+    /// Retries held finished values in order, stopping at the first that fails again.
+    private func retryUnwrittenCommits() async {
+        while let next = unwrittenCommits.first {
+            do {
+                try await write(next)
+                unwrittenCommits.removeFirst()
+            } catch let failure as CommitWriteFailure {
+                unwrittenCommits[0] = failure.remaining
+                return
+            } catch {
+                return
+            }
+        }
+    }
+}
+
+/// A finished value the corpus has not fully taken yet, and how far its write got.
+struct UnwrittenCommit: Sendable {
+    /// The value the field ended with.
+    let text: String
+    /// Where it was finished.
+    let surface: Surface
+    /// The draft it retires, until that supersede has landed.
+    var superseded: String?
+    /// The line it followed when it was finished.
+    let previous: String?
+    /// When it was finished.
+    let moment: Date
+}
+
+/// A failed finished-value write, carrying what is left of it to retry.
+private struct CommitWriteFailure: Error {
+    /// The value as far as its write got.
+    let remaining: UnwrittenCommit
+    /// What the sink threw.
+    let underlying: any Error
 }
