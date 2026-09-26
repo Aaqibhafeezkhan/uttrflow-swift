@@ -55,6 +55,31 @@ private actor FlakySink: CaptureSink {
 
 private enum FlakySinkError: Error { case transient }
 
+/// A sink whose first record waits until released, so a second write can arrive while it is suspended.
+private actor GatedSink: CaptureSink {
+    private(set) var recorded: [(text: String, previous: String?)] = []
+    private var gate: CheckedContinuation<Void, Never>?
+    private var isHolding = true
+
+    func record(
+        _ text: String, in surface: Surface, after previous: String?, selfSourced: Bool, at moment: Date
+    ) async {
+        recorded.append((text, previous))
+        guard isHolding else { return }
+        isHolding = false
+        await withCheckedContinuation { gate = $0 }
+    }
+
+    func supersede(_ text: String, with replacement: String, in surface: Surface) {}
+
+    var isWaiting: Bool { gate != nil }
+
+    func release() {
+        gate?.resume()
+        gate = nil
+    }
+}
+
 private let start = Date(timeIntervalSince1970: 1_800_000_000)
 private let terminal = FieldReading(bundleIdentifier: "com.example.terminal", role: "AXTextArea")
 private let browser = FieldReading(
@@ -651,5 +676,19 @@ struct CaptureSessionFieldIdentityTests {
         #expect(await recorder.texts.isEmpty)
         let finished = try await session.handle(.returnPressed(at: start.addingTimeInterval(2)), in: edited)
         #expect(finished == .recorded("buy milk"))
+    }
+
+    @Test("An acceptance arriving while a finished line is still being written follows that line.")
+    func acceptanceDuringWriteFollowsIt() async throws {
+        let scratch = Scratch()
+        let sink = GatedSink()
+        let session = try await session(scratch, sink, allowing: ["com.example.terminal"])
+        _ = try await session.handle(.keystroke("hello", at: start), in: terminal)
+        let typed = Task { try await session.handle(.returnPressed(at: start), in: terminal) }
+        while !(await sink.isWaiting) { await Task.yield() }
+        _ = try await session.accepted("world", in: terminal, at: start)
+        await sink.release()
+        _ = try await typed.value
+        #expect(await sink.recorded.map(\.previous) == [nil, "hello"])
     }
 }

@@ -76,10 +76,16 @@ public actor CaptureSession {
         if let refusal = CaptureGate.refusal(toRecord: text, from: reading, given: preferences) {
             return .refused(refusal)
         }
-        // Recorded before the acceptance is counted, so a new line's first acceptance is not lost.
-        try await sink.record(text, in: surface, after: lastRecorded[surface], selfSourced: true, at: moment)
+        // Claimed before the await, so a write admitted while this one is suspended follows it.
+        let previous = claimLast(text, in: surface)
+        do {
+            // Recorded before the acceptance is counted, so a new line's first acceptance is not lost.
+            try await sink.record(text, in: surface, after: previous, selfSourced: true, at: moment)
+        } catch {
+            releaseLast(text, in: surface, restoring: previous)
+            throw error
+        }
         try await sink.recordAccepted(text, in: surface)
-        lastRecorded[surface] = text
         if isFocused(reading) { detector.accepted(text) }
         return .recorded(text)
     }
@@ -160,23 +166,34 @@ public actor CaptureSession {
             CaptureGate.refusal(toRecord: $0, from: reading, given: preferences) == nil ? $0 : nil
         }
         let unwritten = UnwrittenCommit(
-            text: commit.text, surface: surface, superseded: superseded, previous: lastRecorded[surface],
-            moment: moment)
+            text: commit.text, surface: surface, superseded: superseded,
+            previous: claimLast(commit.text, in: surface), moment: moment)
         do {
             try await write(unwritten)
         } catch let failure as CommitWriteFailure {
             if commit.reason == .wentIdle {
                 // The detector still holds an idle value, so the next tick re-emits it.
                 detector.forgetLastIdleCommit()
+                releaseLast(commit.text, in: surface, restoring: unwritten.previous)
             } else {
                 // A field's ending has already reset the detector, so only the held copy can bring it back.
-                lastRecorded[surface] = commit.text
                 hold(failure.remaining)
             }
             throw failure.underlying
         }
-        lastRecorded[surface] = commit.text
         return .recorded(commit.text)
+    }
+
+    /// Makes this value the surface's last line and answers with the one it follows.
+    private func claimLast(_ text: String, in surface: Surface) -> String? {
+        defer { lastRecorded[surface] = text }
+        return lastRecorded[surface]
+    }
+
+    /// Gives back a failed claim, unless a later write has already taken the surface's last line.
+    private func releaseLast(_ text: String, in surface: Surface, restoring previous: String?) {
+        guard lastRecorded[surface] == text else { return }
+        lastRecorded[surface] = previous
     }
 
     /// How many finished values are waiting for their write to be retried.
