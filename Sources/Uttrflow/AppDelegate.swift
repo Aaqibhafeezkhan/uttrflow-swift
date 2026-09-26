@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Keeps the pipeline's stage timings for the session, which is what the diagnostics page reports on.
     private let diagnostics = DiagnosticsRecorder()
+    /// Anonymous counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
+    private var telemetry: UsageTelemetry?
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
     private let secureInput = SecureInputWatch()
     private var secureInputObserver: (any NSObjectProtocol)?
@@ -243,6 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Reconciled at launch too: the login item can be removed without telling the app.
         applyAppearance()
         applyLaunchAtLogin()
+        startTelemetry()
         buildPipeline()
         seedTheDictionary()
         sweepExpired()
@@ -262,6 +265,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Configured last, from the setting; the automatic check itself waits for `modelLoadingSettled()`.
         updates.onProgressChanged = { [weak self] in self?.refreshMenuBar() }
         updates.begin(automatically: settings.installsUpdatesAutomatically)
+    }
+
+    /// Builds the telemetry service from the saved switch and starts its hourly flush.
+    private func startTelemetry() {
+        let usage = UsageTelemetry(
+            isEnabled: settings.sharesUsageStatistics, sender: account.telemetry,
+            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        usage.start()
+        telemetry = usage
     }
 
     /// Deletes recordings and transcripts past their retention, with or without a window. See `Docs/recordings.md`.
@@ -546,7 +558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Finishes the dictation in flight before letting the process die, but not for ever.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        Task { [weak self, pipeline, clipboard] in
+        Task { [weak self, pipeline, clipboard, telemetry] in
             let controller = self?.controller
             let quittingPipeline = pipeline.map { pipeline in
                 AppQuitCoordinator.Pipeline(
@@ -561,6 +573,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 flushClipboard: { await clipboard.flushUse() },
                 stopController: { await controller?.stop() },
                 reply: {
+                    // After the dictation has landed, so a quit's last report never holds one up.
+                    await telemetry?.flushBeforeQuitting()
                     // On every path: an unanswered `terminateLater` is an app that cannot be quit.
                     await MainActor.run {
                         NSApplication.shared.reply(toApplicationShouldTerminate: true)
@@ -792,7 +806,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             snippets: StoredSnippets(store: snippets),
             learner: StoreCounters(dictionary: dictionary, snippets: snippets),
             vocabulary: LearnedVocabulary(dictionary: dictionary),
-            metrics: diagnostics,
+            metrics: telemetry.map { MetricsFanOut([diagnostics, $0.recorder]) } ?? diagnostics,
             cleaningRecorder: diagnostics,
             destinationOverrides: settings.destinations,
             recordings: recordings,
@@ -1506,6 +1520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Internal so a test can end a dictation without a microphone.
     func render(_ state: DictationState) {
         getOutOfTheWay(for: state)
+        telemetry?.observe(state, language: settings.profile.preferredLanguages.first)
         // Recorded before the menu is drawn, and kept even when insertion failed. §19.
         switch state {
         case .inserted(let outcome):
@@ -2234,6 +2249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let activation = updated.hotkeyActivation
             Task { [weak self] in await self?.controller?.setActivation(activation) }
         }
+        telemetry?.setEnabled(updated.sharesUsageStatistics)
         // As above: a switch that drew itself and changed nothing.
         if updated.installsUpdatesAutomatically != previous.installsUpdatesAutomatically {
             updates.setInstallsAutomatically(updated.installsUpdatesAutomatically)
