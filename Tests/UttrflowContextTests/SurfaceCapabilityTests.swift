@@ -163,6 +163,25 @@ struct ProbeReportTests {
         #expect(markdown.contains("a\\|b"))
     }
 
+    @Test(
+        "A line break in an application, role or field keeps every reading on one row.",
+        arguments: ["\n", "\r", "\r\n", "\u{2028}", "\u{2029}", "\u{85}"])
+    func flattensLineBreaks(_ separator: String) {
+        let markdown = ProbeReport(
+            CapabilitySweep([
+                reading(
+                    application: "Alpha\(separator)App", role: "AX\(separator)TextArea",
+                    locator: "Search\(separator)Or type a command"),
+                reading(application: "Beta"),
+            ])
+        ).markdown()
+        let table = markdown.components(separatedBy: "\n\n")[0]
+        let rows = table.split(whereSeparator: \.isNewline)
+        #expect(rows.count == 4)
+        #expect(rows.allSatisfy { $0.hasPrefix("|") && $0.hasSuffix("|") })
+        #expect(markdown.contains("| Alpha App | AX TextArea | Search Or type a command |"))
+    }
+
     @Test("Enough inline fields and the report says the ghost is worth leading with.")
     func recommendsTheGhost() {
         #expect(
