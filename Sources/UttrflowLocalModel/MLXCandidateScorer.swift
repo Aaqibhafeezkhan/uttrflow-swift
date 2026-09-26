@@ -80,6 +80,8 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
             cache: cache, downloader: downloader, onProgress: onProgress)
         guard let loaded = try await weights.load(from: directory) else { return }
         container = loaded
+        // Lines judged with no model loaded are empty, so they are dropped once there is one.
+        judgementCache.forgetEverything()
         beginPass()
         defer { endPass() }
         warm = await warmInstructions()
@@ -445,7 +447,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
             }
         }
         judgementCacheMisses += 1
-        guard let container, !Task.isCancelled else {
+        // A cancelled pass says nothing about the candidate, so it leaves the cache as it found it.
+        if Task.isCancelled { return [] }
+        guard let container else {
             judgementCache.remember(JudgedLine(tokens: [], rows: [], texts: []), for: candidate)
             return []
         }
