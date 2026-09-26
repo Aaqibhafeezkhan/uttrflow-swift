@@ -381,7 +381,9 @@ struct SuggestionRejectionTests {
         #expect(session.route(KeyStroke(.tab)) != .accept("git checkout"))
     }
 
-    @Test("A redraw that narrows the model's list lets go of the highlight, so Return cannot take a line nobody chose.")
+    @Test(
+        "A redraw that narrows the model's list lets go of the highlight, so Return cannot take a line nobody chose."
+    )
     func aNarrowedListDropsTheHighlight() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
