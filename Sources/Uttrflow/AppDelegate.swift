@@ -194,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var clipboardWatchTask: Task<Void, Never>?
 
     /// F7, F9 — the clip a delete removed, held by the app because the undo outlives the panel.
-    private var undoable: Clip?
+    private var undoOffer = PanelUndoOffer()
     private var undoTask: Task<Void, Never>?
     private let noticeLinger = NoticeLinger()
     /// Puts the floating button back once a panel paste's report has been read.
@@ -1227,14 +1227,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             _ = try await clipboard.setCategory(category, of: id, keeping: retention)
         case .delete(let id):
             // F7, F9 — kept in hand, because the store forgets it the moment this returns.
-            undoable = panel?.clips.first { $0.id == id }
-            panel?.canUndoDelete = undoable != nil
+            let held = panel?.clips.first { $0.id == id }
+            let ticket = undoOffer.offer(held)
+            // The earlier delete's timer must not expire this one's offer before its own starts.
+            undoTask?.cancel()
+            panel?.canUndoDelete = held != nil
             Self.log.info(
-                "delete: undoable=\(self.undoable != nil, privacy: .public) flag=\(self.panel?.canUndoDelete == true, privacy: .public)"
+                "delete: undoable=\(held != nil, privacy: .public) flag=\(self.panel?.canUndoDelete == true, privacy: .public)"
             )
             // Only the latest delete can be undone, so an earlier one's picture is let go first.
             await clipboard.forgetHeldPictures()
-            _ = try await clipboard.delete(id, keeping: retention, holdingPicture: undoable != nil)
+            _ = try await clipboard.delete(id, keeping: retention, holdingPicture: held != nil)
+            // A later delete owns the offer and its timer, so a superseded one leaves both alone.
+            guard undoOffer.isLatest(ticket) else { return }
             await startForgettingTheUndo()
         case .create(let text):
             // Detected here, off the main actor: the panel knows what was typed, not what a string is.
@@ -1259,7 +1264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .restore(let clip):
             _ = try await clipboard.record(clip, keeping: retention)
             await clipboard.forgetHeldPictures()
-            undoable = nil
+            undoOffer.withdraw()
             panel?.canUndoDelete = false
         }
     }
@@ -1271,7 +1276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             try? await Task.sleep(for: AppDelegate.undoWindow)
             guard !Task.isCancelled else { return }
             await self?.clipboard.forgetHeldPictures()
-            self?.undoable = nil
+            self?.undoOffer.withdraw()
             self?.panel?.canUndoDelete = false
             await self?.refreshPanelIfOpen()
         }
@@ -1305,8 +1310,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             closeQuickPanel()
             Task { await openSettingsPane(.accessibility) }
         case .undoDelete:
-            Self.log.info("undo requested: have=\(self.undoable != nil, privacy: .public)")
-            guard let clip = undoable else { return }
+            Self.log.info("undo requested: have=\(self.undoOffer.clip != nil, privacy: .public)")
+            guard let clip = undoOffer.clip else { return }
             undoTask?.cancel()
             apply(.restore(clip))
         case .format(let id):
