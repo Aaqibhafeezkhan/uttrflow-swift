@@ -372,9 +372,7 @@ private let keyInterceptorCallback: CGEventTapCallBack = { _, type, event, userI
             keyCode: UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)),
             modifiers: KeyModifiers(event.flags))
         let slot = ArmedKeys.slot(of: stroke)
-        guard state.route(slot) else {
-            return Unmanaged.passUnretained(event)
-        }
+        guard state.route(slot) else { return Unmanaged.passUnretained(event) }
         state.hold.begin()
         return nil
     case .tapDisabledByTimeout, .tapDisabledByUserInput:
