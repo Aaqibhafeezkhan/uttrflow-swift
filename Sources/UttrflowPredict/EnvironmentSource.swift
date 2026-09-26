@@ -78,10 +78,27 @@ public actor EnvironmentIndex {
     private var cached: [Key: Cached] = [:]
     /// The reads in flight, one per key, so a burst cannot start a burst of them.
     private var refreshing: [Key: Task<Void, Never>] = [:]
+    /// Monotonic seconds, read around each read so an answer's lifetime starts when it lands.
+    private let seconds: @Sendable () -> Double
 
     /// An index over one reader, holding nothing until that reader answers.
     public init(reader: any EnvironmentReading) {
+        self.init(reader: reader, seconds: EnvironmentIndex.monotonicSeconds)
+    }
+
+    /// An index whose sense of how long a read took is given, which only a test has a reason to do.
+    init(reader: any EnvironmentReading, seconds: @escaping @Sendable () -> Double) {
         self.reader = reader
+        self.seconds = seconds
+    }
+
+    /// The fixed point ``monotonicSeconds()`` counts from.
+    private static let origin = ContinuousClock.now
+
+    /// Seconds on the continuous clock since ``origin``.
+    static func monotonicSeconds() -> Double {
+        let since = origin.duration(to: .now).components
+        return Double(since.seconds) + Double(since.attoseconds) / 1e18
     }
 
     /// What is known right now, asking the machine in the background when that is nothing or stale; absent until it has answered.
@@ -103,9 +120,11 @@ public actor EnvironmentIndex {
     /// Asks the machine once per key, so a burst of keystrokes cannot start a burst of reads.
     private func refresh(_ key: Key, now: Date) {
         guard refreshing[key] == nil else { return }
+        let started = seconds()
         refreshing[key] = Task {
             let values = await reader.values(of: key.kind, in: key.directory)
-            record(key, values: values, now: now)
+            let landed = now.addingTimeInterval(max(0, seconds() - started))
+            record(key, values: values, now: landed)
         }
     }
 
