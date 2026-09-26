@@ -18,6 +18,19 @@ struct WhisperKitContractTests {
         #expect((Constants.maxTokenContext / 2) - 1 == VocabularyPrompt.maximumTokens)
     }
 
+    /// The decoder builds its fallback through this initialiser, so its reason is the one `judged` sees.
+    @Test("a compression fallback is named by the reason LanguageHeldDecoder relaxes for")
+    func compressionFallbackReason() throws {
+        let options = DecodingOptions(compressionRatioThreshold: 2.4, logProbThreshold: -1.0, noSpeechThreshold: 0.6)
+        let fallback = try #require(
+            DecodingFallback(
+                options: options, isFirstTokenLogProbTooLow: false, noSpeechProb: 0, compressionRatio: 2.8,
+                avgLogProb: 0))
+
+        #expect(fallback.needsFallback)
+        #expect(fallback.fallbackReason == LanguageHeldDecoder.compressionFallbackReason)
+    }
+
     /// A clip WhisperKitBackend's shortest clip is derived from, so audio shorter than it is padded.
     @Test("the window clip the product asks for is a field the decoder still takes")
     func windowClipSurvives() {
