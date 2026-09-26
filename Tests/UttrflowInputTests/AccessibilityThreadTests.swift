@@ -5,19 +5,29 @@ import Testing
 @testable import UttrflowCore
 @testable import UttrflowInput
 
-/// A focus whose every message blocks its thread, as an app that will not answer Accessibility does.
+/// A focus whose every message parks its thread until released, as an app that will not answer Accessibility does.
 private final class BlockingFocus: AccessibilityFocus, @unchecked Sendable {
-    private let block: TimeInterval
+    private let opened = Mutex(false)
     private let sent = Mutex(0)
+    private let offPool = Mutex(true)
+    private let blocks: Bool
 
-    init(blockingFor block: TimeInterval) { self.block = block }
+    init(blocks: Bool = true) { self.blocks = blocks }
 
     /// How many messages reached the application.
     var messages: Int { sent.withLock { $0 } }
 
+    /// Whether every message was sent from the Accessibility queue rather than a pool thread.
+    var allSentOffPool: Bool { offPool.withLock { $0 } }
+
+    /// Lets every parked message answer, and every later one answer at once.
+    func release() { opened.withLock { $0 = true } }
+
     private func message() {
+        let label = String(cString: __dispatch_queue_get_label(nil))
+        offPool.withLock { $0 = $0 && label == "com.uttrflow.input.accessibility" }
         sent.withLock { $0 += 1 }
-        Thread.sleep(forTimeInterval: block)
+        while blocks, !opened.withLock({ $0 }) { Thread.sleep(forTimeInterval: 0.005) }
     }
 
     func focusedTextField() -> (any FocusedTextField)? { message(); return nil }
@@ -26,6 +36,13 @@ private final class BlockingFocus: AccessibilityFocus, @unchecked Sendable {
     func tail(upTo count: Int) -> FieldTail { message(); return .unreadable }
     func frontmostApplication() -> InsertionDestination? { nil }
     func focusedFieldIsSecure() -> Bool { message(); return false }
+}
+
+/// Whether something happened, readable from any thread.
+private final class Flag: Sendable {
+    private let value = Mutex(false)
+    var isSet: Bool { value.withLock { $0 } }
+    func set() { value.withLock { $0 = true } }
 }
 
 /// A clipboard that holds what it is given.
@@ -47,9 +64,15 @@ private actor Bystander {
 struct AccessibilityThreadTests {
     @Test("Insertions stuck on a silent app leave other actors free to run")
     func blockedInsertionsDoNotStarveThePool() async throws {
-        let focus = BlockingFocus(blockingFor: 1.5)
+        let focus = BlockingFocus()
         let stuck = ProcessInfo.processInfo.activeProcessorCount * 2
-        let started = ContinuousClock.now
+        // Released by a thread of its own, since a starved pool also starves the global queues and would hang the test.
+        let released = Flag()
+        Thread.detachNewThread {
+            Thread.sleep(forTimeInterval: 20)
+            released.set()
+            focus.release()
+        }
         let insertions = (0..<stuck).map { _ in
             Task {
                 let coordinator = TextInsertionCoordinator(
@@ -58,18 +81,27 @@ struct AccessibilityThreadTests {
                 _ = try? await coordinator.insert("words")
             }
         }
-        // Waits until every insertion is parked in its first message, which is when a shared pool would be full.
-        while focus.messages < stuck { try await Task.sleep(for: .milliseconds(5)) }
+        // Waits until every insertion is parked in a message, which is when a shared pool would be full.
+        while focus.messages < stuck, !released.isSet { try await Task.sleep(for: .milliseconds(5)) }
         _ = await Bystander().ping()
 
-        // Measured from the launch, so a pool held for the whole block shows up as at least 1.5 s.
-        #expect(ContinuousClock.now - started < .seconds(1))
-        for insertion in insertions { insertion.cancel() }
+        #expect(!released.isSet, "the bystander ran only once the stuck messages were let go")
+        #expect(focus.allSentOffPool)
+        focus.release()
+        for insertion in insertions { await insertion.value }
+    }
+
+    @Test("Paste confirmation reads the caret from the Accessibility queue")
+    func confirmationReadsOffPool() async {
+        let focus = BlockingFocus(blocks: false)
+        _ = await PasteConfirmation(focus: focus).waitFor("words")
+        #expect(focus.messages == 1)
+        #expect(focus.allSentOffPool)
     }
 
     @Test("A task cancelled before its message leaves the queue sends nothing")
     func cancelledTaskSendsNoMessage() async {
-        let focus = BlockingFocus(blockingFor: 0)
+        let focus = BlockingFocus(blocks: false)
         let answer = await Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return await AccessibilityThread.run(orElse: true) { focus.focusedFieldIsSecure() }

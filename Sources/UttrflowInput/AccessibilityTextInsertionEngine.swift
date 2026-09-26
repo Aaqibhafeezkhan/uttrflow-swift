@@ -26,7 +26,9 @@ public struct AccessibilityTextInsertionEngine: TextInsertionEngine {
         guard !Task.isCancelled else {
             throw .insertionRejected(description: TextInsertion.dictationEnded)
         }
-        try await AccessibilityThread.run { () throws(TextInsertionError) in try field.replaceSelection(with: text) }
+        try await AccessibilityThread.run { () throws(TextInsertionError) in
+            try field.replaceSelection(with: text)
+        }
         return .notReported
     }
 }
