@@ -9,7 +9,8 @@ import UttrflowPredict
 struct SuggestionArmedClaimTests {
     @Test("a different line lets go of the key armed for the drawn one")
     func differentLineDropsClaim() {
-        #expect(!SuggestionCoordinator.keepsClaimWhileReading(armed: "see you soon", next: .certain("see you later")))
+        #expect(
+            !SuggestionCoordinator.keepsClaimWhileReading(armed: "see you soon", next: .certain("see you later")))
     }
 
     @Test("the same leader with alternatives behind it keeps the key")
