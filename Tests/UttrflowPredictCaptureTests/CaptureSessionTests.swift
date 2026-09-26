@@ -512,6 +512,58 @@ struct CaptureSessionForgetLearnedTests {
 
 @Suite("Surviving a transient capture write failure")
 struct CaptureSessionTransientFailureTests {
+    @Test(
+        "A field's ending whose write fails is held and written before the next event.",
+        arguments: [CommitReason.returnPressed, .focusLeft, .applicationDeactivated])
+    func failedEndingIsRetriedByTheNextEvent(reason: CommitReason) async throws {
+        let scratch = Scratch()
+        let sink = FlakySink(recordFailures: 1)
+        let session = try await session(
+            scratch, sink, allowing: ["com.example.terminal"], policy: only(reason))
+        _ = try await session.handle(.keystroke("git status", at: start), in: terminal)
+        let ending: CaptureEvent =
+            switch reason {
+            case .returnPressed: .returnPressed(at: start)
+            case .focusLeft: .focusLeft(at: start)
+            default: .applicationDeactivated(at: start)
+            }
+        await #expect(throws: FlakySinkError.self) { _ = try await session.handle(ending, in: terminal) }
+        #expect(await sink.recorded.isEmpty)
+        #expect(await session.unwrittenCommitCount() == 1)
+
+        _ = try await session.handle(.keystroke("ls", at: start.addingTimeInterval(1)), in: terminal)
+        #expect(await sink.recorded == ["git status"])
+        #expect(await session.unwrittenCommitCount() == 0)
+    }
+
+    @Test("Moving to a new field whose old value fails to write still takes the new field's event.")
+    func failedImplicitFlushKeepsTheNewEvent() async throws {
+        let scratch = Scratch()
+        let sink = FlakySink(recordFailures: 1)
+        let session = try await session(
+            scratch, sink, allowing: ["com.example.terminal", "com.example.browser"])
+        _ = try await session.handle(.keystroke("git status", at: start), in: terminal)
+        _ = try await session.handle(.keystroke("example.com", at: start), in: browser)
+        #expect(try await session.handle(.returnPressed(at: start), in: browser) == .recorded("example.com"))
+        #expect(await sink.recorded == ["git status", "example.com"])
+    }
+
+    @Test("Held values are bounded, and forgetting an application drops its own.")
+    func heldValuesAreBoundedAndForgotten() async throws {
+        let scratch = Scratch()
+        let limit = CaptureSession.unwrittenCommitLimit
+        let sink = FlakySink(recordFailures: .max)
+        let session = try await session(
+            scratch, sink, allowing: ["com.example.terminal"], policy: only(.returnPressed))
+        for index in 0...limit {
+            _ = try await session.handle(.keystroke("echo \(index)", at: start), in: terminal)
+            _ = try? await session.handle(.returnPressed(at: start), in: terminal)
+        }
+        #expect(await session.unwrittenCommitCount() == limit)
+        await session.forgetLearned(from: "com.example.terminal")
+        #expect(await session.unwrittenCommitCount() == 0)
+    }
+
     @Test("A failed idle write does not lock the detector; the next eligible tick retries it.")
     func failedIdleIsRetriedByTheNextTick() async throws {
         let scratch = Scratch()
