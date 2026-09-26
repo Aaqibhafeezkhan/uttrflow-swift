@@ -17,6 +17,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var suggestionModel: SuggestionModelReadiness = .notAsked
     /// Which shortcuts the window server refused, kept for the same reason.
     private var unarmedShortcuts: Set<ShortcutAction> = []
+    /// Asks this Mac which clean-up engines are ready for a profile; injected so a test can order the answers.
+    private let probe: @Sendable (UserProfile) async -> SettingsCapabilities
+    /// Counts capability probes, so only the most recently started one may apply its answer.
+    private var probeGeneration = 0
+    /// The probe in flight, cancelled when a newer one starts.
+    private(set) var capabilityRefresh: Task<Void, Never>?
 
     /// `personalisation` has no default: a fresh store here would be a second actor racing over each file.
     init(
@@ -26,8 +32,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         onChange: @escaping (UttrflowSettings.Settings) -> Void = { _ in },
         onRequest: @escaping (SettingsChange) -> Void = { _ in },
         onReset: @escaping (SettingsReset) -> Void = { _ in },
-        onShortcutRecording: @escaping (Bool) -> Void = { _ in }
+        onShortcutRecording: @escaping (Bool) -> Void = { _ in },
+        probe: @escaping @Sendable (UserProfile) async -> SettingsCapabilities = {
+            await SettingsCapabilities.refreshed(for: $0)
+        }
     ) {
+        self.probe = probe
         model = SettingsViewModel(
             store: store, personalisation: personalisation, capabilities: capabilities,
             onChange: onChange, onRequest: onRequest, onReset: onReset,
@@ -47,11 +57,19 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         NSApplication.shared.activate()
         window.makeKeyAndOrderFront(nil)
         model.refreshPersonalisation()
+        refreshCapabilities()
+    }
 
-        Task { [weak self] in
-            guard let self else { return }
-            var refreshed = await SettingsCapabilities.refreshed(
-                for: model.session.settings.profile)
+    /// Re-probes the engines for the current profile; an answer from a superseded probe is discarded.
+    func refreshCapabilities() {
+        capabilityRefresh?.cancel()
+        probeGeneration += 1
+        let generation = probeGeneration
+        let profile = model.session.settings.profile
+        let probe = probe
+        capabilityRefresh = Task { [weak self] in
+            var refreshed = await probe(profile)
+            guard let self, !Task.isCancelled, generation == probeGeneration else { return }
             // Re-applied, because the probe asks this Mac and only the app knows about the fetch.
             refreshed.suggestionModel = suggestionModel
             refreshed.unarmedShortcuts = unarmedShortcuts
