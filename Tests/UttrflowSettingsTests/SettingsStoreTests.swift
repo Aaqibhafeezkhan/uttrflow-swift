@@ -140,6 +140,16 @@ struct SettingsTests {
         #expect(!restored.sharesUsageStatistics)
     }
 
+    /// Crash reports stay off for anyone who never chose, and on for anyone who did.
+    @Test("crash reports are off by default and keep the user's choice")
+    func crashReportsAreOptIn() throws {
+        #expect(!Settings.default.sendsCrashReports)
+        #expect(!(try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))).sendsCrashReports)
+        let restored = try JSONDecoder().decode(
+            Settings.self, from: JSONEncoder().encode(Settings(sendsCrashReports: true)))
+        #expect(restored.sendsCrashReports)
+    }
+
     /// The upgrade case: a build that added settings must still find the ones the user chose.
     @Test("keeps what an older build wrote and defaults what it never knew")
     func olderPayload() throws {

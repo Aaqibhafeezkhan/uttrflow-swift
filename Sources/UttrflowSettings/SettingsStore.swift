@@ -69,6 +69,8 @@ public struct Settings: Sendable, Equatable, Codable {
 
     /// Whether anonymous counts and timings are sent; never what was dictated. See `Docs/account-telemetry.md`.
     public var sharesUsageStatistics: Bool
+    /// Whether crash and hang reports go to Uttrflow; off until the user turns it on. See `Docs/crash-reporting.md`.
+    public var sendsCrashReports: Bool
 
     /// Whether the interface is drawn light, dark, or however the Mac is set.
     public var appearance: AppAppearance
@@ -101,6 +103,7 @@ public struct Settings: Sendable, Equatable, Codable {
         opensAtLogin: Bool = true,
         installsUpdatesAutomatically: Bool = true,
         sharesUsageStatistics: Bool = true,
+        sendsCrashReports: Bool = false,
         appearance: AppAppearance = .dark,
         transcriptRetentionDays: Int = Settings.defaultRetentionDays,
         clipboardRetentionDays: Int = Settings.defaultRetentionDays,
@@ -123,6 +126,7 @@ public struct Settings: Sendable, Equatable, Codable {
         self.opensAtLogin = opensAtLogin
         self.installsUpdatesAutomatically = installsUpdatesAutomatically
         self.sharesUsageStatistics = sharesUsageStatistics
+        self.sendsCrashReports = sendsCrashReports
         self.appearance = appearance
         self.transcriptRetentionDays = transcriptRetentionDays
         self.clipboardRetentionDays = clipboardRetentionDays
@@ -162,6 +166,7 @@ extension Settings {
         case opensAtLogin
         case installsUpdatesAutomatically
         case sharesUsageStatistics
+        case sendsCrashReports
         case appearance
         case transcriptRetentionDays
         case clipboardRetentionDays
@@ -215,6 +220,8 @@ extension Settings {
             sharesUsageStatistics: container.value(
                 forKey: .sharesUsageStatistics, default: fallback.sharesUsageStatistics
             ),
+            sendsCrashReports: container.value(
+                forKey: .sendsCrashReports, default: fallback.sendsCrashReports),
             appearance: container.value(forKey: .appearance, default: fallback.appearance),
             transcriptRetentionDays: Settings.retention(
                 container.value(

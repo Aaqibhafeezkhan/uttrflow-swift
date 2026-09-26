@@ -154,6 +154,11 @@ struct PredictionEngineTests {
         #expect(decided.silence == expected)
         #expect(decided.suggestion == suggestion(candidates, context))
         #expect((decided.silence == nil) == (decided.suggestion.accepting != nil))
+        let ranked = PredictionEngine.ranked(from: candidates, in: context, now: moment)
+        #expect(ranked.suggestion == decided.suggestion && ranked.silence == decided.silence)
+        if decided.suggestion.accepting != nil {
+            #expect(ranked.ranking == Ranking(candidates, now: moment))
+        }
     }
 
     @Test("What Tab would insert is what is on screen.")

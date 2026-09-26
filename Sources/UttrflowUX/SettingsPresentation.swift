@@ -169,6 +169,7 @@ public enum SettingsToggleField: String, Sendable, Equatable, CaseIterable {
     case opensAtLogin
     case installsUpdatesAutomatically
     case sharesUsageStatistics
+    case sendsCrashReports
     case suggestionsEnabled
     case quietSuggestions
 }

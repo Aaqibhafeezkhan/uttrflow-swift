@@ -425,6 +425,14 @@ titles and application names have nowhere to go. It is on by default; Settings �
 "Share anonymous usage statistics" turns it off, which also drops anything not yet sent.
 [`Docs/account-telemetry.md`](Docs/account-telemetry.md) has the detail.
 
+**Crash reports are off unless you turn them on.** Settings → Privacy → *Send crash
+reports* is the one exception to the paragraph above, and it starts off. When it is on, a
+crash or a freeze is reported to Sentry, the error tracker the project uses: the app and
+macOS versions, the Mac model and architecture, the exception, and the stack as binary
+names and addresses. No user or host name, no file paths (each is cut to its file name), no
+breadcrumbs, and nothing you dictated or copied. Builds made from source carry no reporting
+key and never send anything. [Docs/crash-reporting.md](Docs/crash-reporting.md) has the details.
+
 The app is not hermetic and does not claim to be: it downloads a speech model on first run,
 roughly 646 MB, and signs you in once. After that it dictates with no network at all. A
 cloud clean-up engine exists behind the `UTTRFLOW_CLOUD` compilation flag and is **not** in

@@ -41,6 +41,16 @@ struct SuggestionAnnouncerTests {
                 == "AI suggestion: ls -l. Right Arrow to accept.")
     }
 
+    @Test("The dot Escape leaves is labelled and announced once")
+    func theDotIsAnnouncedOnce() {
+        var announcer = SuggestionAnnouncer()
+        let dot = SuggestionPresentation(.minimised)
+        #expect(dot.accessibilityLabel == SuggestionPresentation.dotLabel)
+        #expect(announcer.announcement(for: SuggestionPresentation(.certain("Sydney"))) != nil)
+        #expect(announcer.announcement(for: dot) == SuggestionPresentation.dotLabel)
+        #expect(announcer.announcement(for: dot) == nil)
+    }
+
     @Test("A redraw of the same offer, or typing that keeps its cost, is not announced again")
     func aRedrawIsSilent() {
         var announcer = SuggestionAnnouncer()
@@ -86,11 +96,13 @@ struct SuggestionAnnouncerTests {
                 == "AI suggestion: Soho. Tab to accept. Alternatives: Sydney, Sydenham.")
     }
 
-    @Test("Nothing, or the dot left after Escape, is never announced and lets the next offer be heard")
+    @Test("Nothing is never announced, and neither it nor the dot stops the next offer being heard")
     func nothingIsSilentAndResets() {
         var announcer = SuggestionAnnouncer()
         _ = announcer.announcement(for: SuggestionPresentation(.certain("Sydney")))
-        #expect(announcer.announcement(for: SuggestionPresentation(.minimised)) == nil)
+        #expect(
+            announcer.announcement(for: SuggestionPresentation(.minimised)) == SuggestionPresentation.dotLabel
+        )
         #expect(announcer.announcement(for: SuggestionPresentation(.certain("Sydney"))) != nil)
         #expect(announcer.announcement(for: SuggestionPresentation(.silent)) == nil)
         #expect(announcer.announcement(for: SuggestionPresentation(.certain("Sydney"))) != nil)

@@ -92,6 +92,7 @@ public enum SettingsEditor {
         case .opensAtLogin: settings.opensAtLogin = isOn
         case .installsUpdatesAutomatically: settings.installsUpdatesAutomatically = isOn
         case .sharesUsageStatistics: settings.sharesUsageStatistics = isOn
+        case .sendsCrashReports: settings.sendsCrashReports = isOn
         case .suggestionsEnabled: settings.suggestions.isEnabled = isOn
         case .quietSuggestions: settings.suggestions.isQuiet = isOn
         }
@@ -129,7 +130,7 @@ public enum SettingsEditor {
             capabilities.canCheckForUpdates
                 ? nil
                 : "This build has no update feed, so there is nothing for it to install."
-        case .suggestionsEnabled:
+        case .suggestionsEnabled, .sendsCrashReports:
             nil
         case .quietSuggestions:
             settings.suggestions.isEnabled ? nil : suggestionsAreOff

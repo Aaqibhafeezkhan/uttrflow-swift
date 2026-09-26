@@ -226,12 +226,12 @@ public struct SuggestionSession: Sendable, Equatable {
         }
         // A candidate the user has already finished typing adds nothing, and one in another script is never written.
         let offerable = candidates.filter { $0.text != pending.typed && LatinScript.writes($0.text) }
-        let decided = PredictionEngine.decision(from: offerable, in: pending, now: now)
+        let decided = PredictionEngine.ranked(from: offerable, in: pending, now: now)
         // A turn with nothing on offer has nothing to be wrong about, so the gates are never troubled.
-        guard decided.suggestion.accepting != nil else {
+        guard decided.suggestion.accepting != nil, let ranking = decided.ranking else {
             return .settled(settle(decided.suggestion, silence: decided.silence))
         }
-        let head = Ranking(offerable, now: now).candidates.prefix(Self.verifiedDepth).map(\.candidate)
+        let head = ranking.candidates.prefix(Self.verifiedDepth).map(\.candidate)
         return .verify(
             VerificationRequest(
                 surface: query.surface, typed: pending.typed, candidates: head,

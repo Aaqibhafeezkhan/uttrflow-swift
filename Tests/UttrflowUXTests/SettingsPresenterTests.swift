@@ -445,6 +445,25 @@ struct SettingsPrivacyPaneTests {
     func privacyRowsAreAlwaysOperable() {
         #expect(privacy().everyRow.allSatisfy { $0.isEnabled })
     }
+
+    @Test("offers crash reports off by default, and shows the stored choice")
+    func crashReportsAreOptIn() {
+        #expect(
+            privacy().row("sendsCrashReports")?.control == .toggle(field: .sendsCrashReports, isOn: false))
+        var settings = Settings.default
+        settings.sendsCrashReports = true
+        #expect(
+            privacy(settings).row("sendsCrashReports")?.control
+                == .toggle(field: .sendsCrashReports, isOn: true))
+    }
+
+    @Test("the crash report switch is written through both ways")
+    func crashReportSwitchApplies() throws {
+        let on = try SettingsEditor.apply(.toggle(.sendsCrashReports, isOn: true), to: .default)
+        #expect(on.sendsCrashReports)
+        let off = try SettingsEditor.apply(.toggle(.sendsCrashReports, isOn: false), to: on)
+        #expect(!off.sendsCrashReports)
+    }
 }
 
 // MARK: - Rows
