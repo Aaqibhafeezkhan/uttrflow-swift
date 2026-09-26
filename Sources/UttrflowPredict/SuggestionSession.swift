@@ -95,8 +95,8 @@ public enum SuggestionAction: Sendable, Equatable {
     case accept(String)
     /// Draw this instead, which a move or a dismissal produces.
     case redraw(SuggestionUpdate)
-    /// The keystroke changed nothing here.
-    case nothing
+    /// The keystroke means nothing here, so it goes back to the application as pressed.
+    case giveBack(KeyStroke)
 }
 
 /// Sequences the whole tab-to-complete loop without touching a store, a clock or a screen.
@@ -301,7 +301,7 @@ public struct SuggestionSession: Sendable, Equatable {
         let lowered = typed.lowercased()
         return lines.filter {
             let lower = $0.lowercased()
-            return lower != lowered && lower.hasPrefix(lowered) && LatinScript.writes($0)
+            return lower != lowered && lower.hasScalarPrefix(lowered) && LatinScript.writes($0)
                 && seen.insert(lower).inserted
         }
     }
@@ -321,7 +321,7 @@ public struct SuggestionSession: Sendable, Equatable {
         {
         case .accept(let text):
             // A key typed since the read this offer was worked out for has moved the line, so Tab takes nothing.
-            guard drawnAtKeystroke == keystrokes else { return .nothing }
+            guard drawnAtKeystroke == keystrokes else { return .giveBack(stroke) }
             // The offer is gone the moment it is taken, and so is any answer still in flight for it.
             generation += 1
             clearDrawing()
@@ -333,7 +333,7 @@ public struct SuggestionSession: Sendable, Equatable {
         case .dismiss(let dismissal):
             return .redraw(dismiss(dismissal))
         case .passThrough:
-            return .nothing
+            return .giveBack(stroke)
         }
     }
 
@@ -371,18 +371,20 @@ public struct SuggestionSession: Sendable, Equatable {
             isMinimised = false
         }
         let lowered = typing.lowercased()
-        // Case alone is not typing past, since the store matched the line regardless of it.
-        guard let offered = suggestion.accepting, !offered.lowercased().hasPrefix(lowered) else { return nil }
+        // Case and a scalar typed ahead of its own combining mark are not typing past, since the store matched regardless.
+        guard let offered = suggestion.accepting, !offered.lowercased().hasScalarPrefix(lowered)
+        else { return nil }
         // Finishing the suggestion by hand and typing on is taking it, not typing past it.
-        guard !lowered.hasPrefix(offered.lowercased()) else { return nil }
+        guard !lowered.hasScalarPrefix(offered.lowercased()) else { return nil }
         // Whitespace alone typed past a suggestion is a pause or a slip of the space bar, not a refusal.
         let earlier = typed.lowercased()
-        guard !(lowered.hasPrefix(earlier) && lowered.dropFirst(earlier.count).allSatisfy(\.isWhitespace))
+        guard
+            !(lowered.hasScalarPrefix(earlier) && lowered.dropFirst(earlier.count).allSatisfy(\.isWhitespace))
         else { return nil }
         // Typing past a guess the model invented says the model was wrong, not that the field wants quiet.
         guard !shownIsGenerated else { return nil }
         // Only an offer that completed the line can be typed past; leaving a fuzzy or corrected one, or shortening the line, says nothing.
-        guard offered.lowercased().hasPrefix(typed.lowercased()) else { return nil }
+        guard offered.lowercased().hasScalarPrefix(typed.lowercased()) else { return nil }
         rejectionsHere += 1
         return offered
     }

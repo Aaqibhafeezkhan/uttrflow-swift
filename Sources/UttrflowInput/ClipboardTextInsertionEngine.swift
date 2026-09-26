@@ -23,7 +23,8 @@ public struct ClipboardTextInsertionEngine: TextInsertionEngine {
         guard !Task.isCancelled else {
             throw .insertionRejected(description: TextInsertion.dictationEnded)
         }
-        if focus?.focusedFieldIsSecure() == true {
+        let focus = focus
+        if await AccessibilityThread.run(orElse: true, { focus?.focusedFieldIsSecure() == true }) {
             pasteboard.setConcealedText(text)
         } else {
             pasteboard.setText(text)

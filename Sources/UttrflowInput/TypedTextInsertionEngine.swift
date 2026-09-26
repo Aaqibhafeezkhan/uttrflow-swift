@@ -39,7 +39,9 @@ extension TypedTextInsertionEngine: CompletionWriting {
         let count = replaced.count
         if count > 0 {
             // A blind backspace could eat a shell prompt, so what is there is checked when the field will say.
-            if let preceding = focus.precedingText(count), preceding != replaced {
+            let focus = focus
+            let preceding = await AccessibilityThread.run(orElse: nil) { focus.precedingText(count) }
+            if let preceding, preceding != replaced {
                 throw .insertionRejected(
                     description: "the text before the caret is not what would be replaced")
             }

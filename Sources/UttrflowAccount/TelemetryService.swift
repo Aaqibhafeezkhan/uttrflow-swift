@@ -114,10 +114,11 @@ public final class TelemetryService: Sendable {
             return
         }
         if let report = collector.takeReport(endedAt: moment) {
-            outbox.withLock { $0.enqueue(report) }
+            // Checked under the outbox lock, so an opt-out that lands after the take still drops the report.
+            outbox.withLock { if collector.isEnabled { $0.enqueue(report) } }
         }
 
-        while let next = outbox.withLock({ $0.pending.first }) {
+        while let next = outbox.withLock({ collector.isEnabled ? $0.pending.first : nil }) {
             do {
                 try await sender.send(next)
             } catch {
@@ -152,9 +153,10 @@ extension TelemetryService {
             if pending.count > TelemetryService.outboxCapacity { pending.removeFirst() }
         }
 
-        /// Records a delivered report, finding it by value because opting out can empty the queue mid-send.
+        /// Records a delivered report, unless opting out mid-send has already discarded it.
         mutating func accept(_ report: TelemetryReport, at moment: Date) {
-            if let index = pending.firstIndex(of: report) { pending.remove(at: index) }
+            guard let index = pending.firstIndex(of: report) else { return }
+            pending.remove(at: index)
             sent.append(TelemetryDispatch(report: report, sentAt: moment))
             if sent.count > TelemetryService.ledgerCapacity { sent.removeFirst() }
         }

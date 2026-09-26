@@ -36,6 +36,9 @@ WAKEUPS_ALLOWED = {
     ("Sources/UttrflowInput/CarbonHotkeyMonitor.swift", ".milliseconds(Self.reconciliationMilliseconds)"): (
         "the release check, which runs only while the shortcut is held; see Docs/stuck-recording.md"
     ),
+    ("Sources/UttrflowInput/ActivationMonitor.swift", ".milliseconds(Self.reconciliationMilliseconds)"): (
+        "the release check, which runs only while the dictation key is held; see Docs/stuck-recording.md"
+    ),
     ("Sources/UttrflowInput/PasteConfirmation.swift", "interval"): (
         "watches the caret after a paste the user made, bounded by the confirmation budget"
     ),
@@ -50,6 +53,9 @@ WAKEUPS_ALLOWED = {
     ),
     ("Sources/UttrflowAccount/HTTPAuthenticationService.swift", "wait"): (
         "polls for a sign-in the user started, at the interval the server sets, until the code expires"
+    ),
+    ("Sources/UttrflowInput/SelectionWriter.swift", "lateWriteInterval"): (
+        "re-reads a field after an insertion, at most `lateWriteRereads` times, and never at rest"
     ),
     ("Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift", ".milliseconds(max(delay, 1))"): (
         "books one turn after a pause in typing, calling the other `wake` overload once; each keystroke replaces it"

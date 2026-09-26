@@ -38,4 +38,15 @@ struct DiagnosticsEngineProbeTests {
             #expect(answered[kind] != nil, "\(kind.rawValue) was left unanswered")
         }
     }
+
+    /// #1668: the speech model row was never given an answer, so it read Not checked yet forever.
+    @Test("the speech model is looked for on disk too")
+    func speechModelIsLookedFor() async {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        #expect(app.speechModelPresence == nil)
+
+        await app.probeSpeechModel().value
+        #expect(app.speechModelPresence != nil, "the page would still say Not checked yet")
+    }
 }

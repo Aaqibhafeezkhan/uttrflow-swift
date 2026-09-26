@@ -209,6 +209,34 @@ struct CaptureSessionTests {
         #expect(await recorder.texts.isEmpty)
     }
 
+    @Test("Return after accepting a correction records only the accepted line, not the typo it replaced.")
+    func returnAfterAcceptedCorrectionRecordsNothingNew() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder, allowing: ["com.example.terminal"])
+        _ = try await session.handle(.keystroke("git chekout", at: start), in: terminal)
+        _ = try await session.accepted("git checkout main", in: terminal, at: start.addingTimeInterval(1))
+        #expect(
+            try await session.handle(.returnPressed(at: start.addingTimeInterval(2)), in: terminal)
+                == .nothing)
+        #expect(await recorder.texts == ["git checkout main"])
+    }
+
+    @Test("Typing more after accepting commits the whole line as it then stands.")
+    func typingAfterAcceptCommitsTheFullLine() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder, allowing: ["com.example.terminal"])
+        _ = try await session.handle(.keystroke("git chekout", at: start), in: terminal)
+        _ = try await session.accepted("git checkout main", in: terminal, at: start.addingTimeInterval(1))
+        _ = try await session.handle(
+            .keystroke("git checkout main -q", at: start.addingTimeInterval(2)), in: terminal)
+        #expect(
+            try await session.handle(.returnPressed(at: start.addingTimeInterval(3)), in: terminal)
+                == .recorded("git checkout main -q"))
+        #expect(await recorder.texts == ["git checkout main", "git checkout main -q"])
+    }
+
     @Test("The value entered before is what the next one is recorded as following.")
     func successionIsRecorded() async throws {
         let scratch = Scratch()
@@ -234,6 +262,24 @@ struct CaptureSessionTests {
         _ = try await session.handle(.returnPressed(at: start.addingTimeInterval(62)), in: terminal)
         #expect(await recorder.superseded.map(\.text) == ["git pu"])
         #expect(await recorder.texts == ["git pu", "git push"])
+    }
+
+    @Test("A refused idle value is never handed to the sink as the one a later line replaces.")
+    func refusedValueIsNeverSuperseded() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder)
+        _ = try await session.handle(.keystroke("git pu", at: start), in: terminal)
+        #expect(
+            try await session.handle(.tick(at: start.addingTimeInterval(60)), in: terminal)
+                == .refused(.consentNotGiven))
+        try await session.record(.allowed, for: "com.example.terminal")
+        _ = try await session.handle(.keystroke("git push", at: start.addingTimeInterval(61)), in: terminal)
+        #expect(
+            try await session.handle(.returnPressed(at: start.addingTimeInterval(62)), in: terminal)
+                == .recorded("git push"))
+        #expect(await recorder.superseded.isEmpty)
+        #expect(await recorder.texts == ["git push"])
     }
 
     @Test("Moving to another field commits what the first one still held.")
@@ -268,7 +314,7 @@ struct CaptureSessionTests {
         let recorder = Recorder()
         let session = try await session(
             scratch, recorder, allowing: ["com.example.terminal"],
-            policy: .returnOnly(in: ["com.example.terminal"]))
+            policy: returnOnlyInTerminal)
         _ = try await session.handle(.keystroke("lsbom", at: start), in: terminal)
         #expect(try await session.handle(.focusLeft(at: start), in: terminal) == .nothing)
         _ = try await session.handle(.keystroke("lsbom", at: start), in: terminal)
@@ -319,7 +365,7 @@ struct CaptureSessionTests {
         let recorder = Recorder()
         let session = try await session(
             scratch, recorder, allowing: ["com.example.browser"],
-            policy: .returnOnly(in: ["com.example.terminal"]))
+            policy: returnOnlyInTerminal)
         _ = try await session.handle(.keystroke("example.com", at: start), in: browser)
         #expect(try await session.handle(.focusLeft(at: start), in: browser) == .recorded("example.com"))
     }
@@ -371,6 +417,20 @@ struct CaptureSessionTests {
         #expect(await recorder.texts.count == 2)
     }
 
+    @Test("A history line with a command substitution is not imported.")
+    func shellHistorySkipsUnresolvedLines() async throws {
+        let scratch = Scratch()
+        try scratch.write(
+            ": 1:0;rm -rf $(find . -name node_modules)\n: 2:0;make verify\n", to: ".zsh_history")
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder, allowing: ["com.example.terminal"])
+        let surface = try #require(terminal.surface)
+        let imported = try await session.importShellHistory(
+            forHomeDirectory: scratch.directory, into: surface, at: start)
+        #expect(imported == 1)
+        #expect(await recorder.texts == ["make verify"])
+    }
+
     @Test("A home directory with no history in it imports nothing and is not tried again.")
     func shellHistoryMayBeAbsent() async throws {
         let scratch = Scratch()
@@ -410,6 +470,43 @@ struct CaptureSessionForgettingTests {
         let reloaded = CapturePreferencesFile(path: scratch.preferencesPath).load()
         #expect(reloaded.state(of: "com.example.terminal") == .unknown)
         #expect(reloaded.state(of: "com.example.editor") == .allowed)
+    }
+}
+
+@Suite("Forgetting what was learned")
+struct CaptureSessionForgetLearnedTests {
+    @Test("A line recorded after its application is forgotten does not follow the forgotten one.")
+    func forgettingAnApplicationDropsItsLastLine() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let session = try await session(
+            scratch, recorder, allowing: ["com.example.terminal", "com.example.browser"])
+        _ = try await session.handle(.keystroke("secret line", at: start), in: terminal)
+        _ = try await session.handle(.returnPressed(at: start), in: terminal)
+        _ = try await session.handle(.keystroke("example.com", at: start), in: browser)
+        _ = try await session.handle(.returnPressed(at: start), in: browser)
+        await session.forgetLearned(from: "com.example.terminal")
+        _ = try await session.handle(.keystroke("next line", at: start), in: terminal)
+        _ = try await session.handle(.returnPressed(at: start), in: terminal)
+        _ = try await session.handle(.keystroke("example.org", at: start), in: browser)
+        _ = try await session.handle(.returnPressed(at: start), in: browser)
+        #expect(await recorder.recorded.map(\.previous) == [nil, nil, nil, "example.com"])
+    }
+
+    @Test("Forgetting everything drops every last line and every answer, in memory and on disk.")
+    func forgettingEverythingDropsLinesAndAnswers() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder, allowing: ["com.example.terminal"])
+        _ = try await session.handle(.keystroke("secret line", at: start), in: terminal)
+        _ = try await session.handle(.returnPressed(at: start), in: terminal)
+        try await session.forgetEverythingLearned()
+        #expect(await session.decisions() == CapturePreferences())
+        #expect(!FileManager.default.fileExists(atPath: scratch.preferencesPath))
+        try await session.record(.allowed, for: "com.example.terminal")
+        _ = try await session.handle(.keystroke("next line", at: start), in: terminal)
+        _ = try await session.handle(.returnPressed(at: start), in: terminal)
+        #expect(await recorder.recorded.map(\.previous) == [nil, nil])
     }
 }
 
@@ -475,5 +572,32 @@ struct CaptureSessionTransientFailureTests {
         #expect(outcome == .recorded("git push"))
         #expect(await sink.recorded == ["git pu", "git push"])
         #expect(await sink.superseded.map(\.text) == ["git pu"])
+    }
+}
+
+/// Return alone finishes a field in the example terminal, and every ending finishes one elsewhere.
+private let returnOnlyInTerminal = CommitPolicy { reason, reading in
+    reason == .returnPressed || reading.bundleIdentifier != "com.example.terminal"
+}
+
+@Suite("A field's identity across readings")
+struct CaptureSessionFieldIdentityTests {
+    @Test("A title mark appearing mid-line is the same field, so nothing is committed early.")
+    func titleMarkIsNotAFocusChange() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder, allowing: ["com.example.notes"])
+        let clean = FieldReading(
+            bundleIdentifier: "com.example.notes", role: "AXTextArea", windowTitle: "Groceries")
+        let edited = FieldReading(
+            bundleIdentifier: "com.example.notes", role: "AXTextArea", windowTitle: "Groceries •")
+        #expect(clean.surface == edited.surface)
+        #expect(try await session.handle(.keystroke("buy", at: start), in: clean) == .nothing)
+        let outcome = try await session.handle(
+            .keystroke("buy milk", at: start.addingTimeInterval(1)), in: edited)
+        #expect(outcome == .nothing)
+        #expect(await recorder.texts.isEmpty)
+        let finished = try await session.handle(.returnPressed(at: start.addingTimeInterval(2)), in: edited)
+        #expect(finished == .recorded("buy milk"))
     }
 }

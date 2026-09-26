@@ -166,7 +166,7 @@ struct PasteboardTextInsertionEngineTests {
     }
 
     /// The guard's whole point: eligibility answered for another app must not survive a switch to Uttrflow.
-    @Test("rejects the paste and leaves the clipboard alone when Uttrflow becomes frontmost after eligibility")
+    @Test("rejects the paste and leaves the clipboard alone when Uttrflow is frontmost at the write")
     func revalidatesFrontmostBeforeWriting() async {
         let focus = SwitchableFocus()
         let pasteboard = FakePasteboard()
@@ -245,6 +245,19 @@ struct PasteboardTextInsertionEngineTests {
 
         #expect(keystrokes.pasteCount == 1)
         #expect(pasteboard.text() == "dictated words", "the dictation must outlive the failure")
+    }
+
+    @Test("refuses to paste when the clipboard write does not stick")
+    func refusesToPasteAnUnheldWrite() async {
+        let pasteboard = FakePasteboard(text: "stale words", acceptsWrites: false)
+        let keystrokes = FakeKeystrokeSender()
+        let sut = engine(pasteboard, keystrokes)
+
+        await #expect(throws: TextInsertionError.clipboardUnavailable) {
+            try await sut.insert("dictated words")
+        }
+
+        #expect(keystrokes.pasteCount == 0, "a paste now would put the stale clipboard into the field")
     }
 
     @Test("copies an empty transcript without inventing anything")

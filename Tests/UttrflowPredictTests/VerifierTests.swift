@@ -84,6 +84,25 @@ struct VerifierTests {
         #expect(verdict == .rejected)
     }
 
+    @Test("A rejected branch is not condemned for good, since it may be fetched tomorrow.")
+    func openVocabularyRejectionIsNotRecorded() async {
+        let store = RecordingSupersession()
+        let verdict = await decided(
+            "git checkout zqxjw", typed: "git checkout z", machine: [.branch: ["main"]],
+            scoring: ScriptedScoring(disliked), supersession: store)
+        #expect(verdict == .rejected)
+        #expect(await store.rejected.isEmpty)
+    }
+
+    @Test("A rejected subcommand is condemned for good, since its vocabulary is closed.")
+    func closedVocabularyRejectionIsRecorded() async {
+        let store = RecordingSupersession()
+        _ = await decided(
+            "git zqxjw", typed: "git z", machine: [.subcommand(of: "git"): ["commit"]],
+            scoring: ScriptedScoring(disliked), supersession: store)
+        #expect(await store.rejected == ["git zqxjw"])
+    }
+
     @Test("A candidate the model likes stands even where the machine cannot place it.")
     func keepsWhatTheModelLikes() async {
         let verdict = await decided(
@@ -128,6 +147,22 @@ struct VerifierTests {
         #expect(
             elapsed < .seconds(4),
             "the verdict must return once the deadline wins, not wait out an 8-second noncooperative scorer")
+    }
+
+    @Test("A cancelled turn stops `verified` between candidates, not just after the whole loop.")
+    func stopsBetweenCandidatesOnCancellation() async {
+        let box = TaskBox<[Candidate]>()
+        let scoring = CancellingScoring<[Candidate]>(disliked, cancelling: box)
+        let verifier = await warmed([:], on: "candidate0", scoring: scoring)
+        let candidates = (0..<4).map { Candidate(text: "candidate\($0)", source: .personal) }
+        let task = Task {
+            await verifier.verified(candidates, in: terminal, typed: "", now: moment)
+        }
+        box.task = task
+        _ = await task.value
+        #expect(
+            await scoring.asked == 1,
+            "the second candidate must never be scored once the first one's scoring cancelled the turn")
     }
 
     @Test("A candidate the machine attested is answered before the model is asked at all.")
@@ -531,5 +566,23 @@ struct GeneratedLineTests {
         let kept = await standing(
             [".vim"], after: "vim .env", machine: [.file: [".env"]], in: notes)
         #expect(kept == [".vim"])
+    }
+    @Test("A dominant irreversible leader leaves the turn silent, never its rival shown as certain.")
+    func dominantIrreversibleLeaderIsNotReplacedByItsRival() async {
+        let notes = Surface(bundleIdentifier: "com.example.notes", role: "AXTextArea")
+        let context = PredictionContext(typed: "git p")
+        let candidates = [
+            remembered("git push --force", count: 90, irreversible: true),
+            remembered("git push", count: 1),
+        ]
+        let first = PredictionEngine.decision(from: candidates, in: context, now: moment)
+        var shown = first.suggestion
+        if first.suggestion.accepting != nil {
+            let verifier = Verifier(index: EnvironmentIndex(reader: StubEnvironment([:])))
+            let kept = await verifier.verified(candidates, in: notes, typed: context.typed, now: moment)
+            shown = PredictionEngine.decision(from: kept, in: context, now: moment).suggestion
+        }
+        #expect(shown == .silent)
+        #expect(first.silence == .irreversibleNotCertain)
     }
 }

@@ -54,11 +54,12 @@ public enum FocusedFieldReader {
         cachedPrimaryScreenMaxY.withLock { $0 = maxY }
     }
 
-    /// The frontmost application's identity, read on the main thread the one place `NSWorkspace` allows.
+    /// The frontmost application's identity, or `nil` when it is Uttrflow, whose AX tree must not be walked off the main actor.
     @MainActor
     public static func frontmostApp() -> FrontmostApp? {
         guard let app = NSWorkspace.shared.frontmostApplication,
-            let bundleIdentifier = app.bundleIdentifier
+            let bundleIdentifier = app.bundleIdentifier,
+            bundleIdentifier != Bundle.main.bundleIdentifier
         else { return nil }
         // Some applications pad their name with control and direction marks, which would reach the model verbatim.
         let name = Surroundings.cleaned(app.localizedName ?? bundleIdentifier)

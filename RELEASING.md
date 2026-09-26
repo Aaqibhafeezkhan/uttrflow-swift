@@ -10,14 +10,15 @@ staging branch and no release branch, and this is deliberate rather than lax —
 "Why there is no staging branch" below.
 
 ```
-fork / branch ──PR──> main ──tag v2026.9.14-rc.1──> prerelease  (soak)
+fork / branch ──PR──> main ──tag v26.0926.0-rc.1──> prerelease  (soak)
                        │
-                       └──tag v2026.9.14────────> release       (download button moves)
+                       └──tag v26.0926.0────────> release       (download button moves)
 ```
 
-Versions are **calendar dates**: `YEAR.MONTH.DAY`, no leading zeros, for the day the release
-is cut — `2026.9.14`. A second release on the same day adds a fourth number, `2026.9.14.1`.
-Releases up to `0.5.0` used semantic versioning, and every date version sorts above them.
+Versions are **`YY.MMDD.REVISION`** for the day the release is cut — `26.0926.0`, then
+`26.0926.1` for a second release that day. Month before day with the leading zero kept, so
+versions sort in date order. `2026.9.14` and semver up to `0.5.0` are retired; the updater
+orders by `CFBundleVersion`, which keeps rising across every scheme.
 
 ## Cutting a release
 
@@ -25,13 +26,13 @@ Releases up to `0.5.0` used semantic versioning, and every date version sorts ab
 
 ```
 Resources/Uttrflow-Info.plist
-  CFBundleShortVersionString   2026.9.14   what people see
+  CFBundleShortVersionString   26.0926.0   what people see
   CFBundleVersion              9           a counter; only has to increase
 ```
 
 Both are edited by hand, at the moment the release is cut. `CFBundleVersion` is what the
 updater compares, so it must go up by at least one every release, whatever the date says. The release workflow **refuses a tag that disagrees
-with the plist** — a `v2026.9.14` tag on a build reporting `0.5.0` publishes an appcast that
+with the plist** — a `v26.0926.0` tag on a build reporting `0.5.0` publishes an appcast that
 offers every installed copy a downgrade.
 
 **Two.** Update `CHANGELOG.md`: move everything under `## [Unreleased]` into a new
@@ -43,8 +44,8 @@ version heading with today's date.
 
 ```bash
 git checkout main && git pull
-git tag v2026.9.14-rc.1
-git push origin v2026.9.14-rc.1
+git tag v26.0926.0-rc.1
+git push origin v26.0926.0-rc.1
 ```
 
 That builds, notarises and publishes a **prerelease**. It does not move
@@ -55,8 +56,8 @@ willing to run it.
 **Five.** When it holds up, ship the same tree:
 
 ```bash
-git tag v2026.9.14
-git push origin v2026.9.14
+git tag v26.0926.0
+git push origin v26.0926.0
 ```
 
 That publishes a full release, which takes over the download URL and the appcast the

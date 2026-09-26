@@ -43,6 +43,11 @@ final class FakeMicrophoneSource: MicrophoneSource {
         state.withLock { $0.interrupted }?(.ended(error))
     }
 
+    /// The interruption callback the current recording was started with, so a test can fire it late.
+    var interruptionHandler: (@Sendable (CaptureInterruption) -> Void)? {
+        state.withLock(\.interrupted)
+    }
+
     /// Says the device went and came back, which leaves a hole in the middle of the recording.
     func skip() {
         state.withLock { $0.interrupted }?(.began)

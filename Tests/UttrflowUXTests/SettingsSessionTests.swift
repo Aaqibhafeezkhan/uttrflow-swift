@@ -99,6 +99,21 @@ struct SettingsSessionTests {
         #expect(!session.recorder.isRecording)
     }
 
+    @Test("keeps the field listening when the shortcut already belongs to another action")
+    func clashingShortcutKeepsRecording() throws {
+        var session = SettingsSession(settings: .default)
+        let taken = try #require(session.settings.shortcuts.first(for: .pasteLastTranscript))
+        let before = session.settings.shortcuts.first(for: .copyLastTranscript)
+        session.beginRecordingShortcut(.copyLastTranscript)
+
+        #expect(session.record(keyCode: taken.keyCode, modifiers: taken.modifiers) == nil)
+        #expect(session.recorder.isRecording)
+        #expect(session.recorder.binding == before)
+        #expect(session.recorder.rejection != nil)
+        #expect(session.rejection == session.recorder.rejection)
+        #expect(session.settings.shortcuts.first(for: .copyLastTranscript) == before)
+    }
+
     @Test("saves nothing when the recorded shortcut could not be delivered")
     func refusedShortcutSavesNothing() {
         var session = SettingsSession(settings: .default)

@@ -402,6 +402,33 @@ struct HTTPAuthenticationServiceTests {
         #expect(Set(transport.refreshAttempts.map(\.idempotencyKey)).count == 1)
     }
 
+    @Test("ends the session when a timed-out refresh is refused on its retry")
+    func aRefusedAmbiguousRefreshEndsTheSession() async throws {
+        let tokens = InMemoryTokenStore(refreshToken: "dead-refresh")
+        let refreshes = Mutex(0)
+        let transport = StubTransport { request, _ in
+            guard request.url.path().hasSuffix("/refresh") else { return BackendResponse(status: 401) }
+            let count = refreshes.withLock { count -> Int in
+                count += 1
+                return count
+            }
+            return count == 1 ? nil : BackendResponse(status: 401)
+        }
+        let service = service(transport: transport, tokens: tokens)
+
+        await #expect(throws: AccountError.serverUnreachable) {
+            try await service.currentProfile(ifChangedFrom: nil)
+        }
+        await #expect(throws: AccountError.serverUnreachable) {
+            try await service.currentProfile(ifChangedFrom: nil)
+        }
+        #expect(try await service.currentProfile(ifChangedFrom: nil) == .signedOut)
+        #expect(tokens.refreshToken() == nil)
+        let keys = transport.requests(to: "/refresh").compactMap { $0.jsonBody["idempotencyKey"] as? String }
+        #expect(keys.count == 3)
+        #expect(keys[0] == keys[1])
+    }
+
     @Test("keeps the rotated refresh token, because the old one is already dead")
     func rotationIsKept() async throws {
         let tokens = InMemoryTokenStore(refreshToken: "first")
@@ -416,6 +443,38 @@ struct HTTPAuthenticationServiceTests {
 
         _ = try await service(transport: transport, tokens: tokens).currentProfile(ifChangedFrom: nil)
         #expect(tokens.refreshToken() == "second")
+    }
+
+    /// Holds a token and refuses to replace it, as a Keychain that cannot take the write does.
+    private final class UnwritableStore: TokenStore {
+        /// The token held before the refused write.
+        private let held: Mutex<String?>
+        /// Starts holding `refreshToken`.
+        init(refreshToken: String) { held = Mutex(refreshToken) }
+        /// The token held.
+        func refreshToken() -> String? { held.withLock { $0 } }
+        /// Refuses without touching what is held.
+        func store(_ refreshToken: String) throws(AccountError) { throw .sessionCouldNotBeKept }
+        /// Drops the token held.
+        func clear() { held.withLock { $0 = nil } }
+    }
+
+    @Test("a rotation the Keychain refuses leaves the stored token in place")
+    func aRefusedRotationKeepsTheOldToken() async throws {
+        let tokens = UnwritableStore(refreshToken: "first")
+        let transport = StubTransport { [signedIn] request, _ in
+            if request.url.path().hasSuffix("/refresh") {
+                var session = Stub.IssuedSession()
+                session.refreshToken = "second"
+                return Stub.json(session)
+            }
+            return Stub.json(signedIn)
+        }
+
+        await #expect(throws: AccountError.sessionCouldNotBeKept) {
+            try await service(transport: transport, tokens: tokens).currentProfile(ifChangedFrom: nil)
+        }
+        #expect(tokens.refreshToken() == "first")
     }
 
     // MARK: Signing out
@@ -709,6 +768,8 @@ private final class RotatingServer: BackendTransport {
         var released = false
         /// Refreshes waiting on `release()`.
         var held: [CheckedContinuation<Void, Never>] = []
+        /// How many refreshes were cancelled by the time they were let go.
+        var cancelled = 0
     }
 
     /// The profile `/me` answers with.
@@ -723,6 +784,9 @@ private final class RotatingServer: BackendTransport {
 
     /// How many refreshes have arrived.
     var refreshes: Int { state.withLock { $0.spent.count } }
+
+    /// How many refreshes were cancelled by the time they were let go.
+    var cancelledRefreshes: Int { state.withLock { $0.cancelled } }
 
     /// Lets every held refresh, and every later one, through.
     func release() {
@@ -753,6 +817,7 @@ private final class RotatingServer: BackendTransport {
                 }
                 if !wait { continuation.resume() }
             }
+            if Task.isCancelled { state.withLock { $0.cancelled += 1 } }
             return state.withLock { state -> BackendResponse in
                 guard token == state.live else { return BackendResponse(status: 401) }
                 state.issued += 1
@@ -818,6 +883,21 @@ struct SharedRenewalTests {
         #expect(try await read.value == .noCredential)
         #expect(tokens.refreshToken() == nil)
         #expect(await service.avatar(at: "/v1/me/avatar") == nil)
+    }
+
+    /// Signing out cancels the renewal in flight rather than leaving it to spend a revoked token.
+    @Test("cancels a renewal in flight when the Mac signs out")
+    func signOutCancelsTheRenewal() async throws {
+        let server = RotatingServer(profile: signedIn)
+        let service = service(server, tokens: InMemoryTokenStore(refreshToken: "old-example"))
+
+        let read = Task { try await service.currentProfile(ifChangedFrom: nil) }
+        await server.waitForRefreshes(1)
+        await service.signOut()
+        server.release()
+
+        #expect(try await read.value == .noCredential)
+        #expect(server.cancelledRefreshes == 1)
     }
 
     /// A refusal for a session already ended is not a second sign-out for whatever came after it.

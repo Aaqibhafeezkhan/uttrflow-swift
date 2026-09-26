@@ -324,6 +324,13 @@ struct CorrectedWordTests {
         #expect(DoubleMetaphone.code(for: "hhh").isSilent)
         #expect(LearnableWords.corrected(over: "hhhh", wrote: "hhh") == nil)
     }
+
+    /// A name a Devanagari dictation left on screen, corrected by re-dictating it in romanised Hinglish.
+    @Test("Learns a correction from a Devanagari selection to its romanisation")
+    func learnsAcrossScripts() {
+        let devanagari = "\u{0930}\u{0918}\u{0941}\u{0928}\u{093E}\u{0925}"  // रघुनाथ
+        #expect(LearnableWords.corrected(over: devanagari, wrote: "Raghunath") == "Raghunath")
+    }
 }
 
 @Suite("The tally of what keeps turning up")
@@ -381,5 +388,26 @@ struct SightingLedgerTests {
 
         // The twice-seen term survived the cull, so one more sighting is enough.
         #expect(ledger.record(["Uttrflow"]) == ["Uttrflow"])
+    }
+
+    @Test("Holds no more refusals than its bound, lapsing the oldest first")
+    func refusalsStayInsideTheBound() {
+        var ledger = SightingLedger()
+        for index in 0...SightingLedger.maximumRefused { ledger.refuse("Refused\(index)word") }
+        #expect(ledger.refusalCount == SightingLedger.maximumRefused)
+
+        // The first refusal lapsed, so that word counts again; the newest is still refused.
+        for _ in 1...2 { _ = ledger.record(["Refused0word", "Refused\(SightingLedger.maximumRefused)word"]) }
+        #expect(
+            ledger.record(["Refused0word", "Refused\(SightingLedger.maximumRefused)word"]) == ["Refused0word"]
+        )
+    }
+
+    @Test("Counts a word refused twice as one refusal")
+    func refusingTwiceHoldsOne() {
+        var ledger = SightingLedger()
+        ledger.refuse("pgvector")
+        ledger.refuse("PGVector")
+        #expect(ledger.refusalCount == 1)
     }
 }

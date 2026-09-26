@@ -50,10 +50,16 @@ final class UpdateController: NSObject {
         else { return false }
         // A placeholder key fails closed: Sparkle would install whatever the feed handed it.
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
-            !key.isEmpty, !key.contains(" ")
+            isPublicKey(key)
         else { return false }
         // Checks the archive against the key before it is unpacked. See Docs/releasing.md ("Updating").
         return Bundle.main.object(forInfoDictionaryKey: "SUVerifyUpdateBeforeExtraction") as? Bool == true
+    }
+
+    /// Whether `key` is base64 for a 32-byte Ed25519 public key that is not all zeros.
+    nonisolated static func isPublicKey(_ key: String) -> Bool {
+        guard let bytes = Data(base64Encoded: key), bytes.count == 32 else { return false }
+        return bytes.contains { $0 != 0 }
     }
 
     /// Configures Sparkle; an automatic check itself waits for ``modelLoadingSettled()``.
@@ -81,6 +87,14 @@ final class UpdateController: NSObject {
     func refresh(at now: Date = Date()) {
         gate.note(activity(), at: now)
         installIfTheMomentIsRight(at: now)
+    }
+
+    /// Holds an install handle until the app is quiet enough to take it; internal so a test can stage one.
+    func stage(_ install: @escaping () -> Void, at now: Date = Date()) {
+        installNow = install
+        progress = .readyToInstall
+        // `refresh` rather than the check alone: the app may have told the gate nothing for hours.
+        refresh(at: now)
     }
 
     /// Installs a staged update once the app has been quiet long enough, or schedules a wake-up.
@@ -145,12 +159,7 @@ extension UpdateController: SPUUpdaterDelegate {
     ) -> Bool {
         // Wrapped before it crosses to the main actor, because Sparkle's closure carries no isolation.
         let install = UncheckedSend(immediateInstallHandler)
-        MainActor.assumeIsolated {
-            installNow = { install.value() }
-            progress = .readyToInstall
-            // `refresh` rather than the check alone: the app may have told the gate nothing for hours.
-            refresh()
-        }
+        MainActor.assumeIsolated { stage { install.value() } }
         // True: this app decides when; false hands the decision back to a quit that never comes.
         return true
     }

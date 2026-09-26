@@ -15,6 +15,8 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
     private var isGapped = false
     /// How many interruptions have reached the actor, so a test can wait for the hop instead of a clock.
     private(set) var interruptionsHandled = 0
+    /// Counts `start()` calls, so an interruption reaching the actor late is applied only to its own recording.
+    private var generation = 0
     /// Played the moment the microphone closes, since this engine alone knows that instant.
     private let cue: any RecordingCueing
 
@@ -47,8 +49,10 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
 
         failure = nil
         isGapped = false
+        generation += 1
+        let mine = generation
         let accumulator = self.accumulator
-        // Opened before the tap, so the file holds every block the buffer does.
+        // Started before the tap and without touching the disk, so the file holds every block the buffer does.
         let writer = await recordings?.begin()
         self.writer = writer
         do {
@@ -56,7 +60,7 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
                 accumulator.append(samples)
                 writer?.append(samples)
             } onInterruption: { [weak self] interruption in
-                Task { await self?.microphoneInterrupted(interruption) }
+                Task { await self?.microphoneInterrupted(interruption, in: mine) }
             }
         } catch {
             await abandonWriter()
@@ -93,9 +97,9 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
     }
 
     /// Remembers what a device change did, since only `stop()` has somewhere to report it.
-    private func microphoneInterrupted(_ interruption: CaptureInterruption) {
+    private func microphoneInterrupted(_ interruption: CaptureInterruption, in recording: Int) {
         interruptionsHandled += 1
-        guard currentState == .recording else { return }
+        guard currentState == .recording, recording == generation else { return }
         switch interruption {
         case .began: isGapped = true
         case .ended(let error): failure = error

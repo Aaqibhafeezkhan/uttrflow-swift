@@ -199,6 +199,31 @@ struct TerminalLineCheckTests {
         #expect(!check.allows("git checkout main", in: "/"))
     }
 
+    @Test("A commit named by a loose object's id is allowed only when exactly one object on disk matches.")
+    func objectIDs() {
+        let object = "/repo/.git/objects/a1/b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+        let twin = "/repo/.git/objects/ff/00aa11bb22cc33dd44ee55ff6677889900aabb"
+        let disk = FakeDisk(
+            directories: ["/repo/.git/refs/heads", "/repo/.git/objects/a1", "/repo/.git/objects/ff"],
+            files: [object, twin, twin.replacingOccurrences(of: "00aa", with: "00ab")],
+            executables: ["/usr/bin/git"])
+        let check = TerminalLineCheck(files: disk)
+        for line in [
+            "git checkout a1b2c3d", "git checkout A1B2C3D", "git checkout a1b2c3d~1",
+            "git checkout a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", "git switch -d a1b2c3d",
+            "git switch -c topic a1b2c3d", "git checkout -b topic a1b2",
+        ] {
+            #expect(check.allows(line, in: "/repo"), "\(line)")
+        }
+        for line in [
+            "git checkout a1b2c3e", "git checkout a1b", "git checkout ff00", "git checkout 0123abc",
+            "git switch -d 9999999", "git switch a1b2c3d", "git checkout a1b2c3dz", "git checkout ../a1b2c3d",
+        ] {
+            #expect(!check.allows(line, in: "/repo"), "\(line)")
+        }
+        #expect(DestructiveCommand.matches("git checkout a1b2c3d -- .", failClosedOnUnresolved: true))
+    }
+
     @Test("A packed-refs too large to read whole vouches for nothing.")
     func largePackedRefs() {
         let huge = String(repeating: "abc refs/heads/other\n", count: GitRepository.packedRefsLimit / 20 + 1)
