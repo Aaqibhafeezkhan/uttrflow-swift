@@ -21,7 +21,8 @@ struct WhisperKitContractTests {
     /// The decoder builds its fallback through this initialiser, so its reason is the one `judged` sees.
     @Test("a compression fallback is named by the reason LanguageHeldDecoder relaxes for")
     func compressionFallbackReason() throws {
-        let options = DecodingOptions(compressionRatioThreshold: 2.4, logProbThreshold: -1.0, noSpeechThreshold: 0.6)
+        let options = DecodingOptions(
+            compressionRatioThreshold: 2.4, logProbThreshold: -1.0, noSpeechThreshold: 0.6)
         let fallback = try #require(
             DecodingFallback(
                 options: options, isFirstTokenLogProbTooLow: false, noSpeechProb: 0, compressionRatio: 2.8,
