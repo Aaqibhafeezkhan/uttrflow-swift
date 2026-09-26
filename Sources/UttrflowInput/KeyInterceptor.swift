@@ -272,7 +272,7 @@ final class TapState: @unchecked Sendable {
 
     /// Keeps a new tap's port for the callback and forgets older disables, so each tap is judged alone.
     func adopt(_ port: CFMachPort) {
-        lastDisable.store(0, ordering: .relaxed)  // No previous disable, so the new tap's first counts as one.
+        lastDisable.store(0, ordering: .relaxed)  // The new tap starts with no disables.
         if let previous = tapPointer.exchange(Unmanaged.passRetained(port).toOpaque(), ordering: .releasing) {
             Unmanaged<CFMachPort>.fromOpaque(previous).release()
         }
