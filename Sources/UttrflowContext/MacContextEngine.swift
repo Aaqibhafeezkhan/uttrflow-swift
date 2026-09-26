@@ -93,7 +93,8 @@ public final class MacContextEngine: ContextEngine, Sendable {
         let token = observeActivations { [weak self] application in
             guard let self, !self.isOurselves(application) else { return }
             self.memory.withLock { memory in
-                memory.requestNumber &+= 1  // Supersedes any read still in flight, so its older answer is not kept.
+                // Supersedes any read still in flight, so its older answer is not kept.
+                memory.requestNumber &+= 1
                 memory.appBehind = application
             }
         }
