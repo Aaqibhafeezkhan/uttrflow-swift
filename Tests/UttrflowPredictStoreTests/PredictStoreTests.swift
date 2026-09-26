@@ -436,6 +436,20 @@ struct ForgettingTests {
         #expect(try await first.entryCountsByApplication().isEmpty)
     }
 
+    @Test("Forgetting one line also forgets what it followed and what followed it.")
+    func oneLineTakesItsSuccessions() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record("git add .", in: terminal, at: moment)
+        try await store.record("git commit -m", in: terminal, after: "git add .", at: moment)
+        try await store.record("git push", in: terminal, after: "git commit -m", at: moment)
+        try await store.forget("git commit -m", in: terminal)
+        try await store.record("git add .", in: terminal, at: moment)
+        try await store.record("git commit -m", in: terminal, at: moment)
+        #expect(try await store.successors(for: terminal, after: "git add .").isEmpty)
+        #expect(try await store.successors(for: terminal, after: "git commit -m").isEmpty)
+    }
+
     @Test("Forgetting from a field never typed in is not an error.")
     func unknownSurface() async throws {
         let corpus = Corpus()

@@ -430,12 +430,20 @@ public actor PredictStore: PredictionStore {
         try leaveNothingBehind()
     }
 
-    /// Forgets one entry, wherever the user noticed it.
+    /// Forgets one entry, and every succession naming it, wherever the user noticed it.
     public func forget(_ text: String, in surface: Surface) throws(PredictStoreError) {
         guard let id = try identifier(of: surface, creating: false) else { return }
-        try database.run("DELETE FROM entry WHERE surface_id = ? AND text = ?") {
-            $0.bind(1, id)
-            $0.bind(2, Spelling.canonical(text))
+        let text = Spelling.canonical(text)
+        try database.transaction { () throws(PredictStoreError) in
+            try database.run("DELETE FROM entry WHERE surface_id = ? AND text = ?") {
+                $0.bind(1, id)
+                $0.bind(2, text)
+            }
+            try database.run("DELETE FROM succession WHERE surface_id = ? AND (previous = ? OR next = ?)") {
+                $0.bind(1, id)
+                $0.bind(2, text)
+                $0.bind(3, text)
+            }
         }
         try leaveNothingBehind()
     }
