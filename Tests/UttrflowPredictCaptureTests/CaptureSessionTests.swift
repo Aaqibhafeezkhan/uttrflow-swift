@@ -399,6 +399,28 @@ struct CaptureSessionTests {
         #expect(await recorder.texts.count == 2)
     }
 
+    @Test("Shell history is not imported into a terminal that was not allowed, and may be once it is.")
+    func shellHistoryNeedsConsent() async throws {
+        let scratch = Scratch()
+        try scratch.write(": 1:0;git status\n", to: ".zsh_history")
+        let recorder = Recorder()
+        let session = try await session(scratch, recorder)
+        let surface = try #require(terminal.surface)
+        #expect(
+            try await session.importShellHistory(
+                forHomeDirectory: scratch.directory, into: surface, at: start) == 0)
+        try await session.record(.declined, for: "com.example.terminal")
+        #expect(
+            try await session.importShellHistory(
+                forHomeDirectory: scratch.directory, into: surface, at: start) == 0)
+        #expect(await recorder.texts.isEmpty)
+        #expect(await !session.decisions().hasImportedShellHistory)
+        try await session.record(.allowed, for: "com.example.terminal")
+        #expect(
+            try await session.importShellHistory(
+                forHomeDirectory: scratch.directory, into: surface, at: start) == 1)
+    }
+
     @Test("A home directory with no history in it imports nothing and is not tried again.")
     func shellHistoryMayBeAbsent() async throws {
         let scratch = Scratch()

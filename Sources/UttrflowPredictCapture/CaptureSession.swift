@@ -88,11 +88,13 @@ public actor CaptureSession {
         try preferencesFile.remove()
     }
 
-    /// Seeds a terminal from the shell's history, once, and only because the user asked for it.
+    /// Seeds a terminal from the shell's history, once, only when asked and only where capture is allowed.
     public func importShellHistory(
         forHomeDirectory home: String, into surface: Surface, at moment: Date
     ) async throws -> Int {
-        guard !preferences.hasImportedShellHistory else { return 0 }
+        guard !preferences.hasImportedShellHistory,
+            preferences.decision(for: surface.bundleIdentifier) == .proceed
+        else { return 0 }
         preferences.hasImportedShellHistory = true
         try preferencesFile.save(preferences)
         for path in ShellHistory.paths(inHomeDirectory: home) {
