@@ -194,8 +194,15 @@ public actor ClipboardStore {
         ofDictation id: UUID, saying spoken: String?, keeping retention: ClipRetention
     ) throws(ClipboardStoreError) -> [Clip] {
         let stored = loaded()
-        let left = stored.filter { !$0.isCopy(ofDictation: id, saying: spoken) }
-        guard left.count != stored.count else { return retained(stored, keeping: retention) }
+        var changed = false
+        let left: [Clip] = stored.compactMap { clip in
+            guard clip.isCopy(ofDictation: id, saying: spoken) else { return clip }
+            changed = true
+            let others = clip.dictations.filter { $0 != id }
+            // A clip another dictation still copies loses only this dictation's link.
+            return others.isEmpty ? nil : Self.relinking(clip, to: others)
+        }
+        guard changed else { return retained(stored, keeping: retention) }
         return try settled(left, keeping: retention)
     }
 
@@ -416,6 +423,17 @@ public actor ClipboardStore {
             timesCopied: clip.timesCopied)
     }
 
+    /// The same clip, copying only `dictations`.
+    static func relinking(_ clip: Clip, to dictations: [UUID]) -> Clip {
+        Clip(
+            id: clip.id, text: clip.text, kind: clip.kind, copiedAt: clip.copiedAt,
+            source: clip.source, origin: clip.origin, dictations: dictations,
+            dictatedText: clip.dictatedText, lastUsedAt: clip.lastUsedAt,
+            language: clip.language, richText: clip.richText, image: clip.image,
+            alias: clip.alias, category: clip.category, isPinned: clip.isPinned,
+            timesCopied: clip.timesCopied)
+    }
+
     /// Carries what the user chose about a clip onto the copy that has just replaced it.
     private func inheriting(_ previous: Clip, from arrival: Clip) -> Clip {
         Clip(
@@ -423,7 +441,7 @@ public actor ClipboardStore {
             source: arrival.source,
             // Named rather than defaulted, so a repeat cannot quietly become a ⌘C.
             origin: previous.origin,
-            // Both dictations, so deleting either one still takes this clip with it.
+            // Both dictations, so the clip goes only once neither of them is left.
             dictations: previous.dictations
                 + arrival.dictations.filter {
                     !previous.dictations.contains($0)
