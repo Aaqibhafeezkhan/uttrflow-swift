@@ -54,6 +54,8 @@ public enum PredictionEngine {
             .filter { !$0.candidate.isIrreversible }
             .prefix(maximumChoices - 1)
             .map(\.text)
-        return (others.isEmpty ? .certain(leader.text) : .choice(leader: leader.text, others: others), nil)
+        // A close race whose every rival was barred is still unseparated, so it is not shown as certain.
+        guard !others.isEmpty else { return (.silent, .irreversibleNotCertain) }
+        return (.choice(leader: leader.text, others: others), nil)
     }
 }
