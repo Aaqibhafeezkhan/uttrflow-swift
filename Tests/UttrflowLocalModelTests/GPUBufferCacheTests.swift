@@ -1,3 +1,4 @@
+import MLXLMCommon
 import os
 import Testing
 import UttrflowPredict
@@ -80,5 +81,56 @@ struct GPUBufferCacheTests {
     @Test("The cap is a quarter of a gigabyte")
     func limitIsMeasured() {
         #expect(GPUBufferCache.limit == 256 * 1_048_576)
+    }
+}
+
+/// Counts builds and holds each one until the test lets it fail.
+private final class GatedBuilds: Sendable {
+    private let count = OSAllocatedUnfairLock(initialState: 0)
+    private let gate: AsyncStream<Void>
+    private let opener: AsyncStream<Void>.Continuation
+    let started: AsyncStream<Void>
+    private let starter: AsyncStream<Void>.Continuation
+
+    init() {
+        (gate, opener) = AsyncStream.makeStream()
+        (started, starter) = AsyncStream.makeStream()
+    }
+
+    var builds: Int { count.withLock { $0 } }
+
+    func open() { opener.finish() }
+
+    var loading: WeightLoading<ModelContainer> {
+        WeightLoading(
+            build: { _ in
+                self.count.withLock { $0 += 1 }
+                self.starter.yield()
+                for await _ in self.gate {}
+                throw CancellationError()
+            },
+            refill: { _, _ in }, empty: { _ in })
+    }
+}
+
+@Suite("Loading the scorer's weights")
+struct ScorerLoadTests {
+    @Test("Two callers at once share one load")
+    func concurrentPreparesLoadOnce() async throws {
+        let cache = try FakeCache()
+        try cache.addConfiguration()
+        try cache.add("model.safetensors", FakeCache.weights(bytes: 512))
+        let builds = GatedBuilds()
+        let scorer = MLXCandidateScorer(
+            model: cache.model(), maximumTokens: 16, bufferCache: CacheRecorder().control, cache: cache.root,
+            loading: builds.loading)
+        let first = Task { try await scorer.prepare() }
+        for await _ in builds.started { break }
+        let second = Task { try await scorer.prepare() }
+        for _ in 0..<200 { await Task.yield() }
+        builds.open()
+        _ = try? await first.value
+        _ = try? await second.value
+        #expect(builds.builds == 1)
     }
 }

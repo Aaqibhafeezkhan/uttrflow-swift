@@ -57,6 +57,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     /// The Hugging Face cache a whole model is loaded from without asking the hub.
     private let cache: URL
 
+    /// The load in flight, which a second caller joins rather than starting its own.
+    private var loadInFlight: Task<Void, any Error>?
+
     /// Loads the weights from disk when they are whole there, downloading them only when they are not.
     public func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         try await load(downloader: { #hubDownloader(AnonymousHub.client()) }, onProgress: onProgress)
@@ -67,12 +70,24 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         try await load(downloader: nil, onProgress: { _ in })
     }
 
-    /// Reads the weights in, fetching them through `downloader` only where one is given.
+    /// Reads the weights in once however many callers ask at the same time.
     private func load(
         downloader: (@Sendable () -> any MLXLMCommon.Downloader)?,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws {
         guard container == nil else { return }
+        if let loadInFlight { return try await loadInFlight.value }
+        let step = Task { try await self.fill(downloader: downloader, onProgress: onProgress) }
+        loadInFlight = step
+        defer { if loadInFlight == step { loadInFlight = nil } }
+        try await step.value
+    }
+
+    /// Reads the weights in, fetching them through `downloader` only where one is given.
+    private func fill(
+        downloader: (@Sendable () -> any MLXLMCommon.Downloader)?,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws {
         // The instruction warm-up is a pass like any other, so it is held to the cap and leaves nothing cached.
         bufferCache.hold()
         defer { bufferCache.clear() }
@@ -97,6 +112,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     /// Empties the weights once every pass using them has ended, and hands the freed GPU buffers back to the system.
     public func release() async {
         container = nil
+        loadInFlight = nil
         forgetReadings()
         await passesEnded()
         await weights.unload()
