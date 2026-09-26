@@ -220,7 +220,7 @@ Apple Silicon Mac, macOS 26 or later. Xcode 26.6 or later supplies the toolchain
 itself is SwiftPM.
 
 ```bash
-make verify     # lint, PII audit, build, 5,000+ tests, coverage floor, offline audit
+make verify     # lint, PII audit, build, 6,000+ tests, coverage floor, offline audit
 make app        # builds and ad-hoc signs dist/Uttrflow.app
 open dist/Uttrflow.app
 make help       # every target
