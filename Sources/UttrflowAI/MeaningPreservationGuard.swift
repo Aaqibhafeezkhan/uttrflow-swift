@@ -245,9 +245,10 @@ public struct MeaningPreservationGuard: Sendable {
         if !originalWords.isEmpty, rewrittenWords.isEmpty {
             return .rejected(reason: "the rewrite is empty", kind: .emptyRewrite)
         }
-        // A speaker who opens with "I have" gets their words, not a preamble check.
+        // A speaker who opens with "I have" or "sure" gets their words; the entry's punctuation is the model's, not theirs.
         if let preamble = Self.preambles.first(where: {
-            rewritten.lowercased().hasPrefix($0) && !original.lowercased().hasPrefix($0)
+            rewritten.lowercased().hasPrefix($0)
+                && !original.lowercased().hasPrefix($0.trimmingCharacters(in: .punctuationCharacters))
         }) {
             return .rejected(reason: "the rewrite begins with '\(preamble)'", kind: .preamble)
         }
