@@ -143,4 +143,14 @@ struct DestructiveCommandTests {
         #expect(DestructiveCommand.matches("sudo sqlite3 app.db 'drop index idx_users'"))
         #expect(DestructiveCommand.matches("ALTER TABLE users DROP COLUMN email"))
     }
+
+    @Test func aShellRunningAStringIsJudgedByThatString() {
+        #expect(DestructiveCommand.matches("sh -c \"rm -rf ~\""))
+        #expect(DestructiveCommand.matches("bash -c 'dd if=/dev/zero of=/dev/disk2'"))
+        #expect(DestructiveCommand.matches("zsh -c 'git reset --hard'"))
+        #expect(DestructiveCommand.matches("sudo /bin/bash -lc \"rm -rf build\""))
+        #expect(DestructiveCommand.matches("nohup sh -c 'shred notes.txt'"))
+        #expect(!DestructiveCommand.matches("sh -c \"echo hi\""))
+        #expect(!DestructiveCommand.matches("bash script.sh"))
+    }
 }
