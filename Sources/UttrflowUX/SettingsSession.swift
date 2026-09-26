@@ -86,24 +86,35 @@ public struct SettingsSession: Sendable, Equatable {
     /// Takes one keystroke and applies whatever it earned.
     @discardableResult
     public mutating func receive(_ stroke: KeyStroke) -> Settings? {
-        settle(recorder.receive(stroke))
+        settle { $0.receive(stroke) }
     }
 
     /// Takes a modifier going down; nothing is earned until it is known what it belongs to.
     @discardableResult
     public mutating func hold(keyCode: UInt16, modifiers: Set<HotkeyModifier>) -> Settings? {
-        settle(recorder.hold(keyCode: keyCode, modifiers: modifiers))
+        settle { $0.hold(keyCode: keyCode, modifiers: modifiers) }
     }
 
     /// Takes every modifier coming up, which settles a modifier that was held on its own.
     @discardableResult
     public mutating func release() -> Settings? {
-        settle(recorder.release())
+        settle { $0.release() }
     }
 
-    /// Applies whatever an outcome earned, which is the same for every way one is reached.
-    private mutating func settle(_ outcome: SettingsShortcutOutcome) -> Settings? {
-        switch outcome {
+    /// Applies whatever a keystroke earned, keeping the field listening when the shortcut clashes.
+    private mutating func settle(
+        _ attempt: (inout SettingsShortcutRecorder) -> SettingsShortcutOutcome
+    ) -> Settings? {
+        let listening = recorder
+        switch attempt(&recorder) {
+        case .recorded(.shortcut(let action, let binding)):
+            if let clash = SettingsEditor.clash(for: action, binding: binding, in: settings) {
+                recorder = listening
+                recorder.refuse(clash)
+                rejection = clash.reason
+                return nil
+            }
+            return apply(.shortcut(action, binding))
         case .recorded(let change):
             return apply(change)
         case .refused(let refusal):
@@ -120,7 +131,7 @@ public struct SettingsSession: Sendable, Equatable {
     public mutating func record(
         keyCode: UInt16, modifiers: Set<HotkeyModifier>
     ) -> Settings? {
-        settle(recorder.record(keyCode: keyCode, modifiers: modifiers))
+        settle { $0.record(keyCode: keyCode, modifiers: modifiers) }
     }
 
     // MARK: - Forgetting
