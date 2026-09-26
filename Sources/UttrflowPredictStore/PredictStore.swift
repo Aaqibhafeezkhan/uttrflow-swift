@@ -427,7 +427,7 @@ public actor PredictStore: PredictionStore {
         try database.run("DELETE FROM surface WHERE bundle_id = ?") {
             $0.bind(1, ApplicationKey.of(bundleIdentifier))
         }
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
     /// Forgets one entry, wherever the user noticed it.
@@ -437,22 +437,20 @@ public actor PredictStore: PredictionStore {
             $0.bind(1, id)
             $0.bind(2, Spelling.canonical(text))
         }
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
     /// Forgets every surface, and with it every entry and succession they hold.
     public func forgetEverything() throws(PredictStoreError) {
         try database.execute("DELETE FROM surface")
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
-    /// Empties the write-ahead log, which otherwise holds what was forgotten until the app quits.
-    private func leaveNothingBehind() throws(PredictStoreError) {
-        // The pragma answers in a row rather than an error code, so a checkpoint that was refused reads as success.
-        let refused = try database.rows("PRAGMA wal_checkpoint(TRUNCATE)", { _ in }) {
-            $0.integer(0)
-        }
-        guard refused.first == 0 else { throw .query("the write-ahead log could not be emptied") }
+    /// Empties the write-ahead log when no reader holds it, and reports whether it did; the delete has already committed either way.
+    @discardableResult
+    private func leaveNothingBehind() -> Bool {
+        let refused = try? database.rows("PRAGMA wal_checkpoint(TRUNCATE)", { _ in }) { $0.integer(0) }
+        return refused?.first == 0
     }
 
     /// How many entries each application has taught, keyed by bundle identifier.
