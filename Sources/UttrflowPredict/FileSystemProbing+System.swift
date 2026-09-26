@@ -75,7 +75,8 @@ public struct SystemFileSystem: FileSystemProbing {
         guard !slow.isSlow(volume, at: now()) else { return .unknown }
         // A worker still out is not doubled until its claim lapses, so a hung stat never outlasts the cooldown.
         let moment = now()
-        guard let claim = inFlight.begin(volume, at: moment, lapsingAfter: Self.slowVolumeLifetimeInSeconds) else {
+        guard let claim = inFlight.begin(volume, at: moment, lapsingAfter: Self.slowVolumeLifetimeInSeconds)
+        else {
             return .unknown
         }
         let probe = self.probe
