@@ -39,6 +39,9 @@ public struct Surroundings: Sendable, Equatable {
     /// How many elements one read may visit, since an Electron window can hold thousands.
     public static let maximumElements = 400
 
+    /// How many ancestors one read may climb, so a deep or cyclic parent chain cannot spend the budget on the way up.
+    public static let maximumAncestors = 400
+
     /// Counts the pending-step entries a read builds while this is bound, so a test can bound the wrapping work without a clock.
     @TaskLocal package static var stepTally: SurroundingsStepTally?
 
@@ -65,8 +68,10 @@ public struct Surroundings: Sendable, Equatable {
         var walk = Walk<Tree>(tree: tree, window: windowFrame, deadline: deadline)
         var levels: [[String]] = []
         var child = focused
+        var climbed = 0
         // Each ancestor's other children are one ring further out, so the message list beside a compose box comes first.
-        while let parent = tree.parent(of: child), !walk.isExhausted {
+        while climbed < maximumAncestors, !walk.isExhausted, let parent = tree.parent(of: child) {
+            climbed += 1
             let siblings = tree.children(of: parent)
             let position = siblings.firstIndex(of: child) ?? siblings.count
             // Both sides are read nearest first, so what the caps cut is the farthest, then put back in reading order.
