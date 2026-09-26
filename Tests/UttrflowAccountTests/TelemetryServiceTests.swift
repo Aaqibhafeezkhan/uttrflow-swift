@@ -176,6 +176,59 @@ struct TelemetryServiceTests {
         #expect(sender.sendCount == 1)
         #expect(service.sentReports.count == 1)
     }
+
+    /// An opt-out that lands while a flush is in flight stops everything after it and records nothing.
+    @Test("opting out during a flush stops the rest of the queue and records nothing")
+    func optingOutMidFlushSendsNothingMore() async throws {
+        let sender = OptingOutSender()
+        let service = TelemetryService(collector: Telemetry.collector(), sender: sender)
+
+        dictate(service)
+        sender.fail(true)
+        await service.flush(at: Telemetry.anHourLater)
+        #expect(service.pendingReports.count == 1)
+
+        sender.optingOut(of: service)
+        dictate(service)
+        await service.flush(at: Telemetry.anHourLater.addingTimeInterval(3600))
+
+        #expect(sender.sendCount == 1)
+        #expect(service.sentReports.isEmpty)
+        #expect(service.pendingReports.isEmpty)
+    }
+}
+
+/// A sender that switches telemetry off from inside its first delivered send.
+private final class OptingOutSender: TelemetrySending {
+    /// The service to switch off, whether to refuse, and how many sends were delivered.
+    private let state = Mutex<(service: TelemetryService?, failing: Bool, count: Int)>(
+        (service: nil, failing: false, count: 0))
+
+    var sendCount: Int { state.withLock { $0.count } }
+
+    /// Starts or stops refusing every send.
+    func fail(_ failing: Bool) {
+        state.withLock { $0.failing = failing }
+    }
+
+    /// Names the service to switch off, and stops refusing.
+    func optingOut(of service: TelemetryService) {
+        state.withLock {
+            $0.service = service
+            $0.failing = false
+        }
+    }
+
+    /// Refuses, or counts the send and switches the service off on the first one.
+    func send(_ report: TelemetryReport) async throws(TelemetryError) {
+        let (failing, service) = state.withLock { state -> (Bool, TelemetryService?) in
+            guard !state.failing else { return (true, nil) }
+            state.count += 1
+            return (false, state.count == 1 ? state.service : nil)
+        }
+        if failing { throw .unreachable }
+        service?.setEnabled(false, at: Telemetry.anHourLater)
+    }
 }
 
 /// A sender that flushes the service again from inside a send, the only deterministic way to overlap two.
