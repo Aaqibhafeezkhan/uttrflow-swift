@@ -48,6 +48,9 @@ public struct SystemEnvironmentReader: EnvironmentReading {
     /// Every file and directory read goes through this, which refuses a remote volume. See `SystemFileSystem`.
     private let files: any FileSystemProbing
 
+    /// The same disk behind a short-lived cache, so a branch refresh does not walk the refs tree afresh.
+    private let refFiles: CachedFileSystem
+
     /// A reader over this Mac, which needs nothing to be told.
     public init() {
         self.init(
@@ -63,6 +66,7 @@ public struct SystemEnvironmentReader: EnvironmentReading {
         self.launcher = launcher
         self.programDirectories = programDirectories
         self.files = files
+        self.refFiles = CachedFileSystem(files)
     }
 
     /// Every value of one kind here, each kind read the way that kind is read.
@@ -81,7 +85,7 @@ public struct SystemEnvironmentReader: EnvironmentReading {
 
     /// The repository's refs by their short names — branches, tags and remote branches — read off disk without running git, absent outside a repository.
     private func branches(in directory: String) -> [String]? {
-        GitRepository.holding(directory, files: SystemFileSystem())?.refNames(limit: Self.verbLimit)
+        GitRepository.holding(directory, files: refFiles)?.refNames(limit: Self.verbLimit)
     }
 
     /// What one directory holds, hidden entries included since a dotfile is named on purpose; nothing where the directory does not exist, and no answer where it cannot be read.
