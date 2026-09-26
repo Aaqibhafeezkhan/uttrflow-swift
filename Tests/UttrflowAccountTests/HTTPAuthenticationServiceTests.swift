@@ -183,7 +183,11 @@ struct HTTPAuthenticationServiceTests {
     func aStaleChallengeLeavesTheCurrentAttempt() async throws {
         let draws = Mutex(0)
         let counting: @Sendable (Int) -> Data = { count in
-            Data(repeating: draws.withLock { $0 += 1; return UInt8($0) }, count: count)
+            let draw = draws.withLock { value in
+                value += 1
+                return UInt8(value)
+            }
+            return Data(repeating: draw, count: count)
         }
         let second = StubLoopbackListener(
             returning: LoopbackCallback(
