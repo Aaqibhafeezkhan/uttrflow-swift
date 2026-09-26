@@ -54,6 +54,9 @@ WAKEUPS_ALLOWED = {
     ("Sources/UttrflowAccount/HTTPAuthenticationService.swift", "wait"): (
         "polls for a sign-in the user started, at the interval the server sets, until the code expires"
     ),
+    ("Sources/UttrflowInput/SelectionWriter.swift", "lateWriteInterval"): (
+        "re-reads a field after an insertion, at most `lateWriteRereads` times, and never at rest"
+    ),
     ("Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift", ".milliseconds(max(delay, 1))"): (
         "books one turn after a pause in typing, calling the other `wake` overload once; each keystroke replaces it"
     ),
