@@ -50,15 +50,13 @@ public final class KeyInterceptor: Sendable {
 
     deinit {
         running.withLock { $0?.stop() }
-        // Also breaks the cycle between the source and the state that signals it.
-        drain.setEventHandler(handler: nil)
+        drain.setEventHandler(handler: nil)  // Also breaks the source-to-state cycle.
         drain.cancel()
     }
 
-    /// Which keystrokes to take, which is the one atomic the callback reads.
+    /// Which keystrokes to take, and the tap is off while none are, so no keystroke waits here.
     public func arm(_ keys: ArmedKeys) {
         state.armed.store(keys.rawValue, ordering: .relaxed)
-        // Off while nothing is claimed, so an ordinary keystroke never waits on this process.
         if let port = state.port() { CGEvent.tapEnable(tap: port, enable: !keys.isEmpty) }
     }
 
@@ -272,8 +270,9 @@ final class TapState: @unchecked Sendable {
         ring.deallocate()
     }
 
-    /// Keeps the port where the callback can re-enable the tap without taking a lock, releasing the one it replaces.
+    /// Keeps a new tap's port for the callback and forgets older disables, so each tap is judged alone.
     func adopt(_ port: CFMachPort) {
+        lastDisable.store(0, ordering: .relaxed)  // The new tap starts with no disables.
         if let previous = tapPointer.exchange(Unmanaged.passRetained(port).toOpaque(), ordering: .releasing) {
             Unmanaged<CFMachPort>.fromOpaque(previous).release()
         }
@@ -379,8 +378,7 @@ private let keyInterceptorCallback: CGEventTapCallBack = { _, type, event, userI
         return nil
     case .tapDisabledByTimeout, .tapDisabledByUserInput:
         // Not the keystroke path: by the time this runs the system has already stopped delivering.
-        guard state.armed.load(ordering: .relaxed) != 0 else { return Unmanaged.passUnretained(event) }
-        if state.shouldReEnable(), let port = state.port() {
+        if state.armed.load(ordering: .relaxed) != 0, state.shouldReEnable(), let port = state.port() {
             CGEvent.tapEnable(tap: port, enable: true)
         }
         return Unmanaged.passUnretained(event)
