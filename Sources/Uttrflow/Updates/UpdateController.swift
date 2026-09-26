@@ -83,6 +83,14 @@ final class UpdateController: NSObject {
         installIfTheMomentIsRight(at: now)
     }
 
+    /// Holds an install handle until the app is quiet enough to take it; internal so a test can stage one.
+    func stage(_ install: @escaping () -> Void, at now: Date = Date()) {
+        installNow = install
+        progress = .readyToInstall
+        // `refresh` rather than the check alone: the app may have told the gate nothing for hours.
+        refresh(at: now)
+    }
+
     /// Installs a staged update once the app has been quiet long enough, or schedules a wake-up.
     private func installIfTheMomentIsRight(at now: Date) {
         guard let install = installNow else { return }
@@ -145,12 +153,7 @@ extension UpdateController: SPUUpdaterDelegate {
     ) -> Bool {
         // Wrapped before it crosses to the main actor, because Sparkle's closure carries no isolation.
         let install = UncheckedSend(immediateInstallHandler)
-        MainActor.assumeIsolated {
-            installNow = { install.value() }
-            progress = .readyToInstall
-            // `refresh` rather than the check alone: the app may have told the gate nothing for hours.
-            refresh()
-        }
+        MainActor.assumeIsolated { stage { install.value() } }
         // True: this app decides when; false hands the decision back to a quit that never comes.
         return true
     }

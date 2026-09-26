@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let quickPanel = QuickPanelController()
 
     /// Keeping the app up to date, asking this delegate what it is doing rather than being told.
-    private lazy var updates = UpdateController { [weak self] in
+    lazy var updates = UpdateController { [weak self] in
         // No delegate means no idea, and no idea means do not interrupt.
         self?.updateActivity ?? UpdateActivity(isDictating: true)
     }
@@ -491,6 +491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Re-read, because the microphone check writes the language list through the same store.
             settingsChanged(to: settingsStore.load())
             self.onboarding = nil
+            updates.refresh()
             // The session is what onboarding changes that the settings store knows nothing about.
             refreshMainWindow()
         }
@@ -499,6 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard let self else { return }
             // Cleared here too, so a window shut with the red button no longer holds updates back.
             if self.onboarding === onboarding { self.onboarding = nil }
+            updates.refresh()
             refreshMainWindow()
             loadSpeechModelIfItArrived()
         }
@@ -994,6 +996,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let opening = PanelSnapshot.opening(now: Date(), resuming: resume)
         panel = opening
         quickPanel.show(PanelPresenter.present(opening))
+        updates.refresh()
         let opened = quickPanel.opens
         // A copy since the last poll is taken now, started not awaited, so no read holds the panel shut (#895).
         if settings.clipboardEnabled {
@@ -1439,6 +1442,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         noticeLinger.interrupt()
         quickPanel.hide()
         panel = nil
+        // The quiet minute an update waits for starts here, not at the next window event.
+        updates.refresh()
     }
 
     // MARK: Relaying
@@ -1505,6 +1510,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         // Kept here, where every change already arrives, so the updater need not ask the pipeline.
         lastDictationState = state
+        updates.refresh()
         // A dictation's own outcome is newer than any panel paste's report.
         if state != .idle { pasteReport = nil }
         DictationInProgress.shared.set(dictating: state.isBusy)
