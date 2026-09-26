@@ -91,6 +91,7 @@ public enum SettingsEditor {
         case .playsSoundWhenRecordingStarts: settings.playsSoundWhenRecordingStarts = isOn
         case .opensAtLogin: settings.opensAtLogin = isOn
         case .installsUpdatesAutomatically: settings.installsUpdatesAutomatically = isOn
+        case .sharesUsageStatistics: settings.sharesUsageStatistics = isOn
         case .suggestionsEnabled: settings.suggestions.isEnabled = isOn
         case .quietSuggestions: settings.suggestions.isQuiet = isOn
         }
@@ -112,7 +113,8 @@ public enum SettingsEditor {
         in settings: Settings
     ) -> String? {
         switch field {
-        case .dictationEnabled, .clipboardEnabled, .showsFloatingButton, .minimisesWhileDictating:
+        case .dictationEnabled, .clipboardEnabled, .showsFloatingButton, .minimisesWhileDictating,
+            .sharesUsageStatistics:
             nil
         case .shrinksToGripWhenIdle:
             settings.showsFloatingButton

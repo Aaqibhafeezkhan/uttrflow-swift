@@ -67,6 +67,9 @@ public struct Settings: Sendable, Equatable, Codable {
     /// Whether a found update installs itself or waits to be asked; `UpdateGate` picks the moment.
     public var installsUpdatesAutomatically: Bool
 
+    /// Whether anonymous counts and timings are sent; never what was dictated. See `Docs/account-telemetry.md`.
+    public var sharesUsageStatistics: Bool
+
     /// Whether the interface is drawn light, dark, or however the Mac is set.
     public var appearance: AppAppearance
 
@@ -97,6 +100,7 @@ public struct Settings: Sendable, Equatable, Codable {
         playsSoundWhenRecordingStarts: Bool = true,
         opensAtLogin: Bool = true,
         installsUpdatesAutomatically: Bool = true,
+        sharesUsageStatistics: Bool = true,
         appearance: AppAppearance = .dark,
         transcriptRetentionDays: Int = Settings.defaultRetentionDays,
         clipboardRetentionDays: Int = Settings.defaultRetentionDays,
@@ -118,6 +122,7 @@ public struct Settings: Sendable, Equatable, Codable {
         self.playsSoundWhenRecordingStarts = playsSoundWhenRecordingStarts
         self.opensAtLogin = opensAtLogin
         self.installsUpdatesAutomatically = installsUpdatesAutomatically
+        self.sharesUsageStatistics = sharesUsageStatistics
         self.appearance = appearance
         self.transcriptRetentionDays = transcriptRetentionDays
         self.clipboardRetentionDays = clipboardRetentionDays
@@ -156,6 +161,7 @@ extension Settings {
         case playsSoundWhenRecordingStarts
         case opensAtLogin
         case installsUpdatesAutomatically
+        case sharesUsageStatistics
         case appearance
         case transcriptRetentionDays
         case clipboardRetentionDays
@@ -205,6 +211,9 @@ extension Settings {
             installsUpdatesAutomatically: container.value(
                 forKey: .installsUpdatesAutomatically,
                 default: fallback.installsUpdatesAutomatically
+            ),
+            sharesUsageStatistics: container.value(
+                forKey: .sharesUsageStatistics, default: fallback.sharesUsageStatistics
             ),
             appearance: container.value(forKey: .appearance, default: fallback.appearance),
             transcriptRetentionDays: Settings.retention(

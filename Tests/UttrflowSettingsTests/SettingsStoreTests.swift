@@ -127,6 +127,19 @@ struct SettingsTests {
         #expect(!restored.installsUpdatesAutomatically)
     }
 
+    /// Usage statistics are shared unless the user says otherwise, and saying so is kept.
+    @Test("shares usage statistics by default, and keeps the opt-out across a save and a load")
+    func usageStatisticsOptOutSticks() throws {
+        #expect(Settings.default.sharesUsageStatistics)
+        let older = try JSONDecoder().decode(Settings.self, from: Data(#"{"opensAtLogin":false}"#.utf8))
+        #expect(older.sharesUsageStatistics)
+
+        let restored = try JSONDecoder().decode(
+            Settings.self, from: JSONEncoder().encode(Settings(sharesUsageStatistics: false))
+        )
+        #expect(!restored.sharesUsageStatistics)
+    }
+
     /// The upgrade case: a build that added settings must still find the ones the user chose.
     @Test("keeps what an older build wrote and defaults what it never knew")
     func olderPayload() throws {
