@@ -98,6 +98,12 @@ public enum DestructiveCommand {
             if lowered.contains("destroy") || lowered.contains("-destroy") { return true }
         case "crontab":
             if lowered.contains("-r") { return true }
+        case "sh", "bash", "zsh", "dash", "ksh", "fish":
+            if let script = shellScript(arguments),
+                matches(script, failClosedOnUnresolved: failClosedOnUnresolved)
+            {
+                return true
+            }
         case "mv", "cp":
             if lowered.last == "/dev/null" { return true }
         default:
@@ -112,6 +118,16 @@ public enum DestructiveCommand {
             })
         if words.contains("drop"), words.contains(where: droppableObject) { return true }
         return words.contains("truncate")
+    }
+
+    /// The command string a shell is given with `-c`, which it runs as a line of its own.
+    private static func shellScript(_ arguments: [String]) -> String? {
+        guard
+            let flag = arguments.firstIndex(where: {
+                $0.hasPrefix("-") && !$0.hasPrefix("--") && $0.dropFirst().contains("c")
+            })
+        else { return nil }
+        return arguments.dropFirst(flag + 1).first { !$0.hasPrefix("-") }
     }
 
     /// SQL verbs that begin a statement typed straight into a database prompt.
