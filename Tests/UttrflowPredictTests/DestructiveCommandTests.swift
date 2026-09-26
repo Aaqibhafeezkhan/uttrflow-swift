@@ -167,4 +167,14 @@ struct DestructiveCommandTests {
         #expect(!DestructiveCommand.matches("sh -c \"echo hi\""))
         #expect(!DestructiveCommand.matches("bash script.sh"))
     }
+
+    @Test func kubectlDeleteIsFoundPastGlobalFlags() {
+        #expect(DestructiveCommand.matches("kubectl -n production delete deployment critical-app"))
+        #expect(DestructiveCommand.matches("kubectl --context=prod delete namespace staging"))
+        #expect(DestructiveCommand.matches("kubectl --kubeconfig ~/.kube/alt -v 6 delete pod api"))
+        #expect(DestructiveCommand.matches("kubectl delete pod api"))
+        #expect(!DestructiveCommand.matches("kubectl -n production get pods"))
+        #expect(!DestructiveCommand.matches("kubectl -n delete get pods"))
+        #expect(!DestructiveCommand.matches("kubectl get pod delete"))
+    }
 }
