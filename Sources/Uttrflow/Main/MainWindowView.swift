@@ -84,7 +84,7 @@ struct MainWindowView: View {
     }
 
     /// Whether the page draws its own title, and so its own margins.
-    private var drawsOwnHeader: Bool { [.home, .insights].contains(model.page) }
+    private var drawsOwnHeader: Bool { [.home, .insights, .account].contains(model.page) }
 
     @ViewBuilder private var page: some View {
         switch model.page {

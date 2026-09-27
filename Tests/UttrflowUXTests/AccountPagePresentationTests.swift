@@ -1,4 +1,4 @@
-// Tests for the Account page: the Mac account, identity, details, notices, and the signed-out page.
+// Tests for the Account page: the Mac account, identity, facts, notices, and the signed-out page.
 import Foundation
 import UttrflowAccount
 import Testing
@@ -22,7 +22,9 @@ extension HistoryFixture {
         plan: Plan = .free,
         access: DictationAccess = .allowed,
         picture: Data? = nil,
-        local: LocalAccount? = nil
+        local: LocalAccount? = nil,
+        memberSince: Date? = nil,
+        macName: String? = nil
     ) -> AccountPagePresentation {
         AccountPagePresenter.page(
             for: AccountPageSnapshot(
@@ -31,15 +33,18 @@ extension HistoryFixture {
                         account: $0, plan: plan,
                         expiresAt: now.addingTimeInterval(86_400), signature: "signed")
                 },
-                access: access, now: now, picture: picture, local: local),
+                access: access, now: now, picture: picture, local: local,
+                memberSince: memberSince, macName: macName),
             locale: locale)
     }
 
     /// Somebody who chose this Mac over an account, with no entitlement anywhere.
-    static func macAccountPage(name: String? = "Naveen Bhatt") -> AccountPagePresentation {
+    static func macAccountPage(
+        name: String? = "Naveen Bhatt", macName: String? = "Studio Mac"
+    ) -> AccountPagePresentation {
         accountPage(
             account: nil, access: .allowedOnThisMac,
-            local: LocalAccount(name: name, since: now))
+            local: LocalAccount(name: name, since: now), macName: macName)
     }
 }
 
@@ -61,9 +66,7 @@ struct MacAccountPageTests {
     @Test("claims no plan, because there is none")
     func noPlanIsClaimed() {
         let page = HistoryFixture.macAccountPage()
-        #expect(!page.details.contains { $0.label == "Plan" })
-        let wording = page.details.flatMap { [$0.label, $0.value ?? "", $0.explanation ?? ""] }
-            .joined(separator: " ")
+        let wording = page.facts.flatMap { [$0.label, $0.value] }.joined(separator: " ")
         for claim in ["Pro", "Free", "subscribed", "trial"] {
             #expect(!wording.contains(claim), "the Mac account page hints at \(claim)")
         }
@@ -73,16 +76,26 @@ struct MacAccountPageTests {
     @Test("offers signing in, and says what it would change")
     func signingInIsOffered() {
         let page = HistoryFixture.macAccountPage()
-        let signIn = page.details.first { $0.action?.intent == .signIn }
-        #expect(signIn?.action?.title == "Sign In")
-        #expect(signIn?.explanation?.contains("leaves everything on this Mac") == true)
-        #expect(!page.details.contains { $0.action?.intent == .signOut }, "there is no session")
+        #expect(page.action?.intent == .signIn, "there is no session to sign out of")
+        #expect(page.action?.title == "Sign in")
+        #expect(page.action?.isDestructive == false)
+        #expect(page.actionHelp?.contains("leaves everything on this Mac") == true)
+    }
+
+    /// No provider and no address, so the list says so and then says when and where.
+    @Test("lists no account, since when, and this Mac")
+    func facts() {
+        let page = HistoryFixture.macAccountPage()
+        #expect(page.facts.map(\.kind) == [.signIn, .since, .thisMac])
+        #expect(page.facts[0].value == "No account — this Mac only")
+        #expect(page.facts[2].value == "Studio Mac")
+        #expect(HistoryFixture.macAccountPage(macName: nil).facts.map(\.kind) == [.signIn, .since])
     }
 
     @Test("says when this arrangement started, in the reader's own calendar")
     func saysSince() {
         #expect(
-            HistoryFixture.macAccountPage().details.first { $0.label == "Since" }?.value
+            HistoryFixture.macAccountPage().facts.first { $0.kind == .since }?.value
                 == AccountPagePresenter.since(HistoryFixture.now, locale: HistoryFixture.locale))
     }
 
@@ -101,7 +114,7 @@ struct MacAccountPageTests {
             local: LocalAccount(name: "Somebody Else", since: HistoryFixture.now))
         #expect(page.identity?.name == "Naveen Bhatt")
         #expect(page.identity?.providerID == .google)
-        #expect(page.details.contains { $0.label == "Plan" })
+        #expect(page.action?.intent == .signOut)
     }
 
     /// This page explains itself from top to bottom, so a banner would be the same sentence twice.
@@ -190,36 +203,65 @@ struct AccountIdentityTests {
     }
 }
 
-@Suite("Account: what having one allows")
-struct AccountDetailsTests {
-    @Test("the plan and the way out are the only two rows")
-    func rows() {
-        let page = HistoryFixture.accountPage()
-        #expect(page.details.map(\.label) == ["Plan", "Sign out"])
-        #expect(page.details[0].value == "Free")
-        #expect(page.details[1].action?.intent == .signOut)
-        #expect(page.details[1].action?.isDestructive == true)
-        #expect(page.details[0].id == "Plan")
+@Suite("Account: the facts under the banner")
+struct AccountFactsTests {
+    /// The same person the other suites draw, with every fact known.
+    static let everything = HistoryFixture.accountPage(
+        account: HistoryFixture.account(name: "Ada Byron", email: "ada@example.com"),
+        memberSince: Date(timeIntervalSince1970: 1_785_571_200), macName: "Ada's MacBook Pro")
+
+    @Test("email, provider, member since and this Mac, in that order")
+    func allFour() {
+        let facts = Self.everything.facts
+        #expect(facts.map(\.label) == ["Email", "Signed in with", "Member since", "This Mac"])
+        #expect(facts.map(\.value) == ["ada@example.com", "Google", "1 Aug 2026", "Ada's MacBook Pro"])
+        #expect(facts.map(\.id) == [.email, .signIn, .since, .thisMac])
     }
 
-    /// ``Entitlement`` records only when it expires, so an issue date would have to be invented.
-    @Test("nothing is shown that the entitlement does not record")
+    /// Only the profile records a creation date, so without one the row is left out rather than invented.
+    @Test("no creation date means no member-since row")
     func noInventedDate() {
-        #expect(!HistoryFixture.accountPage().details.contains { $0.label == "Signed in since" })
+        let page = HistoryFixture.accountPage()
+        #expect(!page.facts.contains { $0.kind == .since })
+        #expect(page.facts.first { $0.kind == .signIn }?.value == "Google")
     }
 
-    @Test("each plan is named and explained")
-    func plans() {
-        #expect(AccountPagePresenter.title(for: .free) == "Free")
-        #expect(AccountPagePresenter.title(for: .pro) == "Pro")
-        #expect(HistoryFixture.accountPage(plan: .pro).details[0].value == "Pro")
-        for plan in Plan.allCases {
-            #expect(!AccountPagePresenter.explanation(for: plan).isEmpty)
-        }
+    @Test("a missing or blank address and a blank Mac name leave their rows out")
+    func unknownsAreLeftOut() {
+        let page = HistoryFixture.accountPage(
+            account: HistoryFixture.account(email: "  "), macName: " ")
+        #expect(page.facts.map(\.kind) == [.signIn])
+        #expect(
+            HistoryFixture.accountPage(account: HistoryFixture.account(email: nil)).facts.map(\.kind)
+                == [.signIn])
     }
 
-    /// The question an account on this product invites, answered on the screen, not a support article.
-    @Test("the page says what signing out does not do")
+    @Test("each provider names itself on the sign-in row")
+    func providerRow() {
+        let page = HistoryFixture.accountPage(account: HistoryFixture.account(provider: .gitHub))
+        #expect(page.facts.first { $0.kind == .signIn }?.value == "GitHub")
+    }
+
+    /// The plan is not shown, so the page cannot disagree with the signed entitlement about it.
+    @Test("claims no plan")
+    func noPlan() {
+        let wording = HistoryFixture.accountPage(plan: .pro).facts.map(\.value)
+        #expect(!wording.contains("Pro"))
+    }
+
+    @Test("the one button signs out, in red, and says what it keeps")
+    func signOut() {
+        let page = Self.everything
+        #expect(page.action?.intent == .signOut)
+        #expect(page.action?.title == "Sign out")
+        #expect(page.action?.isDestructive == true)
+        #expect(page.action?.symbolName != nil)
+        #expect(page.actionHelp == AccountPagePresenter.signOutHelp)
+        #expect(page.actionHelp?.contains("stay on this Mac") == true)
+    }
+
+    /// The question an account on this product invites, answered beside the invitation to sign in.
+    @Test("the promise about local data is kept for the invitation")
     func promise() {
         let page = HistoryFixture.accountPage()
         #expect(page.callout.message == AccountPagePresenter.localDataPromise)
@@ -227,16 +269,10 @@ struct AccountDetailsTests {
         #expect(page.callout.tone == .good)
     }
 
-    @Test("the network note scopes the offline dictation guarantee")
-    func networkUse() {
-        let footnote = HistoryFixture.accountPage().footnote
-        #expect(footnote == AccountPagePresenter.networkUseFootnote)
-        #expect(footnote?.contains("profile refreshes") == true)
-        #expect(footnote?.contains("update checks") == true)
-        #expect(footnote?.contains("model setup") == true)
-        #expect(footnote?.contains("Dictation itself runs on this Mac") == true)
-        #expect(footnote?.contains("for nothing else") == false)
-        #expect(footnote?.contains("never needs it again") == false)
+    @Test("a day is written the reader's way")
+    func since() {
+        let day = Date(timeIntervalSince1970: 1_785_571_200)
+        #expect(AccountPagePresenter.since(day, locale: Locale(identifier: "en_GB")) == "1 Aug 2026")
     }
 }
 
@@ -276,8 +312,9 @@ struct AccountEmptyTests {
     func signedOut() {
         let page = HistoryFixture.accountPage(account: nil, access: .refused)
         #expect(page.identity == nil)
-        #expect(page.details.isEmpty)
-        #expect(page.footnote == nil)
+        #expect(page.facts.isEmpty)
+        #expect(page.action == nil)
+        #expect(page.actionHelp == nil)
         #expect(page.emptyState?.title == "Not signed in")
         #expect(page.emptyState?.action?.intent == .signIn)
         #expect(page.emptyState?.message.contains("dictation runs on this Mac") == true)

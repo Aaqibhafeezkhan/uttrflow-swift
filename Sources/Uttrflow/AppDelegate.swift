@@ -1967,7 +1967,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Reads the account the pages draw from, the entitlement and the local choice together.
     func readAccount() {
         // The signed half only. See `Docs/entitlements.md`.
-        knownEntitlement = account.profiles.load()?.entitlement
+        let profile = account.profiles.load()
+        knownEntitlement = profile?.entitlement
+        // Displayed, never enforced, and only from a document that names the signed account.
+        knownMemberSince = profile.flatMap { $0.isInternallyConsistent ? $0.account.createdAt : nil }
         // Read beside the entitlement, so two surfaces cannot draw from two readings.
         knownLocalAccount = account.local.load()
     }
@@ -1981,7 +1984,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     .access(at: now, networkIsReachable: network.isReachable),
                 now: now,
                 picture: knownPicture?.bytes,
-                local: knownLocalAccount))
+                local: knownLocalAccount,
+                memberSince: knownMemberSince,
+                macName: MacName.current))
     }
 
     /// What one page is filtered by, asked per page because every page is rebuilt on each redraw.
@@ -2019,6 +2024,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var knownWords: [DictionaryEntry] = []
     private var knownSnippets: [Snippet] = []
     private var knownEntitlement: Entitlement?
+    /// When the signed-in account was created, from the unsigned profile beside the entitlement.
+    private var knownMemberSince: Date?
     /// The choice to work without an account, consulted only when there is no entitlement.
     private var knownLocalAccount: LocalAccount?
     /// The person's picture and the path it came from, kept together so it is fetched once per account.

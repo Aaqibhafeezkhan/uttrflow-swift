@@ -4,10 +4,12 @@ import UttrflowUX
 import AppKit
 import SwiftUI
 
-/// Whoever is signed in, as a circle: their picture, or their initials, which are not a placeholder.
+/// Whoever is signed in, as a circle: their picture, or their initials on the lilac-to-teal disc.
 struct AvatarView: View {
     let identity: AccountIdentity
     var size: CGFloat = 44
+    /// The width of the faint ring drawn outside the circle; none by default.
+    var ring: CGFloat = 0
 
     var body: some View {
         Group {
@@ -18,15 +20,16 @@ struct AvatarView: View {
                     .aspectRatio(contentMode: .fill)
             } else {
                 Text(identity.initials)
-                    .font(.system(size: size * 0.38, weight: .semibold))
-                    .foregroundStyle(Color.dockAccent)
+                    .font(BrandFont.display(size: size * 0.4, weight: .semibold))
+                    .foregroundStyle(ProfilePalette.avatarInk)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.dockAccent.opacity(0.14))
+                    .background(ProfilePalette.avatarDisc)
             }
         }
         .frame(width: size, height: size)
         .clipShape(.circle)
-        .overlay(Circle().strokeBorder(Color.dockAccentTint, lineWidth: 1))
+        // Outside the frame, so the ring never moves what is laid out beside the circle.
+        .background { Circle().fill(ProfilePalette.avatarRing).padding(-ring).opacity(ring > 0 ? 1 : 0) }
         // The name is beside it on every page, so the circle is decoration to a screen reader.
         .accessibilityHidden(true)
     }
