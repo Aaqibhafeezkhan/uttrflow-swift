@@ -175,8 +175,12 @@ struct MainNoticeBar: View {
                 }
                 if let action = notice.action {
                     HStack(spacing: 6) {
-                        Button(action.title) { onIntent(action.intent) }
-                            .buttonStyle(MainPrimaryButtonStyle(size: .compact))
+                        // Put away first, so a refusal the action itself raises is the one left showing.
+                        Button(action.title) {
+                            onIntent(.dismissNotice)
+                            onIntent(action.intent)
+                        }
+                        .buttonStyle(MainPrimaryButtonStyle(size: .compact))
                         Button("Not now") { onIntent(.dismissNotice) }
                             .buttonStyle(MainSecondaryButtonStyle(size: .compact))
                     }
