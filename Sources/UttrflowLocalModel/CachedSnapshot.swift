@@ -11,18 +11,15 @@ enum CachedSnapshot {
     static let largestHeader: UInt64 = 100_000_000
 
     /// The snapshot of `identifier` in `cache` when its files are whole and its weights heavy enough.
-    static func complete(identifier: String, in cache: URL, minimumWeightBytes: UInt64) -> URL? {
+    static func complete(
+        identifier: String, revision: String, in cache: URL, minimumWeightBytes: UInt64
+    ) -> URL? {
+        guard isCommitHash(revision) else { return nil }
         let repository = cache.appending(
             path: "models--" + identifier.replacingOccurrences(of: "/", with: "--"),
             directoryHint: .isDirectory)
-        guard
-            let reference = try? String(
-                contentsOf: repository.appending(path: "refs").appending(path: "main"), encoding: .utf8),
-            case let commit = reference.trimmingCharacters(in: .whitespacesAndNewlines),
-            isCommitHash(commit)
-        else { return nil }
         let snapshot = repository.appending(path: "snapshots").appending(
-            path: commit, directoryHint: .isDirectory)
+            path: revision, directoryHint: .isDirectory)
         guard requiredFiles.allSatisfy({ (size(of: snapshot.appending(path: $0)) ?? 0) > 0 }),
             let weights = weightFiles(in: snapshot)
         else { return nil }
@@ -173,7 +170,8 @@ extension LocalModel {
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         if let snapshot = CachedSnapshot.complete(
-            identifier: identifier, in: cache, minimumWeightBytes: minimumWeightBytes)
+            identifier: identifier, revision: revision, in: cache,
+            minimumWeightBytes: minimumWeightBytes)
         {
             onProgress(1)
             return snapshot
