@@ -1,5 +1,6 @@
 // What home's hero says in place of its waveform while the speech model cannot transcribe.
 public import UttrflowCore
+public import struct Foundation.Date
 
 /// The colour of the dot beside the status: dictation's teal while setup runs, amber once it needs a hand.
 public enum HomeModelTone: String, Sendable, Equatable, CaseIterable {
@@ -29,11 +30,14 @@ public struct HomeModelStatus: Sendable, Equatable {
     public let actionTone: HomeModelTone
     /// What VoiceOver reads for the block as a whole.
     public let accessibilityLabel: String
+    /// When the load under way began, so the hero moves its own estimate on; `nil` in every other state.
+    public let loadingSince: Date?
 
     /// Builds a status from its parts.
     public init(
         title: String, subtitle: String, tone: HomeModelTone, progress: HomeModelProgress?,
-        action: MainAction?, actionTone: HomeModelTone = .dictation, accessibilityLabel: String
+        action: MainAction?, actionTone: HomeModelTone = .dictation, accessibilityLabel: String,
+        loadingSince: Date? = nil
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -42,6 +46,7 @@ public struct HomeModelStatus: Sendable, Equatable {
         self.action = action
         self.actionTone = actionTone
         self.accessibilityLabel = accessibilityLabel
+        self.loadingSince = loadingSince
     }
 
     /// The line under a long load's estimate, since only the first load after a restart is slow.
@@ -59,6 +64,18 @@ public struct HomeModelStatus: Sendable, Equatable {
             subtitle: ["Downloading the speech model", received].compactMap(\.self).joined(separator: " · "),
             tone: .dictation, progress: .fraction(min(max(fraction, 0), 1)), action: nil,
             accessibilityLabel: "Setting up. Downloading the speech model, \(percent) percent.")
+    }
+
+    /// A load that began at `since`, as it stands at `now`, carrying `since` so the hero redraws it alone.
+    public static func loading(since: Date, at now: Date) -> HomeModelStatus {
+        load(.loading(elapsed: .seconds(now.timeIntervalSince(since)))).began(at: since)
+    }
+
+    /// This status with the load's start attached.
+    func began(at since: Date) -> HomeModelStatus {
+        HomeModelStatus(
+            title: title, subtitle: subtitle, tone: tone, progress: progress, action: action,
+            actionTone: actionTone, accessibilityLabel: accessibilityLabel, loadingSince: since)
     }
 
     /// The model on disk and loading, failed to load, damaged, or not on disk at all.
