@@ -89,10 +89,7 @@ public struct Surroundings: Sendable, Equatable {
         }
         // Farthest first and nearest last, so the tail of the text is what sits closest to the field.
         let raw = levels.reversed().flatMap { $0 }
-        // A subtree the ring walk reaches from two ancestor levels produces the same text twice; drop the later
-        // occurrence so a mirrored nav or a web view that lists its own contents does not halve the prompt budget.
-        // A web view that mirrors the focused textarea's value back into a sibling likewise lands the user's own
-        // draft, so the focused element's text is dropped too.
+        // Drops text reached twice, and the focused field's own draft, so neither spends the prompt budget.
         let focusedText = Self.trimmed(tree.text(of: focused))
         let joined = Self.deduplicated(raw, dropping: focusedText).joined(separator: "\n")
         return Surroundings(
