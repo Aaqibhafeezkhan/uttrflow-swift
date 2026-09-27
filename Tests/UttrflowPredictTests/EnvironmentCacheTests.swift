@@ -140,4 +140,34 @@ struct EnvironmentFailedReadTests {
         await index.settle()
         #expect(await reader.reads == 2, "the failure backs off the retry, not the answer")
     }
+
+    @Test(
+        "an answer long past its lifetime is not served, so a deleted branch is not offered on the first keystroke back"
+    )
+    func aLongExpiredAnswerIsNotServed() async {
+        let reader = ScriptedEnvironment([["feature-x", "main"], ["main"]])
+        let index = EnvironmentIndex(reader: reader)
+
+        _ = await index.values(of: .branch, in: "/repo", now: Self.now)
+        await index.settle()
+        #expect(await index.values(of: .branch, in: "/repo", now: Self.now) == ["feature-x", "main"])
+
+        let back = Self.now.addingTimeInterval(EnvironmentIndex.lifetimeInSeconds + 60)
+        #expect(await index.values(of: .branch, in: "/repo", now: back) == nil)
+        await index.settle()
+        #expect(await index.values(of: .branch, in: "/repo", now: back) == ["main"])
+    }
+
+    @Test("an answer just past its lifetime is still served while the read replacing it is in flight")
+    func aJustExpiredAnswerIsServedDuringItsRefresh() async {
+        let reader = ScriptedEnvironment([["main"], ["main", "next"]])
+        let index = EnvironmentIndex(reader: reader)
+
+        _ = await index.values(of: .branch, in: "/repo", now: Self.now)
+        await index.settle()
+        let justExpired = Self.now.addingTimeInterval(EnvironmentIndex.lifetimeInSeconds + 1)
+        #expect(await index.values(of: .branch, in: "/repo", now: justExpired) == ["main"])
+        await index.settle()
+        #expect(await reader.reads == 2)
+    }
 }

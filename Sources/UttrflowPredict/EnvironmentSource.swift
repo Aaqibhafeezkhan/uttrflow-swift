@@ -61,6 +61,9 @@ public actor EnvironmentIndex {
         let directory: String
     }
 
+    /// How long past its lifetime an answer is still served, which covers the read that replaces it and no more.
+    public static let staleGraceInSeconds = 2.0
+
     /// The longest a listing that keeps failing is left alone, so a program that never answers is asked rarely.
     public static let longestBackoffInSeconds = 600.0
 
@@ -103,13 +106,15 @@ public actor EnvironmentIndex {
         return Double(since.seconds) + Double(since.attoseconds) / 1e18
     }
 
-    /// What is known right now, asking the machine in the background when that is nothing or stale; absent until it has answered.
+    /// What is known right now, asking the machine in the background when that is nothing or stale; absent until it has answered or once long stale.
     public func values(of kind: EnvironmentKind, in directory: String, now: Date) -> [String]? {
         // A machine-wide answer is kept under one key, or every directory pays for its own PATH scan.
         let key = Key(kind: kind, directory: kind.isMachineWide ? "" : directory)
         let entry = cached[key]
         if entry.map({ $0.retry <= now }) ?? true { refresh(key, now: now) }
-        return entry?.values
+        // An answer long past its lifetime is no fact about the machine now, so it is not served while the new one is read.
+        guard let entry, now < entry.expires.addingTimeInterval(Self.staleGraceInSeconds) else { return nil }
+        return entry.values
     }
 
     /// Waits for the reads in flight, which only a test has a reason to do.
