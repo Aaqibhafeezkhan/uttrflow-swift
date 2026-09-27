@@ -16,6 +16,29 @@ struct TerminalStopPassTests {
         #expect(cleaned(input, by: sut) == expected)
     }
 
+    /// An unpunctuated question is finished as one, on the rules path and after a model that left it bare. Issue #2177.
+    @Test(
+        "finishes a sentence that asks a question with a question mark",
+        arguments: [
+            ("where did you put the keys", "where did you put the keys?"),
+            ("Done. can you review the PR", "Done. can you review the PR?"),
+            ("it's late isn't it", "it's late isn't it?"),
+            ("what we need is more time", "what we need is more time."),
+            ("Can you check? I think it's fine", "Can you check? I think it's fine."),
+        ])
+    func addsQuestionMark(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test("keeps a question's mark in a short chat message and adds none where the place never ends one")
+    func questionMarkUnderOtherPolicies() {
+        let sql = TerminalStopPass(policy: .always, layout: .preserveNewlines)
+        #expect(cleaned("where total is greater than 12000", by: sql) == "where total is greater than 12000.")
+        #expect(cleaned("are you coming tonight", by: short) == "are you coming tonight?")
+        #expect(cleaned("on my way", by: short) == "on my way")
+        #expect(cleaned("are you coming tonight", by: never) == "are you coming tonight")
+    }
+
     @Test(
         "leaves text that already ends, looks like code, or is empty",
         arguments: [
