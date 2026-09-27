@@ -117,24 +117,26 @@ struct SystemFileSystemTests {
     }
 
     @Test(
-        "A probe still running past its deadline and past the cooldown is not started a second time on the same volume, but a different volume is not held back by it."
+        "A probe that never returns holds its volume only until the cooldown ends, and a different volume is not held back by it."
     )
-    func inFlightProbeIsNotDuplicated() {
+    func inFlightProbeLapses() {
         let clock = HandClock()
         let boxed = Mutex(0)
         let disk = SystemFileSystem(
             environment: [:], homeDirectory: "/h", probe: { _ in .directory },
             timeBox: { _, _ in
                 boxed.withLock { $0 += 1 }
-                // The worker never calls back: this probe is still running, forever, as a hung mount would leave it.
+                // The worker never calls back, as a hung mount would leave it.
                 return nil
             }, now: { clock.now })
         #expect(disk.kind(atPath: "/Volumes/Stuck/a") == .unknown)
-        clock.advance(by: SystemFileSystem.slowVolumeLifetimeInSeconds + 1)
         #expect(disk.kind(atPath: "/Volumes/Stuck/b") == .unknown)
-        #expect(boxed.withLock { $0 } == 1, "the still-running probe must not be started again")
+        #expect(boxed.withLock { $0 } == 1, "the volume is left alone during the cooldown")
         #expect(disk.kind(atPath: "/Volumes/Other/a") == .unknown)
-        #expect(boxed.withLock { $0 } == 2, "a different, healthy volume starts its own probe")
+        #expect(boxed.withLock { $0 } == 2, "a different volume starts its own probe")
+        clock.advance(by: SystemFileSystem.slowVolumeLifetimeInSeconds + 1)
+        #expect(disk.kind(atPath: "/Volumes/Stuck/c") == .unknown)
+        #expect(boxed.withLock { $0 } == 3, "the stuck volume is probed again once the cooldown ends")
     }
 
     @Test("Work held to a time box that has not finished inside the budget is no answer.")
@@ -165,6 +167,23 @@ struct SystemFileSystemTests {
         #expect(cached.homeDirectory == disk.homeDirectory)
         #expect(cached.searchPaths == disk.searchPaths)
         for index in 0...CachedFileSystem.capacity { _ = cached.kind(atPath: "/many/\(index)") }
+        _ = cached.kind(atPath: "/a")
+        #expect(disk.operations.last == .stat("/a"))
+    }
+
+    @Test("A directory listing is believed for its lifetime, per limit, and asked again after it.")
+    func cachedListing() {
+        let clock = HandClock()
+        let disk = FakeDisk(directories: ["/a"], texts: ["/a/t": "text"])
+        let cached = CachedFileSystem(disk, now: { clock.now })
+        #expect(cached.names(inDirectory: "/a", limit: 10) == ["t"])
+        #expect(cached.names(inDirectory: "/a", limit: 10) == ["t"])
+        #expect(disk.operations == [.list("/a")])
+        #expect(cached.names(inDirectory: "/a", limit: 0) == nil)
+        #expect(disk.operations == [.list("/a"), .list("/a")])
+        clock.advance(by: CachedFileSystem.lifetimeInSeconds)
+        _ = cached.names(inDirectory: "/a", limit: 10)
+        #expect(disk.operations.count == 3)
         _ = cached.kind(atPath: "/a")
         #expect(disk.operations.last == .stat("/a"))
     }

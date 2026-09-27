@@ -46,6 +46,16 @@ struct ReadingRestraintTests {
         #expect(ReadingRestraint.isWorthOffering("Maine", for: "main"))
     }
 
+    /// Regression for issue 1572: a listed homophone is a reading even when its spelling opens differently.
+    @Test("offers a listed homophone whose opening letters differ")
+    func offersAListedHomophoneThatOpensDifferently() {
+        #expect(ReadingRestraint.opensAlike("cell", heard: "sell"))
+        #expect(ReadingRestraint.isWorthOffering("cell", for: "sell"))
+        #expect(ReadingRestraint.isWorthOffering("weight", for: "wait"))
+        #expect(GeneralVocabulary.wordsSounding(like: "write").contains("right"))
+        #expect(!ReadingRestraint.opensAlike("mod", heard: "made"))
+    }
+
     @Test("a word too short to have an opening is a reading only if it is the same spelling")
     func handlesShortWords() {
         #expect(ReadingRestraint.opensAlike("a", heard: "a"))

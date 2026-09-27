@@ -467,6 +467,35 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6b. The crash reporter is in one module, which only the app shell links.
+# ---------------------------------------------------------------------------
+#
+# Sentry sends opt-in crash reports: that is the feature. What is checked is that no module
+# on the dictation path can call it — see Docs/crash-reporting.md.
+printf '\nThe crash reporter\n'
+
+reporter_imports="$(grep -rlnE '^(public )?import Sentry' Sources --include='*.swift' \
+    | grep -v '^Sources/UttrflowDiagnostics/' || true)"
+if [[ -n "${reporter_imports//[[:space:]]/}" ]]; then
+    fail "the crash reporter is imported outside UttrflowDiagnostics" \
+        "Sentry opens a connection. Every file that can drive it is a file that can reach" \
+        "the network, so it stays in the one module the app shell alone depends on." \
+        "" $'\n'"$reporter_imports"
+else
+    pass "the crash reporter is imported only in UttrflowDiagnostics"
+fi
+
+reporter_targets="$(grep -c 'package: "sentry-cocoa"' Package.swift || true)"
+diagnostics_users="$(grep '"UttrflowDiagnostics"' Package.swift | grep -v 'name:' \
+    | grep -vc 'dependencies: \["UttrflowDiagnostics"\]' || true)"
+if [[ "$reporter_targets" -ne 1 || "$diagnostics_users" -ne 1 ]]; then
+    fail "$reporter_targets targets link the crash reporter and $diagnostics_users depend on UttrflowDiagnostics" \
+        "Only UttrflowDiagnostics may link Sentry, and only the app target may depend on it."
+else
+    pass "one target links the crash reporter, and only the app depends on it"
+fi
+
+# ---------------------------------------------------------------------------
 # 7. The built app: which linked objects can actually open a connection.
 # ---------------------------------------------------------------------------
 #

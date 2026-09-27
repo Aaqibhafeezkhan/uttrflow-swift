@@ -38,33 +38,48 @@ public enum PanelPlacement {
     }
 }
 
-/// Remembers where the user left the panel on each display, so a spot on one never places it on another.
+/// Remembers where the user left the panel on the displays used most recently, so a spot on one never places it on another.
 public struct PanelSpots: Sendable, Equatable {
+    /// Caps how many displays keep a spot, so the stored list cannot grow with every display ever attached.
+    public static let limit = 8
+
     /// Holds the origin last dragged to on each display, keyed by the display's number.
     public private(set) var origins: [UInt32: CGPoint]
+    /// Lists the displays in `origins` from least to most recently dragged on.
+    public private(set) var recency: [UInt32]
 
     public init(origins: [UInt32: CGPoint] = [:]) {
-        self.origins = origins
+        self.origins = [:]
+        self.recency = []
+        for display in origins.keys.sorted() {
+            if let origin = origins[display] { remember(origin, on: display) }
+        }
     }
 
     /// Reads back what `propertyList` wrote, skipping anything malformed rather than guessing at it.
     public init(propertyList: Any?) {
-        var origins: [UInt32: CGPoint] = [:]
+        var ranked: [(display: UInt32, rank: Double, origin: CGPoint)] = []
         for (key, value) in propertyList as? [String: Any] ?? [:] {
-            guard let display = UInt32(key), let pair = value as? [Double], pair.count == 2 else {
+            guard let display = UInt32(key), let values = value as? [Double], (2...3).contains(values.count)
+            else {
                 continue
             }
-            origins[display] = CGPoint(x: pair[0], y: pair[1])
+            ranked.append((display, values.count == 3 ? values[2] : 0, CGPoint(x: values[0], y: values[1])))
         }
-        self.origins = origins
+        self.init()
+        for entry in ranked.sorted(by: { ($0.rank, $0.display) < ($1.rank, $1.display) }) {
+            remember(entry.origin, on: entry.display)
+        }
     }
 
-    /// Gives the form kept in user defaults: each display's number as a string, and its origin as `[x, y]`.
+    /// Gives the form kept in user defaults: each display's number as a string, and `[x, y, recency rank]`.
     public var propertyList: [String: [Double]] {
-        Dictionary(
-            uniqueKeysWithValues: origins.map { display, origin in
-                (String(display), [Double(origin.x), Double(origin.y)])
-            })
+        var list: [String: [Double]] = [:]
+        for (rank, display) in recency.enumerated() {
+            guard let origin = origins[display] else { continue }
+            list[String(display)] = [Double(origin.x), Double(origin.y), Double(rank + 1)]
+        }
+        return list
     }
 
     /// Places the panel on this display at its own remembered spot, clamped, or else the default corner.
@@ -72,8 +87,13 @@ public struct PanelSpots: Sendable, Equatable {
         PanelPlacement.origin(remembered: display.flatMap { origins[$0] }, size: size, in: visible)
     }
 
-    /// Records where the user left the panel on this display, leaving every other display's spot alone.
+    /// Records where the user left the panel on this display, forgetting the least recently used one past `limit`.
     public mutating func remember(_ origin: CGPoint, on display: UInt32) {
         origins[display] = origin
+        recency.removeAll { $0 == display }
+        recency.append(display)
+        while recency.count > Self.limit {
+            origins[recency.removeFirst()] = nil
+        }
     }
 }

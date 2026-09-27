@@ -13,8 +13,8 @@ enum Frecency {
     /// How much a perfect acceptance record lifts a candidate, and how much an entirely refused one lowers it.
     static let acceptanceLift = 0.6
 
-    /// The least the acceptance factor may fall to, so refusal lowers a line without ever erasing it.
-    static let acceptanceFloor = 0.1
+    /// The factor an always-refused candidate settles at, so refusal lowers a line without ever erasing it.
+    static let acceptanceFloor = 1 - acceptanceLift
 
     /// What the environment is worth on its own, being true but not necessarily wanted.
     static let environmentWeight = 1.0
@@ -42,12 +42,12 @@ enum Frecency {
         return pow(2, -days / halfLifeInDays)
     }
 
-    /// How the candidate has fared when offered: 1 until it has been, then within [1 - lift, 1 + lift], never below the floor.
+    /// How the candidate has fared when offered: 1 until it has been, then within [floor, 1 + lift].
     static func acceptance(_ evidence: Entry) -> Double {
         let offered = evidence.accepted + evidence.rejected
         guard offered > 0 else { return 1 }
         let balance = Double(evidence.accepted - evidence.rejected) / Double(offered)
-        return max(1 + acceptanceLift * balance, acceptanceFloor)
+        return 1 + acceptanceLift * balance
     }
 
     /// How much a fuzzy match is worth against an exact one, since a typo means less certainty.

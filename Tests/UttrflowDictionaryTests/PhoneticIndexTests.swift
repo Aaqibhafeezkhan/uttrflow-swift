@@ -186,7 +186,7 @@ struct PhoneticIndexTests {
         let index = PhoneticIndex(entries: [entry])
 
         #expect(index.candidates(soundingLike: "naveen").map(\.id) == [entry.id])
-        #expect(index.candidates(soundingLike: "\u{0928}\u{0935}\u{0940}\u{0928}").isEmpty)
+        #expect(index.candidates(soundingLike: "\u{0928}\u{0935}\u{0940}\u{0928}").map(\.id) == [entry.id])
     }
 
     @Test("names an entry nothing can address rather than dropping it in silence")

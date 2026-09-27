@@ -60,6 +60,15 @@ extension NSColor {
         orbitAlpha(dark: tone.dark, light: tone.light, alpha: alpha)
     }
 
+    /// A palette layer, resolved per appearance at that appearance's own opacity.
+    static func orbit(_ layer: BrandLayer) -> NSColor {
+        NSColor(name: nil) { appearance in
+            appearance.isDark
+                ? NSColor(rgb: layer.tone.dark).withAlphaComponent(layer.darkOpacity)
+                : NSColor(rgb: layer.tone.light).withAlphaComponent(layer.lightOpacity)
+        }
+    }
+
     /// A hex as an sRGB colour, so the value in the code is the value on the screen.
     convenience init(rgb: UInt32) {
         self.init(

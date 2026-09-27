@@ -12,8 +12,8 @@ in any agent's memory belonged to the private one and does not exist here.**
 **One long-lived branch, `main`, always releasable. A release is a tag, not a branch.**
 
 ```
-branch / fork  ──PR──>  main  ──tag v2026.9.14-rc.1──>  prerelease  (soak)
-   (CI runs)          (CI runs)  ──tag v2026.9.14────>  release
+branch / fork  ──PR──>  main  ──tag v26.0926.0-rc.1──>  prerelease  (soak)
+   (CI runs)          (CI runs)  ──tag v26.0926.0────>  release
 ```
 
 1. **Cut every branch from `origin/main`.** Short-lived. A branch that lives for weeks is a
@@ -42,7 +42,7 @@ branch / fork  ──PR──>  main  ──tag v2026.9.14-rc.1──>  prerelea
 
 **Releases stay batched and infrequent.** That has not changed; only the mechanism has.
 `main` accumulates merged work, and the operator decides when a commit on it becomes
-`v2026.9.14`. See `RELEASING.md`.
+`v26.0926.0`. See `RELEASING.md`.
 
 **Why there is no staging branch, since an agent reasoning from first principles will
 propose reinstating one.** The gate belongs on the pull request, not after it. A staging
@@ -240,6 +240,9 @@ refactor.
 **This app talks to the backend's API and to nothing else on the network** — see
 `UttrflowAccount`, which is deliberately the only module that can reach a server. That is
 what makes "the offline promise" checkable rather than asserted: there is one place to look.
+The one exception is opt-in crash diagnostics: when the user switches them on, crash and
+hang reports go to Sentry from `UttrflowDiagnostics`, which only the app target links and
+which scrubs every event first. `Docs/crash-reporting.md` is what is sent and why.
 
 ## What dictation is for — NON-NEGOTIABLE
 
@@ -367,24 +370,32 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 # the pre-push hook runs `make verify` for main; CI runs it once more on the PR
 git push -u origin <name>
 gh pr create --base main --head <name>
-# Keep this worktree and both feature-branch refs while the pull request is open.
 ```
 
-Do not clean up from a successful push, from `gh pr create`, or from `git branch -d`
-returning zero. A local branch can be "merged" to its upstream and still not be in `main`,
-which means deleting the worktree and branch would leave an open pull request with no head
-branch to update when CI or review asks for a repair.
+**Remote branches are never deleted, merged or not.** `origin/<name>` is the pull request's
+source ref for as long as the pull request exists, open or merged, and deleting it is how a
+branch stops being reconstructible. Once `origin/<name>` exists, the local worktree and local
+branch are disposable: `origin/<name>` alone is enough to pick the work back up.
 
-Only after GitHub says the pull request is merged:
+So, once `git push -u origin <name>` and `gh pr create` have both succeeded, the local
+worktree and local branch may be removed right away — there is no need to wait for merge:
 
 ```bash
-pr=<number>
-gh pr view "$pr" --json mergedAt --jq 'select(.mergedAt != null) | .mergedAt'
-# Continue only if the command printed a merge timestamp.
 cd -                                                              # back to the main checkout
 git worktree remove .claude/worktrees/<name>
 git branch -d <name> 2>/dev/null || git branch -D <name>
-git push origin --delete <name>
+# no `git push origin --delete` — the remote branch stays, always
+```
+
+If CI fails or review asks for a change after that cleanup, re-fetch the same ref rather than
+opening a new branch or a new pull request:
+
+```bash
+git fetch origin
+git worktree add .claude/worktrees/<name> origin/<name>
+cd .claude/worktrees/<name>
+… fix, commit, `make verify` …
+git push origin <name>
 ```
 
 The isolation is the point, and it is not bureaucracy: more than one agent works in this
@@ -414,12 +425,16 @@ you write down what you would have wanted a reviewer to know: what was measured,
 was assumed, and what you are least sure of. A merge that ends the conversation is worse
 than no merge at all.
 
-**Clear the worktree the moment the work is merged, never while the pull request is still
-open.** First prove the merge with `gh pr view <pr> --json mergedAt --jq 'select(.mergedAt
-!= null) | .mergedAt'`; only then `git worktree remove` and delete the branch. Four stale
-worktrees once sat holding pre-rename copies of the whole tree, and an abandoned one is
-indistinguishable from work in progress to the next session that finds it.
-`.claude/worktrees/` is gitignored, so nothing warns you.
+**Clear the local worktree and local branch as soon as the pull request is open** — pushed to
+`origin/<name>` and created with `gh pr create` — rather than waiting on merge; the remote
+branch is what keeps the work reachable, not the local copies. Four stale worktrees once sat
+holding pre-rename copies of the whole tree, and an abandoned one is indistinguishable from
+work in progress to the next session that finds it. `.claude/worktrees/` is gitignored, so
+nothing warns you.
+
+**The remote branch itself is never deleted, before or after merge.** It costs nothing to
+leave it, and it is the one ref that survives every local cleanup — if CI or a reviewer asks
+for a repair, re-fetch it into a fresh worktree (see above) instead of opening a new branch.
 
 **Never run `swift build` or `swift test` in the main checkout while subagents are
 working.** They share `.build` and corrupt each other. Give parallel agents
@@ -436,16 +451,17 @@ it from an interactive profile.
 `Docs/releasing.md` is the only correct description. In short:
 
 ```bash
-make verify        # lint, build, 5,000+ tests, coverage floor — what the gate runs
+make verify        # lint, build, 6,000+ tests, coverage floor — what the gate runs
 make hooks         # once per clone; hooks are not cloned
 make app-hardened  # a build fit to test on another Mac
 make dmg           # the disk image
 make publish       # to the public downloads repository, using this Mac's gh login
 ```
 
-Versioning is **calendar**, `YEAR.MONTH.DAY` with no leading zeros (`2026.9.14`), hand-edited
-in `Resources/Uttrflow-Info.plist`; a second release that day is `2026.9.14.1`. Releases up to
-0.5.0 were semver. `CFBundleVersion` is what the updater compares, so it goes up by one every
+Versioning is **`YY.MMDD.REVISION`** (`26.0926.0`; tag `v26.0926.0`), hand-edited in
+`Resources/Uttrflow-Info.plist`; a second release that day is `26.0926.1`. Month before day,
+leading zero kept, so versions sort in date order. `2026.9.14` (`YEAR.MONTH.DAY`) and, before
+it, semver up to 0.5.0 are retired. See `Docs/releasing.md`. `CFBundleVersion` is what the updater compares, so it goes up by one every
 release. The five-part `YEAR.MONTH.DAY.HOUR.PATCH` scheme stays rejected, as `Docs/releasing.md` says.
 
 Downloads go to the public **uttrflow/releases** repository. Source repositories stay
@@ -458,9 +474,9 @@ checked it against the plist — and a hand-run publish uses `v<version>` from t
 Signed or not, the release is a full release, so `/releases/latest/download/` resolves to
 the newest build and the download button never has to change.
 
-**A tag with anything after the version is a prerelease**: `v2026.9.14-rc.1` publishes as one,
+**A tag with anything after the version is a prerelease**: `v26.0926.0-rc.1` publishes as one,
 GitHub keeps it out of `/latest/`, and `publish.sh` leaves `latest.json` and `appcast.xml`
-untouched so neither the site nor the updater offers it. That is the soak. `v2026.9.14`
+untouched so neither the site nor the updater offers it. That is the soak. `v26.0926.0`
 releases it.
 
 `latest.json` records `gatekeeper`, and the site shows or hides the `xattr` instruction

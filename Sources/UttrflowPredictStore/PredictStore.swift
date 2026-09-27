@@ -40,14 +40,25 @@ public actor PredictStore: PredictionStore {
             return database
         } catch {
             guard error == .corrupt else { throw error }
-            try? FileManager.default.removeItem(atPath: path)
-            for suffix in ["-wal", "-shm"] {
-                try? FileManager.default.removeItem(atPath: path + suffix)
-            }
+            setAsideCorrupt(at: path)
             let replacement = try Database(path: path)
             try Schema.migrate(replacement)
             secureFiles(at: path)
             return replacement
+        }
+    }
+
+    /// Moves a corrupt database and its sidecars aside under the JSON stores' convention, deleting only what cannot move.
+    private static func setAsideCorrupt(at path: String) {
+        let now = Date()
+        for suffix in ["", "-wal", "-shm"] {
+            let url = URL(filePath: path + suffix)
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+                continue
+            }
+            if LocalStore.setAside(url, now: now) == nil {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 
@@ -65,7 +76,7 @@ public actor PredictStore: PredictionStore {
 
     // MARK: - Reading
 
-    /// What the user might be finishing, drawn from every folder of this field rather than only this one.
+    /// What the user might be finishing, drawn from this folder and the field's most recently used others.
     public func candidates(
         for surface: Surface, matching typed: String
     ) throws(PredictStoreError) -> [Candidate] {
@@ -88,16 +99,7 @@ public actor PredictStore: PredictionStore {
         _ candidates: [Candidate], here: Int64?
     ) throws(PredictStoreError) -> [Candidate] {
         guard let here, !candidates.isEmpty else { return candidates }
-        let texts = Array(Set(candidates.map(\.text)))
-        let placeholders = Array(repeating: "?", count: texts.count).joined(separator: ", ")
-        let retired = Set(
-            try database.rows(
-                "SELECT text FROM entry WHERE surface_id = ? AND superseded_by IS NOT NULL AND text IN (\(placeholders))",
-                { statement in
-                    statement.bind(1, here)
-                    for (offset, text) in texts.enumerated() { statement.bind(Int32(offset + 2), text) }
-                }
-            ) { $0.text(0) })
+        let retired = try retiredTexts(surfaceIdentifier: here)
         return retired.isEmpty ? candidates : candidates.filter { !retired.contains($0.text) }
     }
 
@@ -165,14 +167,27 @@ public actor PredictStore: PredictionStore {
     /// How many compiled statements the open file keeps.
     var cachedStatements: Int { database.cachedStatements }
 
-    /// Every surface that is the same field in the same application, whatever document it was in.
+    /// How many documents of one field a lookup reads, so its cost does not grow with every folder ever used.
+    static let scopeLimit = 8
+
+    /// The same field in the same application: this document first, then the most recently used others.
+    static let scopeQuery = """
+        SELECT id FROM surface
+        WHERE bundle_id = ? AND role = ? AND locator = ?
+        ORDER BY scope = ? DESC, (SELECT MAX(last_used) FROM entry WHERE surface_id = surface.id) DESC, id DESC
+        LIMIT ?
+        """
+
+    /// The documents of this field a lookup reads, bounded by `scopeLimit`.
     private func surfaceIdentifiers(of surface: Surface) throws(PredictStoreError) -> [Int64] {
         try database.rows(
-            "SELECT id FROM surface WHERE bundle_id = ? AND role = ? AND locator = ?",
+            Self.scopeQuery,
             {
                 $0.bind(1, surface.bundleIdentifier)
                 $0.bind(2, surface.role)
                 $0.bind(3, surface.locator ?? "")
+                $0.bind(4, surface.scope ?? "")
+                $0.bind(5, Int64(Self.scopeLimit))
             }
         ) { Int64($0.integer(0)) }
     }
@@ -242,7 +257,7 @@ public actor PredictStore: PredictionStore {
             candidates.append(
                 Candidate(
                     text: text, source: .succession, evidence: evidence,
-                    isIrreversible: DestructiveCommand.matches(text)))
+                    isIrreversible: DestructiveCommand.matches(text, failClosedOnUnresolved: true)))
         }
         return candidates
     }
@@ -309,7 +324,7 @@ public actor PredictStore: PredictionStore {
                     rejected: row.integer(3), selfSourced: row.integer(4),
                     lastUsed: Date(timeIntervalSince1970: row.double(5))),
                 editDistance: distance,
-                isIrreversible: DestructiveCommand.matches(text))
+                isIrreversible: DestructiveCommand.matches(text, failClosedOnUnresolved: true))
         }
         return Self.strongest(rows.compactMap { $0 })
     }
@@ -414,7 +429,7 @@ public actor PredictStore: PredictionStore {
         try database.run("DELETE FROM surface WHERE bundle_id = ?") {
             $0.bind(1, ApplicationKey.of(bundleIdentifier))
         }
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
     /// Forgets one entry, wherever the user noticed it.
@@ -424,22 +439,20 @@ public actor PredictStore: PredictionStore {
             $0.bind(1, id)
             $0.bind(2, Spelling.canonical(text))
         }
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
     /// Forgets every surface, and with it every entry and succession they hold.
     public func forgetEverything() throws(PredictStoreError) {
         try database.execute("DELETE FROM surface")
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
-    /// Empties the write-ahead log, which otherwise holds what was forgotten until the app quits.
-    private func leaveNothingBehind() throws(PredictStoreError) {
-        // The pragma answers in a row rather than an error code, so a checkpoint that was refused reads as success.
-        let refused = try database.rows("PRAGMA wal_checkpoint(TRUNCATE)", { _ in }) {
-            $0.integer(0)
-        }
-        guard refused.first == 0 else { throw .query("the write-ahead log could not be emptied") }
+    /// Empties the write-ahead log when no reader holds it, and reports whether it did; the delete has already committed either way.
+    @discardableResult
+    private func leaveNothingBehind() -> Bool {
+        let refused = try? database.rows("PRAGMA wal_checkpoint(TRUNCATE)", { _ in }) { $0.integer(0) }
+        return refused?.first == 0
     }
 
     /// How many entries each application has taught, keyed by bundle identifier.
@@ -609,7 +622,7 @@ public actor PredictStore: PredictionStore {
                     rejected: row.integer(3), selfSourced: row.integer(4),
                     lastUsed: Date(timeIntervalSince1970: row.double(5))),
                 editDistance: distance,
-                isIrreversible: DestructiveCommand.matches(row.text(0)))
+                isIrreversible: DestructiveCommand.matches(row.text(0), failClosedOnUnresolved: true))
         }
     }
 

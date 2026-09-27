@@ -56,6 +56,21 @@ struct CapturePreferencesFileTests {
         #expect(CapturePreferencesFile(path: scratch.path("capture.json")).load() == CapturePreferences())
     }
 
+    @Test("A corrupt file is set aside before a new answer is saved, so its bytes survive.")
+    func corruptFileSurvivesSave() throws {
+        let scratch = Scratch()
+        try scratch.write("{", to: "capture.json")
+        let file = CapturePreferencesFile(path: scratch.path("capture.json"))
+        var preferences = file.load()
+        #expect(preferences == CapturePreferences())
+        preferences.record(.allowed, for: "com.example.terminal")
+        try file.save(preferences)
+        let names = try FileManager.default.contentsOfDirectory(atPath: scratch.directory)
+        let setAside = try #require(names.first { $0.hasPrefix("capture.json.unreadable-") })
+        #expect(try String(contentsOfFile: scratch.path(setAside), encoding: .utf8) == "{")
+        #expect(file.load() == preferences)
+    }
+
     @Test("What was saved is what comes back, directories and all.")
     func savedPreferencesReturn() throws {
         let scratch = Scratch()

@@ -10,6 +10,8 @@ struct OnboardingAccountLayer {
     let profiles: any ProfileCache
     /// Where the choice to work without an account is kept; one store, read by three windows.
     let local: any LocalAccountStore
+    /// Where usage reports go; a recording sender, so a development build sends nothing anywhere.
+    var telemetry: any TelemetrySending = RecordingTelemetrySender()
 
     /// Re-reads the profile from the server and caches whatever comes back.
     var refresh: AccountRefresh {
@@ -31,14 +33,19 @@ struct OnboardingAccountLayer {
 
     /// The real thing: a URL session, the Keychain, and this Mac's own identity.
     static func production(baseURL: URL) -> OnboardingAccountLayer {
-        OnboardingAccountLayer(
-            authentication: HTTPAuthenticationService(
-                baseURL: baseURL,
-                transport: URLSessionTransport(),
-                tokens: KeychainTokenStore(),
-                device: MacDeviceIdentity.system()),
+        let transport = URLSessionTransport()
+        let authentication = HTTPAuthenticationService(
+            baseURL: baseURL,
+            transport: transport,
+            tokens: KeychainTokenStore(),
+            device: MacDeviceIdentity.system())
+        return OnboardingAccountLayer(
+            authentication: authentication,
             profiles: UserDefaultsProfileCache(),
-            local: UserDefaultsLocalAccountStore())
+            local: UserDefaultsLocalAccountStore(),
+            telemetry: HTTPTelemetrySender(
+                baseURL: baseURL, transport: transport,
+                bearer: { await authentication.accessTokenIfSignedIn() }))
     }
 
     /// The in-memory service with a per-process Ed25519 key, so the signature check runs in development too.

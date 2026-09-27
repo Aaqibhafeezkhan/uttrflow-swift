@@ -21,17 +21,18 @@ public struct SuggestionAcceptor: Sendable {
         _ suggestion: Suggestion, after typed: String
     ) async throws(TextInsertionError) -> TextInsertionMethod? {
         guard let drawn = suggestion.edit(after: typed) else { return nil }
-        guard let edit = try aimed(drawn, after: typed) else { return nil }
+        guard let edit = try await aimed(drawn, after: typed) else { return nil }
         return try await completion.write(edit.inserted, replacing: edit.replaced)
     }
 
     /// The drawn edit rebased onto the field as it is now, refusing when the field has moved away from the line.
     private func aimed(
         _ edit: Acceptance.Edit, after typed: String
-    ) throws(TextInsertionError) -> Acceptance.Edit? {
+    ) async throws(TextInsertionError) -> Acceptance.Edit? {
         guard let focus else { return edit }
-        let reach = typed.count + edit.inserted.count
-        guard case .text(let before) = focus.tail(upTo: max(reach, 1)) else { return edit }
+        let reach = max(typed.count + edit.inserted.count, 1)
+        let tail = await AccessibilityThread.run(orElse: .unreadable) { focus.tail(upTo: reach) }
+        guard case .text(let before) = tail else { return edit }
         if let rebased = Acceptance.rebase(edit, after: typed, onto: before) { return rebased }
         // The whole suggestion already being there means the keys got ahead of the read, and there is nothing left to do.
         if before.hasSuffix(typed + edit.inserted), !edit.isReplacement { return nil }

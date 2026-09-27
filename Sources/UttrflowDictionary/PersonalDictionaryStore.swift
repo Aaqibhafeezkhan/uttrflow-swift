@@ -14,14 +14,18 @@ public actor PersonalDictionaryStore {
     /// The file, injected so a test writes into a temporary directory rather than a real dictionary.
     private let file: URL
 
-    /// The dictionary arranged by sound, built on demand and thrown away by every write.
-    private var cachedIndex: PhoneticIndex?
+    /// The file's decoded contents, reread only when the file changed on disk.
+    var cache: CachedStoredList<[DictionaryEntry]>
+
+    /// The dictionary arranged by sound, and the cache generation it was built from.
+    private var cachedIndex: (generation: Int, index: PhoneticIndex)?
 
     /// Terms seen and said but not yet often enough to keep; never written down, so no page clears it.
     private var sightings = SightingLedger()
 
     public init(file: URL = PersonalDictionaryStore.defaultFile()) {
         self.file = file
+        self.cache = CachedStoredList(file: file)
     }
 
     /// Where the dictionary lives by default; versioned in the name so a new shape can sit beside it.
@@ -43,11 +47,12 @@ public actor PersonalDictionaryStore {
         load()
     }
 
-    /// The dictionary arranged by sound. Built once and reused until something changes.
+    /// The dictionary arranged by sound. Rebuilt from memory only when the entries changed.
     public func index() -> PhoneticIndex {
-        if let cachedIndex { return cachedIndex }
-        let built = PhoneticIndex(entries: load())
-        cachedIndex = built
+        let entries = load()
+        if let cachedIndex, cachedIndex.generation == cache.generation { return cachedIndex.index }
+        let built = PhoneticIndex(entries: entries)
+        cachedIndex = (cache.generation, built)
         return built
     }
 
@@ -80,40 +85,55 @@ public actor PersonalDictionaryStore {
                 firstSeen: moment))
     }
 
-    /// Writes the words this build ships knowing, once ever; a word the user then deletes stays deleted.
+    /// Writes each word this build ships knowing, once ever; a word the user then deletes stays deleted.
     @discardableResult
     public func seedShippedWords(at moment: Date) throws(DictionaryStoreError) -> [DictionaryEntry] {
-        guard try seededVersion() < ShippedWords.version else { return [] }
+        try seed(ShippedWords.entries(at: moment))
+    }
+
+    /// Seeds the given shipped entries, skipping any spelling this dictionary was offered before.
+    func seed(_ shipped: [DictionaryEntry]) throws(DictionaryStoreError) -> [DictionaryEntry] {
+        let offered = try offeredSpellings()
+        let unoffered = shipped.filter { !offered.contains($0.word.lowercased()) }
+        guard !unoffered.isEmpty else { return [] }
         let existing = load()
         let known = Set(existing.map { $0.word.lowercased() })
-        let seeded = ShippedWords.entries(at: moment).filter { !known.contains($0.word.lowercased()) }
+        let seeded = unoffered.filter { !known.contains($0.word.lowercased()) }
         // Recorded only once the words are on disk, so a failed write is retried; a retry skips any word already there.
         if !seeded.isEmpty { try persist(existing + seeded) }
-        try recordSeeded()
+        try recordOffered(offered.union(shipped.map { $0.word.lowercased() }))
         return seeded
     }
 
+    /// The seed record: the list version last applied, and every shipped spelling ever offered.
+    private struct SeedRecord: Codable {
+        let version: Int
+        let offered: [String]?
+    }
+
     /// A missing record is new; an unreadable one is not evidence that a deleted word may return.
-    private func seededVersion() throws(DictionaryStoreError) -> Int {
+    private func offeredSpellings() throws(DictionaryStoreError) -> Set<String> {
         let data: Data
         do {
             data = try Data(contentsOf: seedRecord)
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
-            return 0
+            return []
         } catch {
             throw .couldNotReadSeedRecord
         }
-        guard let record = try? JSONDecoder().decode([String: Int].self, from: data),
-            let version = record["version"], version >= 0
+        guard let record = try? JSONDecoder().decode(SeedRecord.self, from: data),
+            record.version >= 0
         else { throw .couldNotReadSeedRecord }
-        return version
+        if let offered = record.offered { return Set(offered.map { $0.lowercased() }) }
+        // A record written before spellings were listed names only a version, and version 1 was this list.
+        return record.version >= 1 ? ShippedWords.versionOneSpellings : []
     }
 
-    /// Notes which shipped list has been applied, which is what stops a deleted word returning.
-    private func recordSeeded() throws(DictionaryStoreError) {
+    /// Notes every shipped spelling offered so far, which is what stops a deleted word returning.
+    private func recordOffered(_ offered: Set<String>) throws(DictionaryStoreError) {
+        let record = SeedRecord(version: ShippedWords.version, offered: offered.sorted())
         do {
-            try PrivateFile.write(
-                JSONEncoder().encode(["version": ShippedWords.version]), to: seedRecord)
+            try PrivateFile.write(JSONEncoder().encode(record), to: seedRecord)
         } catch {
             throw .couldNotWrite
         }
@@ -124,8 +144,8 @@ public actor PersonalDictionaryStore {
     public func remove(_ id: UUID) throws(DictionaryStoreError) -> [DictionaryEntry] {
         let existing = load()
         let kept = existing.filter { $0.id != id }
-        // A word Uttrflow inferred and the user then deleted must not simply be counted up again.
-        if let gone = existing.first(where: { $0.id == id }), gone.origin != .added {
+        // A deleted word must not simply be counted up again, whoever first put it there.
+        if let gone = existing.first(where: { $0.id == id }) {
             sightings.refuse(gone.word)
         }
         try persist(kept)
@@ -227,20 +247,21 @@ public actor PersonalDictionaryStore {
 
     /// Reads the file, setting an unreadable one aside so the next write cannot replace the only copy.
     private func load() -> [DictionaryEntry] {
-        LocalStore.read([DictionaryEntry].self, from: file).value ?? []
+        cache.load() ?? []
     }
 
     /// Writes the whole list atomically, or removes the file when nothing is left to keep.
     private func persist(_ entries: [DictionaryEntry]) throws(DictionaryStoreError) {
-        // Dropped before the write, not after: an index rebuilt from the old list is right either way.
-        cachedIndex = nil
         do {
             guard !entries.isEmpty else {
                 try removeFile()
+                cache.remember(nil)
                 return
             }
             try PrivateFile.write(JSONEncoder().encode(entries), to: file)
+            cache.remember(entries)
         } catch {
+            cache.forget()
             throw .couldNotWrite
         }
     }

@@ -61,6 +61,13 @@ public actor WhisperKitBackend: TranscriptionBackend {
         report(started.duration(to: ContinuousClock.now))
     }
 
+    /// Drops the recogniser and its weights; the next `load` reads them from disk again.
+    public func unload() async {
+        guard kit != nil else { return }
+        kit = nil
+        Self.log.info("speech model let go after sitting idle")
+    }
+
     /// Says where the load's seconds went, since WhisperKit measures the parts and nothing reads them.
     private func report(_ elapsed: Duration) {
         guard let timings = kit?.timings else {
@@ -119,8 +126,9 @@ public actor WhisperKitBackend: TranscriptionBackend {
         guard !effort.isPlain else { return }
         // Counted, not named: the log audit reads a name holding "prompt" as text somebody typed.
         let retried = effort.retriedWithoutPrompt ? 1 : 0
+        let unresolved = effort.capUnresolved ? 1 : 0
         log.info(
-            "decoded piece: fallbacks=\(effort.fallbacks, privacy: .public) fallbackSeconds=\(effort.fallbackSeconds, format: .fixed(precision: 2), privacy: .public) encoderRuns=\(effort.encoderRuns, privacy: .public) retried=\(retried, privacy: .public)"
+            "decoded piece: fallbacks=\(effort.fallbacks, privacy: .public) fallbackSeconds=\(effort.fallbackSeconds, format: .fixed(precision: 2), privacy: .public) encoderRuns=\(effort.encoderRuns, privacy: .public) retried=\(retried, privacy: .public) capUnresolved=\(unresolved, privacy: .public)"
         )
     }
 }

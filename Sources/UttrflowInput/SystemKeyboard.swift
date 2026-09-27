@@ -6,7 +6,8 @@ public import UttrflowCore
 
 /// The one place the product asks the window server what the keyboard is doing. See `Docs/shortcuts.md`.
 public final class SystemKeyboard: KeyboardEventSource {
-    private let delivery = Delivery()
+    /// The sink the tap reads; internal so tests can see a restart forget the old tap's disables.
+    let delivery = Delivery()
     private let running = Mutex<RunningTap?>(nil)
 
     public init() {}
@@ -30,23 +31,30 @@ public final class SystemKeyboard: KeyboardEventSource {
             current = nil
         }
         delivery.set(nil)
+        delivery.forgetDisables()
     }
 
     deinit { stop() }
 
     /// The domain reading of a CoreGraphics event, kept here so nothing else decodes flags.
     static func stroke(keyCode: UInt16, flags: CGEventFlags, phase: KeyPhase) -> KeyStroke {
-        var modifiers: Set<HotkeyModifier> = []
-        if flags.contains(.maskCommand) { modifiers.insert(.command) }
-        if flags.contains(.maskAlternate) { modifiers.insert(.option) }
-        if flags.contains(.maskControl) { modifiers.insert(.control) }
-        if flags.contains(.maskShift) { modifiers.insert(.shift) }
-        let isFunctionDown = flags.contains(.maskSecondaryFn)
+        let (modifiers, isFunctionDown) = Self.modifiers(from: flags)
         return KeyStroke(
             keyCode: keyCode, modifiers: modifiers, isFunctionDown: isFunctionDown, phase: phase,
             isKeyDown: isDown(
                 keyCode: keyCode, phase: phase, modifiers: modifiers,
                 isFunctionDown: isFunctionDown))
+    }
+
+    /// The modifiers and Fn state a raw flags mask carries, the one place that decodes it.
+    static func modifiers(from flags: CGEventFlags) -> (modifiers: Set<HotkeyModifier>, isFunctionDown: Bool)
+    {
+        var modifiers: Set<HotkeyModifier> = []
+        if flags.contains(.maskCommand) { modifiers.insert(.command) }
+        if flags.contains(.maskAlternate) { modifiers.insert(.option) }
+        if flags.contains(.maskControl) { modifiers.insert(.control) }
+        if flags.contains(.maskShift) { modifiers.insert(.shift) }
+        return (modifiers, flags.contains(.maskSecondaryFn))
     }
 
     /// Whether the named key is down, which for a flags change is whether its own modifier survived.
@@ -113,6 +121,12 @@ final class Delivery: @unchecked Sendable {
     func port() -> CFMachPort? {
         guard let held = tapPointer.load(ordering: .acquiring) else { return nil }
         return Unmanaged<CFMachPort>.fromOpaque(held).takeUnretainedValue()
+    }
+
+    /// Clears the disable history, so a newly built tap is judged only on its own disables.
+    func forgetDisables() {
+        disables.store(0, ordering: .relaxed)
+        lastDisable.store(0, ordering: .relaxed)
     }
 
     /// Whether to turn the tap back on, which it is unless it keeps being disabled in a short window.

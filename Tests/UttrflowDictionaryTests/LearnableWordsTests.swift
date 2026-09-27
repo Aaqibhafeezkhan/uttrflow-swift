@@ -389,4 +389,48 @@ struct SightingLedgerTests {
         // The twice-seen term survived the cull, so one more sighting is enough.
         #expect(ledger.record(["Uttrflow"]) == ["Uttrflow"])
     }
+
+    @Test("Holds no more refusals than its bound, lapsing the oldest first")
+    func refusalsStayInsideTheBound() {
+        var ledger = SightingLedger()
+        for index in 0...SightingLedger.maximumRefused { ledger.refuse("Refused\(index)word") }
+        #expect(ledger.refusalCount == SightingLedger.maximumRefused)
+
+        // The first refusal lapsed, so that word counts again; the newest is still refused.
+        for _ in 1...2 { _ = ledger.record(["Refused0word", "Refused\(SightingLedger.maximumRefused)word"]) }
+        #expect(
+            ledger.record(["Refused0word", "Refused\(SightingLedger.maximumRefused)word"]) == ["Refused0word"]
+        )
+    }
+
+    @Test("Counts a word refused twice as one refusal")
+    func refusingTwiceHoldsOne() {
+        var ledger = SightingLedger()
+        ledger.refuse("pgvector")
+        ledger.refuse("PGVector")
+        #expect(ledger.refusalCount == 1)
+    }
+}
+
+@Suite("Digits inside a learnable word")
+struct DigitBearingWordTests {
+    @Test("Keeps a digit as part of the word it sits in")
+    func keepsDigits() {
+        #expect(
+            LearnableWords.words(in: "GPT4 iOS17, Web3 PROJ-123", atMost: 8) == [
+                "GPT4", "iOS17", "Web3", "PROJ", "123",
+            ])
+    }
+
+    @Test("Learns a correction to a digit-bearing spelling whole")
+    func correctionKeepsDigits() {
+        #expect(LearnableWords.corrected(over: "gpt", wrote: "GPT4") == "GPT4")
+    }
+
+    @Test("Considers a digit-bearing title term whole")
+    func titleTermKeepsDigits() {
+        let found = LearnableWords.seenAndSaid(
+            heard: "ask about pgvector", seeing: .fixture(documentName: "pgvector2 notes"))
+        #expect(found == ["pgvector2"])
+    }
 }

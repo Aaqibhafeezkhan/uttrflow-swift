@@ -127,4 +127,20 @@ struct StandardPipelineTests {
         #expect(draft.words[5].state == .replaced(by: FirstWordPass.id, from: "at"))
         #expect(draft.words[6].state == .replaced(by: TerminalStopPass.id, from: "five"))
     }
+
+    @Test(
+        "keeps a heard id or ill that opens a piece mid-sentence, and repairs it at a sentence start",
+        arguments: [
+            (InsertionPoint.SentenceState.midSentence, "Id is required", "id is required."),
+            (.midSentence, "Ill health can follow", "ill health can follow."),
+            (.midSentence, "I'd rather not", "I'd rather not."),
+            (.startOfSentence, "Id rather not", "I'd rather not."),
+        ]
+    )
+    func openingContraction(state: InsertionPoint.SentenceState, input: String, expected: String) {
+        let plain = DestinationFormatter.standard(for: .plain)
+        let pieces = CleaningPipeline.piece(numbers: plain.numbers, digits: plain.digits).passes
+        let pipeline = CleaningPipeline(passes: pieces + [FirstWordPass(state: state), TerminalStopPass()])
+        #expect(pipeline.run(Draft(text: input)).text == expected)
+    }
 }

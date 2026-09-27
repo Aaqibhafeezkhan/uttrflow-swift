@@ -107,11 +107,24 @@ struct PredictionEngineTests {
         #expect(suggestion([remembered("git status", count: 90)]) == .certain("git status"))
     }
 
-    @Test("A leader whose only rivals were barred is shown alone rather than as a choice of one.")
-    func lonelyLeaderIsCertain() {
-        let result = suggestion([
+    @Test("A leader in a close race whose only rivals were barred is withheld, never shown as certain.")
+    func unseparatedLeaderWithBarredRivalIsSilent() {
+        let candidates = [
             remembered("git push", count: 10),
             remembered("git push --force", count: 9, irreversible: true),
+        ]
+        #expect(Ranking(candidates, now: moment).separation < PredictionEngine.separationThreshold)
+        let context = PredictionContext(typed: "git p")
+        let decided = PredictionEngine.decision(from: candidates, in: context, now: moment)
+        #expect(decided.suggestion == .silent)
+        #expect(decided.silence == .irreversibleNotCertain)
+    }
+
+    @Test("A leader clearly ahead of a barred rival is still shown alone.")
+    func separatedLeaderWithBarredRivalIsCertain() {
+        let result = suggestion([
+            remembered("git push", count: 90),
+            remembered("git push --force", count: 1, irreversible: true),
         ])
         #expect(result == .certain("git push"))
     }
@@ -154,6 +167,11 @@ struct PredictionEngineTests {
         #expect(decided.silence == expected)
         #expect(decided.suggestion == suggestion(candidates, context))
         #expect((decided.silence == nil) == (decided.suggestion.accepting != nil))
+        let ranked = PredictionEngine.ranked(from: candidates, in: context, now: moment)
+        #expect(ranked.suggestion == decided.suggestion && ranked.silence == decided.silence)
+        if decided.suggestion.accepting != nil {
+            #expect(ranked.ranking == Ranking(candidates, now: moment))
+        }
     }
 
     @Test("What Tab would insert is what is on screen.")

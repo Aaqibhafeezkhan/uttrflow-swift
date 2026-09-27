@@ -69,16 +69,24 @@ private enum RescanningShellPrompt {
 
     private static func promptEnd(in characters: [Character]) -> Int? {
         var quote: Character?
+        var unquotedAt = false
         var index = 0
         while index < characters.count {
             let character = characters[index]
+            let wasQuoted = quote != nil
+            defer { unquotedAt = unquotedAt || (!wasQuoted && character == "@") }
             if let open = quote {
-                if character == open { quote = nil }
+                if character == open {
+                    quote = nil
+                } else if open == "\"", character == "\\" {
+                    index += 1
+                }
             } else if character == "'" || character == "\"" {
                 quote = character
             } else if character == "\\" {
+                if index + 1 < characters.count, characters[index + 1] == "@" { unquotedAt = true }
                 index += 1
-            } else if endsAPrompt(characters, at: index) {
+            } else if endsAPrompt(characters, at: index, unquotedAt: unquotedAt) {
                 return index
             }
             index += 1
@@ -86,7 +94,7 @@ private enum RescanningShellPrompt {
         return nil
     }
 
-    private static func endsAPrompt(_ characters: [Character], at index: Int) -> Bool {
+    private static func endsAPrompt(_ characters: [Character], at index: Int, unquotedAt: Bool) -> Bool {
         guard terminators.contains(characters[index]) else { return false }
         let next = index + 1 < characters.count ? characters[index + 1] : nil
         guard next?.isWhitespace ?? true else { return false }
@@ -94,7 +102,9 @@ private enum RescanningShellPrompt {
         return switch characters[index] {
         case "%": prefix.last?.isWhitespace ?? true
         case "$": !(prefix.last?.isWhitespace ?? false)
-        case "#": prefix.allSatisfy(\.isWhitespace) || prefix.last == "=" || prefix.contains("@")
+        case "#":
+            prefix.allSatisfy(\.isWhitespace) || prefix.last == "="
+                || (unquotedAt && !(prefix.last?.isWhitespace ?? true))
         case ">": prefix.allSatisfy { $0 == ">" || $0.isWhitespace } || prefix.last == "="
         default: true
         }

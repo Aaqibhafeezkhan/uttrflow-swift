@@ -154,6 +154,16 @@ on the system-wide element is process-wide and read when each message is sent, s
 suggestion read on another queue setting its own 100 ms would cut the insertion's write short
 mid-dictation (#887). The system-wide focus query itself runs under the system default.
 
+Every one of those calls blocks the thread that sends it for as long as the target takes to
+answer. Swift's cooperative pool has about one thread per core, so a call made from `async`
+code would hold a pool thread for up to 2 s per message while every other actor in the
+process waited for one. Insertion, paste confirmation, suggestion acceptance and the typed route's check therefore
+send them through `AccessibilityThread`, a concurrent dispatch queue of their own, and the
+awaiting task resumes when the answer comes back. A task cancelled before its message leaves
+the queue sends nothing and takes a safe fallback — "secure" for the concealment question,
+"unreadable" for a caret read. A message already sent cannot be recalled; the 2 s cap is
+what bounds it.
+
 ## Announcing Uttrflow's own writes
 
 Pasting a clip puts it on the clipboard and never takes it back, so the clipboard

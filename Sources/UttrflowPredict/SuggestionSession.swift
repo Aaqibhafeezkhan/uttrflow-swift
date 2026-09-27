@@ -226,12 +226,12 @@ public struct SuggestionSession: Sendable, Equatable {
         }
         // A candidate the user has already finished typing adds nothing, and one in another script is never written.
         let offerable = candidates.filter { $0.text != pending.typed && LatinScript.writes($0.text) }
-        let decided = PredictionEngine.decision(from: offerable, in: pending, now: now)
+        let decided = PredictionEngine.ranked(from: offerable, in: pending, now: now)
         // A turn with nothing on offer has nothing to be wrong about, so the gates are never troubled.
-        guard decided.suggestion.accepting != nil else {
+        guard decided.suggestion.accepting != nil, let ranking = decided.ranking else {
             return .settled(settle(decided.suggestion, silence: decided.silence))
         }
-        let head = Ranking(offerable, now: now).candidates.prefix(Self.verifiedDepth).map(\.candidate)
+        let head = ranking.candidates.prefix(Self.verifiedDepth).map(\.candidate)
         return .verify(
             VerificationRequest(
                 surface: query.surface, typed: pending.typed, candidates: head,
@@ -301,7 +301,7 @@ public struct SuggestionSession: Sendable, Equatable {
         let lowered = typed.lowercased()
         return lines.filter {
             let lower = $0.lowercased()
-            return lower != lowered && lower.hasPrefix(lowered) && LatinScript.writes($0)
+            return lower != lowered && lower.hasScalarPrefix(lowered) && LatinScript.writes($0)
                 && seen.insert(lower).inserted
         }
     }
@@ -371,20 +371,21 @@ public struct SuggestionSession: Sendable, Equatable {
             isMinimised = false
         }
         let lowered = typing.lowercased()
-        // Case alone is not typing past, since the store matched the line regardless of it.
-        guard let offered = suggestion.accepting, !offered.lowercased().hasPrefix(lowered) else { return nil }
+        // Case and a scalar typed ahead of its own combining mark are not typing past, since the store matched regardless.
+        guard let offered = suggestion.accepting, !offered.lowercased().hasScalarPrefix(lowered)
+        else { return nil }
         // Finishing the suggestion by hand and typing on is taking it, not typing past it.
-        guard !lowered.hasPrefix(offered.lowercased()) else { return nil }
+        guard !lowered.hasScalarPrefix(offered.lowercased()) else { return nil }
         // Whitespace alone typed past a suggestion is a pause or a slip of the space bar, not a refusal.
         let earlier = typed.lowercased()
-        guard !(lowered.hasPrefix(earlier) && lowered.dropFirst(earlier.count).allSatisfy(\.isWhitespace))
+        guard
+            !(lowered.hasScalarPrefix(earlier) && lowered.dropFirst(earlier.count).allSatisfy(\.isWhitespace))
         else { return nil }
-        // Typing past a guess the model invented says the model was wrong, not that the field wants quiet.
-        guard !shownIsGenerated else { return nil }
         // Only an offer that completed the line can be typed past; leaving a fuzzy or corrected one, or shortening the line, says nothing.
-        guard offered.lowercased().hasPrefix(typed.lowercased()) else { return nil }
+        guard offered.lowercased().hasScalarPrefix(typed.lowercased()) else { return nil }
         rejectionsHere += 1
-        return offered
+        // A guess the model invented counts toward quieting the field, but the store is never told to blame it.
+        return shownIsGenerated ? nil : offered
     }
 
     /// The moment with the three facts only this session knows filled in.
@@ -407,6 +408,8 @@ public struct SuggestionSession: Sendable, Equatable {
         {
             let still = Array(Self.drawable([leader] + others, past: typed).dropFirst())
             if !still.isEmpty {
+                // A narrowed list moves what sits under the highlight, so the highlight goes back to the leader.
+                if still != others { selection = .untouched }
                 suggestion = .choice(leader: leader, others: still)
                 return armed(showing: suggestion, silence: nil)
             }

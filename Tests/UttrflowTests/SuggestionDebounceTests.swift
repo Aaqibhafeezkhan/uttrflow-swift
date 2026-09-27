@@ -29,3 +29,25 @@ struct SuggestionDebounceTests {
         #expect(SuggestionCoordinator.remainingDebounce(sinceKeystroke: Self.key, now: now) == .zero)
     }
 }
+
+@Suite("The wake-up after a prose pause")
+struct SuggestionHesitationWakeTests {
+    static let key = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @Test("a turn settling right at the last key waits the whole pause")
+    func settlingAtTheKeyWaitsTheWholePause() {
+        #expect(SuggestionCoordinator.hesitationWake(sinceKeystroke: Self.key, now: Self.key) == 420)
+    }
+
+    @Test("a turn started before a later key still wakes 400ms after that key (#1623)")
+    func aLaterKeyDoesNotPushTheWakeLater() {
+        let now = Self.key.addingTimeInterval(0.1)
+        #expect(SuggestionCoordinator.hesitationWake(sinceKeystroke: Self.key, now: now) == 320)
+    }
+
+    @Test("a pause already long enough wakes at once")
+    func aLongPauseWakesAtOnce() {
+        let now = Self.key.addingTimeInterval(2)
+        #expect(SuggestionCoordinator.hesitationWake(sinceKeystroke: Self.key, now: now) == 20)
+    }
+}

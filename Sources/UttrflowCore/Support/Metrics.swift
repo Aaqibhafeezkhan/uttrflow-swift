@@ -59,6 +59,27 @@ public struct NoOpMetricsRecorder: MetricsRecording {
     public func record(_ measurement: StageMeasurement) async {}
 }
 
+/// Hands every measurement to each recorder in turn, for a pipeline that takes only one.
+public struct MetricsFanOut: MetricsRecording {
+    /// The recorders, in the order they are told.
+    private let recorders: [any MetricsRecording]
+
+    /// Tells every one of `recorders`, in order.
+    public init(_ recorders: [any MetricsRecording]) {
+        self.recorders = recorders
+    }
+
+    /// Passes the measurement to every recorder.
+    public func record(_ measurement: StageMeasurement) async {
+        for recorder in recorders { await recorder.record(measurement) }
+    }
+
+    /// Passes the decode effort to every recorder.
+    public func recordDecoding(_ effort: DecodeEffort) async {
+        for recorder in recorders { await recorder.recordDecoding(effort) }
+    }
+}
+
 /// The one way every stage is timed, so none is left out of the numbers.
 extension MetricsRecording {
     /// Times `operation` on the caller's actor, records success or failure, and passes the outcome through.

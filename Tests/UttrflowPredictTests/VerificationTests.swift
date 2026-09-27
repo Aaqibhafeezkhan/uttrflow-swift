@@ -188,6 +188,18 @@ struct GeneratedAttestationTests {
             ])
     }
 
+    @Test("git log, diff and reset look a bare word up as a branch or a file; checkout as a branch.")
+    func historyVerbsTakeFiles() {
+        #expect(asked("git log READM") == [lookup("READM", [.branch, .file])])
+        #expect(asked("git diff Package.swift") == [lookup("Package.swift", [.branch, .file])])
+        #expect(asked("git reset staged.txt") == [lookup("staged.txt", [.branch, .file])])
+        #expect(asked("git checkout mai") == [lookup("mai", [.branch])])
+        #expect(
+            asked("git diff feat/login") == [
+                lookup("feat/login", [.branch]), lookup("login", [.entries(under: "feat")]),
+            ])
+    }
+
     @Test("A directory command narrows a path to directories; a file command and an unknown one do not.")
     func directoryCommandsWantDirectories() {
         #expect(asked("cd Sour") == [lookup("Sour", [.directory])])

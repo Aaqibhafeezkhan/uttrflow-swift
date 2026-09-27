@@ -23,6 +23,12 @@ the one-line comments. `Docs/microphone.md` covers the hardware moving under the
   lock makes that safe rather than merely true today. Its input block is declared `@Sendable`
   but is called synchronously before `convert` returns and never escapes, which is why
   `ConversionInput` is `@unchecked Sendable`.
+- The 2048-frame slice and the conversion output are each one buffer, allocated once at
+  `AudioResampler.init` and reused for every callback, on the path a buffer already in the
+  resampler's own format takes — which is the only path the tap ever exercises. What still
+  allocates on that path is the `[Float]` the sink is handed, since that is the callback's
+  public contract; a buffer in a different format (never produced by the tap; only a misuse
+  test constructs one) still allocates its own scratch rather than corrupt the reused pair.
 
 ## Microphone access is read before the engine, not after it
 
@@ -108,6 +114,13 @@ rate would otherwise hold key-up open for as long as it liked.
 
 A cancelled recording does not drain: its audio is discarded, so waiting for more of it would only
 delay the key coming up.
+
+Not draining gives up the rendezvous with the render thread, so a tap callback already in flight at
+teardown can still run afterwards. Two guards make that harmless. Each recording's sample closure
+runs behind a gate that `stop()` and `cancel()` close under the same lock the closure appends under,
+so once teardown returns nothing more reaches that recording's buffer or file. And the device pins
+each tap to the sink it was opened for, so a late callback from an earlier engine never reaches the
+sink a later recording installed.
 
 Measured at the seam rather than on hardware, with a fake source holding one block back: a drained
 stop returns 1,365 more canonical samples than an undrained one, which is 85.3 ms — one tap period
