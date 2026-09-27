@@ -32,11 +32,16 @@ struct LineShape: Equatable, Sendable {
             while let flag = words.first, flag.hasPrefix("-") { words.removeFirst() }
         }
         guard let command = words.first else { return LineShape(command: nil, kind: .program) }
-        let arguments = words.dropFirst().filter { !$0.hasPrefix("-") }
-        let flagged = arguments.count < words.count - 1
+        let rest = words.dropFirst()
+        // A bare `--` ends the options, so every word after it is an operand whatever it begins with.
+        let end = rest.firstIndex(of: "--")
+        let options = rest[..<(end ?? rest.endIndex)]
+        let operands = end.map { rest[($0 + 1)...] } ?? []
+        let arguments = options.filter { !$0.hasPrefix("-") } + operands
         return LineShape(
             command: command,
-            kind: CommandGrammar.kind(of: command, after: Array(arguments), flagged: flagged))
+            kind: CommandGrammar.kind(
+                of: command, after: arguments, flagged: arguments.count < rest.count, endOfOptions: end != nil))
     }
 }
 
@@ -114,8 +119,10 @@ enum CommandGrammar {
         return Array(words[(separator + 1)...])
     }
 
-    /// What the next word of a command is, after the positional arguments already given and whether any flag came before it.
-    static func kind(of command: String, after arguments: [String], flagged: Bool = false) -> ArgumentKind {
+    /// What the next word of a command is, after the positional arguments already given, whether any flag came before it, and whether a bare `--` did.
+    static func kind(
+        of command: String, after arguments: [String], flagged: Bool = false, endOfOptions: Bool = false
+    ) -> ArgumentKind {
         if directoryCommands.contains(command) { return .directory }
         if interpreters.contains(command) { return arguments.isEmpty && !flagged ? .file : .free }
         if fileCommands.contains(command) { return .file }
@@ -125,6 +132,8 @@ enum CommandGrammar {
         guard subcommandPrograms.contains(command) else { return .free }
         guard let verb = arguments.first else { return .subcommand(of: command) }
         if command == "git" {
+            // After `--` git reads only paths.
+            if endOfOptions { return .file }
             if gitBranchVerbs.contains(verb) { return .branch }
             if gitBranchOrFileVerbs.contains(verb) { return .branchOrFile }
             return gitFileVerbs.contains(verb) ? .file : .free

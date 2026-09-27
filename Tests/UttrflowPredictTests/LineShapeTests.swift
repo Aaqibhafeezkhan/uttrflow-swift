@@ -38,6 +38,23 @@ struct LineShapeTests {
         #expect(shape("myapp ser") == LineShape(command: "myapp", kind: .free))
     }
 
+    @Test("After a bare `--` git takes only paths, whatever the verb before it takes.")
+    func gitAfterTheEndOfOptionsTakesPaths() {
+        for line in [
+            "git checkout -- m", "git checkout main -- Sour", "git switch -- m", "git merge -- m",
+            "git log -- S", "git log --oneline -- Sour", "git diff HEAD -- READ",
+        ] {
+            #expect(shape(line) == LineShape(command: "git", kind: .file), "\(line)")
+        }
+        for leading in ["git checkout -- ", "git log -- "] {
+            let token = CompletionToken(leading: leading, token: "")
+            #expect(LineShape.of(token) == LineShape(command: "git", kind: .file), "\(leading)")
+        }
+        #expect(shape("git checkout m") == LineShape(command: "git", kind: .branch))
+        #expect(shape("git log --oneline m") == LineShape(command: "git", kind: .branchOrFile))
+        #expect(shape("rm -- -f") == LineShape(command: "rm", kind: .file))
+    }
+
     @Test("A new simple command begins after an operator, and a wrapper hands its arguments on.")
     func operatorsAndWrappers() {
         #expect(shape("make verify && cd pro") == LineShape(command: "cd", kind: .directory))
