@@ -36,6 +36,39 @@ struct CardNumberDetectionTests {
     }
 
     @Test(
+        "masks a card number grouped by another space or a full stop, or typed in fullwidth digits",
+        arguments: [
+            "4111\u{A0}1111\u{A0}1111\u{A0}1111",
+            "4111\u{2009}1111\u{2009}1111\u{2009}1111",
+            "4111\u{202F}1111\u{202F}1111\u{202F}1111",
+            "4111\t1111\t1111\t1111",
+            "4111.1111.1111.1111",
+            "\u{FF14}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}"
+                + "\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}",
+            "\u{FF14}\u{FF11}\u{FF11}\u{FF11}\u{3000}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{3000}"
+                + "\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{3000}\u{FF11}\u{FF11}\u{FF11}\u{FF11}",
+            "Card: 4111\u{A0}1111\u{A0}1111\u{A0}1111, expires 12/29",
+        ])
+    func otherSeparators(_ text: String) {
+        #expect(ClipKindDetector.kind(of: text) == .secret)
+        #expect(CardNumberShape.matches(text) == BacktrackingPatterns.hasCardNumber(text))
+    }
+
+    @Test(
+        "still leaves a mixed grouping, a decimal and a version alone",
+        arguments: [
+            "4111 1111\u{A0}1111.1111",
+            "4111.1111.1111.1112",
+            "4111111111111111.25",
+            "1.4111.1111.1111.1111",
+            "\u{FF14}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}"
+                + "\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF12}",
+        ])
+    func otherSeparatorsStillNeedACard(_ text: String) {
+        #expect(!CardNumberShape.matches(text), "\(text)")
+    }
+
+    @Test(
         "masks a card number inside a longer copy",
         arguments: [
             "Card: 4111 1111 1111 1111, expires 12/29",

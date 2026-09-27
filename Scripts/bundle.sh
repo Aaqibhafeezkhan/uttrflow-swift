@@ -447,6 +447,13 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BUILT_BINARY" "$APP/Contents/MacOS/$EXECUTABLE"
 cp "$SOURCE_PLIST" "$APP/Contents/Info.plist"
 
+# Keeps the Release dSYM beside the bundle, not in it, so a crash report can be symbolicated against the exact binary.
+DSYM="$PRODUCTS_DIR/$PRODUCT.dSYM"
+if [[ -d "$DSYM" ]]; then
+    rm -rf "dist/$APP_NAME.app.dSYM"
+    ditto "$DSYM" "dist/$APP_NAME.app.dSYM"
+fi
+
 # The crash reporter's DSN, only from the environment and never in a development build; see Docs/crash-reporting.md.
 if [[ "$MODE" != "development" && -n "${SENTRY_DSN:-}" ]]; then
     /usr/libexec/PlistBuddy -c "Add :SentryDSN string $SENTRY_DSN" "$APP/Contents/Info.plist" >/dev/null \
