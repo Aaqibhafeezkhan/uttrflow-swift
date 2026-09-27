@@ -95,11 +95,12 @@ struct OnboardingCard: View {
                 .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
             VStack(spacing: 22) {
                 title
-                Spacer(minLength: 0)
+                // Pushed to the foot with one gap above it, so a page with a hint and the terms still fits the card.
                 VStack(spacing: 0) {
                     buttons
                     footnotes
                 }
+                .frame(maxHeight: .infinity, alignment: .bottom)
                 OnboardingDots(position: page.position, count: page.stepCount)
             }
             .padding(.top, 26)
