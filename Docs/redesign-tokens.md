@@ -57,6 +57,8 @@ translucent card film, hairline, sidebar island and secondary text of the dark a
 | `toastGlass` | `#121020` at 90% | `#FEFEFC` at 93% |
 | `scrim` | `#05050A` at 55% | `#F2F1EC` at 55% |
 | `floatShadow` | black at 70% | black at 12% |
+| `mintAccent` | `#8FF5EC` | `#128077` |
+| `dictationDeep` | `#29C0B4` | `#128077` |
 
 Text tones clear 4.5:1 on the page and on a card; accents clear 3:1 there, the bar for marks.
 The floating button's ink clears 4.5:1 on its glass and the meter 3:1, measured over the

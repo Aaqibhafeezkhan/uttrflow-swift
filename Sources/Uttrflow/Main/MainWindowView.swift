@@ -28,7 +28,7 @@ struct MainWindowView: View {
                         // Through the app, so the sidebar's highlight and badge are rebuilt with the page.
                         onIntent(.show(page))
                     case .settings(let tab):
-                        // Settings is a window of its own, and the app owns every window.
+                        // Through the app too, which refreshes what the Settings page shows.
                         onIntent(.go(.settings(tab)))
                     }
                 },
@@ -49,7 +49,18 @@ struct MainWindowView: View {
 
     // MARK: - Pane
 
-    private var pane: some View {
+    /// Settings when it is showing, which draws its own title and search, or the selected page.
+    @ViewBuilder private var pane: some View {
+        if model.showsSettings, let settings = model.settings {
+            SettingsPageView(
+                model: settings, diagnostics: model.content.diagnostics,
+                searchFocusRequest: model.searchFocusRequest, onIntent: onIntent)
+        } else {
+            pagePane
+        }
+    }
+
+    private var pagePane: some View {
         VStack(spacing: 0) {
             // The band under the title bar, which the traffic lights and the window's drag own; some pages draw their own.
             if !drawsOwnHeader {
@@ -125,13 +136,6 @@ struct MainWindowView: View {
             SnippetsPageView(
                 presentation: model.content.snippets, draft: reporting($model.snippetDraft),
                 onIntent: onIntent)
-        case .style:
-            StylePageView(presentation: model.content.style, onIntent: onIntent)
-        case .diagnostics:
-            ScrollView {
-                DiagnosticsPageView(presentation: model.content.diagnostics, onIntent: onIntent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         case .account:
             AccountPageView(presentation: model.content.account, onIntent: onIntent)
         }

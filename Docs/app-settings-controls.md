@@ -1,7 +1,7 @@
 # Settings controls
 
 `SettingsControlView` draws whatever a settings row asked for. It is one `switch` over a closed
-set, so a control the presenter can ask for and the window cannot draw does not compile. Every case
+set, so a control the presenter can ask for and the page cannot draw does not compile. Every case
 reports the change the presenter already attached to the choice; none of them works out what a
 choice ought to mean.
 
@@ -12,13 +12,13 @@ it. The label still has to be passed in and reattached with `accessibilityLabel`
 `""` there was nothing for SwiftUI to hand to VoiceOver either, and focusing any switch in Settings
 announced "checkbox, checked" and named nothing. The row's own words are the right label.
 
-The anchor picker needs its own spoken names for the same reason — a dot in a rectangle says
-nothing — and a five-point dot is not a hit target, so each dot's tappable area is its whole
-quadrant of the little screen.
+A language chip's × says which language it stops listening for, since a bare × names nothing,
+and the last language has no × at all rather than one that is refused after it is pressed.
 
 ## Destructive versus ordinary buttons
 
-`removal` is red without asking and routes through `model.request`, which asks for confirmation.
+`removal` routes through `model.request`, which asks for confirmation where the level needs it,
+and is red when it resets everything.
 `action` is neither red nor confirmed. The two cases exist precisely to keep those treatments
 attached to one of them and not the other, and neither is ever
 `.keyboardShortcut(.defaultAction)`: nothing on this screen removes anything because Return was
@@ -29,8 +29,8 @@ pressed.
 Keystrokes are taken through a local `NSEvent` monitor rather than SwiftUI's focus machinery,
 because the combinations worth recording — ⌘Q, ⌥Space — are the ones the menus and the responder
 chain would otherwise eat before any view saw them. The monitor is installed only while recording.
-Recording is also tied to the Settings window being the key surface: closing it, moving to another
-window, or leaving the app cancels the attempt and restores the live shortcut monitor.
+Recording is also tied to the Settings page being the key surface: leaving the page, moving to
+another window, or leaving the app cancels the attempt and restores the live shortcut monitor.
 
 ### `.flagsChanged` as well as `.keyDown`
 
@@ -65,7 +65,8 @@ numeric-keypad bit are noise the window server sets on its own.
 
 ### The field owns the recording only while it is the key interaction surface
 
-`SettingsWindowController.windowDidResignKey` cancels the recording, because a keystroke meant
-for the next application must not be saved as Uttrflow's shortcut. The session tap stops, the
-key-down swallow goes with it, and another ⌘Q reaches the foreground app normally. The window's
-`windowWillClose` does the same when the user closes Settings.
+The main window losing the keyboard cancels the recording, through
+`MainWindowController.onSettingsLostFocus`, because a keystroke meant for the next application
+must not be saved as Uttrflow's shortcut. The session tap stops, the key-down swallow goes with it,
+and another ⌘Q reaches the foreground app normally. Leaving the Settings page for another page does
+the same, and so does a search that hides the row that is listening.

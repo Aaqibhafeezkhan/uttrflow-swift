@@ -1,50 +1,76 @@
 public import struct Foundation.Date
+public import struct Foundation.Locale
 import UttrflowCore
 import UttrflowPredict
 public import UttrflowSettings
 
-/// The whole window, as the view is given it.
+/// The whole Settings page, as the view is given it.
 public struct SettingsWindowPresentation: Sendable, Equatable {
     public let tabs: [SettingsTabItem]
     public let selected: SettingsTab
+    /// The selected tab, or every row matching the search while one is typed.
     public let pane: SettingsPane
+    /// What is typed in the search field.
+    public let query: String
 }
 
-/// Turns the user's settings into what the Settings window draws, naming no engine or file.
+/// Turns the user's settings into what the Settings page draws, naming no engine or file.
 public enum SettingsPresenter {
-    /// Every tab, in sidebar order, driven by ``SettingsTab/allCases`` so a new case adds a tab.
+    /// What the empty search field says.
+    public static let searchPlaceholder = "Search settings"
+
+    /// Every tab, in the design's order, driven by ``SettingsTab/allCases`` so a new case adds a tab.
     public static func tabs() -> [SettingsTabItem] {
         SettingsTab.allCases.map { tab in
-            switch tab {
-            case .general:
-                SettingsTabItem(tab: tab, title: "General", symbolName: "gearshape")
-            case .languages:
-                SettingsTabItem(tab: tab, title: "Languages", symbolName: "globe")
-            case .dictation:
-                SettingsTabItem(tab: tab, title: "Dictation", symbolName: "mic")
-            case .suggestions:
-                SettingsTabItem(tab: tab, title: "AI suggestions", symbolName: "text.cursor")
-            case .privacy:
-                SettingsTabItem(tab: tab, title: "Privacy", symbolName: "lock")
-            }
+            SettingsTabItem(tab: tab, title: title(of: tab), symbolName: symbolName(of: tab))
         }
     }
 
-    /// The whole window: every tab, which one is showing, and what that one draws.
+    /// What a tab is called.
+    public static func title(of tab: SettingsTab) -> String {
+        switch tab {
+        case .general: "General"
+        case .languages: "Languages"
+        case .dictation: "Dictation"
+        case .suggestions: "AI suggestions"
+        case .privacy: "Privacy"
+        case .diagnostics: "Diagnostics"
+        }
+    }
+
+    /// The SF Symbol beside a tab's name.
+    static func symbolName(of tab: SettingsTab) -> String {
+        switch tab {
+        case .general: "gearshape"
+        case .languages: "globe"
+        case .dictation: "mic"
+        case .suggestions: "sparkles"
+        case .privacy: "checkmark.shield"
+        case .diagnostics: "waveform.path.ecg"
+        }
+    }
+
+    /// The whole page: every tab, which one is showing, and what that one draws or the search found.
     public static func window(
         showing tab: SettingsTab,
         settings: Settings,
         capabilities: SettingsCapabilities = .everything,
         personalisation: SettingsPersonalisation = .nothing,
-        at moment: Date = Date()
+        at moment: Date = Date(),
+        query: String = ""
     ) -> SettingsWindowPresentation {
-        SettingsWindowPresentation(
+        let searching = !SearchQuery.needle(in: query).isEmpty
+        return SettingsWindowPresentation(
             tabs: tabs(),
             selected: tab,
-            pane: pane(
-                for: tab, settings: settings, capabilities: capabilities,
-                personalisation: personalisation, at: moment)
-        )
+            pane: searching
+                ? search(
+                    query, settings: settings, capabilities: capabilities,
+                    personalisation: personalisation, at: moment)
+                : pane(
+                    for: tab, settings: settings, capabilities: capabilities,
+                    personalisation: personalisation, at: moment),
+            query: query)
     }
 
     /// One tab, drawn from the settings and what this Mac can do.
@@ -61,7 +87,46 @@ public enum SettingsPresenter {
         case .dictation: dictation(settings, capabilities, personalisation)
         case .suggestions: suggestions(settings, personalisation, capabilities, moment)
         case .privacy: privacy(settings, capabilities, personalisation)
+        // Drawn from the diagnostics the main window already holds, so there are no rows here.
+        case .diagnostics:
+            SettingsPane(
+                tab: .diagnostics, title: title(of: .diagnostics), banner: nil, groups: [], callout: nil)
         }
+    }
+
+    // MARK: - Search
+
+    /// Every row on every tab that mentions the query, grouped under its tab and card.
+    public static func search(
+        _ query: String,
+        settings: Settings,
+        capabilities: SettingsCapabilities = .everything,
+        personalisation: SettingsPersonalisation = .nothing,
+        at moment: Date = Date(),
+        locale: Locale = .autoupdatingCurrent
+    ) -> SettingsPane {
+        let groups = SettingsTab.allCases.flatMap { tab in
+            let pane = pane(
+                for: tab, settings: settings, capabilities: capabilities,
+                personalisation: personalisation, at: moment)
+            return pane.groups.compactMap { group -> SettingsGroup? in
+                let heading = [pane.title, group.title].compactMap(\.self).joined(separator: " · ")
+                // A card whose heading matches keeps every row, since the heading is what was looked for.
+                let rows =
+                    SearchQuery.matches([heading], query: query, locale: locale) { [$0] }.isEmpty
+                    ? SearchQuery.matches(group.rows, query: query, locale: locale) {
+                        [$0.label, $0.explanation, $0.keyedExplanation?.text]
+                    }
+                    : group.rows
+                let kept = rows.filter { $0.style != .add }
+                guard !kept.isEmpty else { return nil }
+                return SettingsGroup(id: "\(tab.rawValue).\(group.id)", title: heading, rows: kept)
+            }
+        }
+        let needle = SearchQuery.needle(in: query)
+        return SettingsPane(
+            tab: .general, title: "Search", banner: nil, groups: groups, callout: nil,
+            emptySearch: groups.isEmpty ? "No setting mentions “\(needle)”." : nil)
     }
 
     // MARK: - General
@@ -75,86 +140,96 @@ public enum SettingsPresenter {
         so it is back to the default. Choose another any time.
         """
 
-    /// One shortcut's row, drawn the same way whichever shortcut it is.
+    /// What the Dictate row says under its name, which follows how the shortcut is held.
+    static func dictateExplanation(_ activation: HotkeyActivation) -> String {
+        switch activation {
+        case .holdToTalk: "Hold to talk, anywhere"
+        case .pressToToggle: "Press to start talking, and again to stop"
+        }
+    }
 
+    /// The tile beside each shortcut's row.
+    static func icon(for action: ShortcutAction) -> SettingsIcon {
+        switch action {
+        case .dictate: .symbol("mic", .dictation)
+        case .clipboard: .symbol("list.clipboard", .suggestion)
+        case .pasteLastTranscript: .symbol("text.insert", .info)
+        case .copyLastTranscript: .symbol("doc.on.doc", .mint)
+        }
+    }
+
+    /// One shortcut's row, drawn the same way whichever shortcut it is.
     private static func shortcutRow(
         _ descriptor: ShortcutDescriptor, _ settings: Settings,
         _ capabilities: SettingsCapabilities
     ) -> SettingsRow {
         let binding = settings.shortcuts.first(for: descriptor.action)
-        guard !capabilities.unarmedShortcuts.contains(descriptor.action) else {
-            return SettingsRow(
-                id: "shortcut.\(descriptor.action.rawValue)",
-                label: descriptor.label,
-                explanation: unarmed,
-                control: .shortcut(
-                    action: descriptor.action,
-                    keys: binding.map(SettingsShortcut.keycaps) ?? []))
-        }
-        if settings.shortcutsReturnedToDefault.contains(descriptor.action) {
-            return SettingsRow(
-                id: "shortcut.\(descriptor.action.rawValue)",
-                label: descriptor.label,
-                explanation: returnedToDefault,
-                control: .shortcut(
-                    action: descriptor.action,
-                    keys: binding.map(SettingsShortcut.keycaps(for:)) ?? []))
-        }
-        return SettingsRow(
-            id: "shortcut.\(descriptor.action.rawValue)",
-            label: descriptor.label,
-            // Only Fn, which macOS has its own plans for. See `Docs/ux-settings-model.md`.
-            explanation: binding?.heldModifier == nil
-                ? descriptor.explanation
-                : """
+        let control = SettingsControl.shortcut(
+            action: descriptor.action, keys: binding.map(SettingsShortcut.keycaps(for:)) ?? [])
+        let explanation: String? =
+            if capabilities.unarmedShortcuts.contains(descriptor.action) {
+                unarmed
+            } else if settings.shortcutsReturnedToDefault.contains(descriptor.action) {
+                returnedToDefault
+            } else if binding?.heldModifier != nil {
+                // Only Fn, which macOS has its own plans for. See `Docs/ux-settings-model.md`.
+                """
                 If pressing fn also opens Emoji or Apple's dictation, \
                 set System Settings → Keyboard → "Press 🌐 key to" to \
                 Do Nothing.
-                """,
-            control: .shortcut(
-                action: descriptor.action,
-                keys: binding.map(SettingsShortcut.keycaps(for:)) ?? []))
+                """
+            } else if descriptor.action == .dictate {
+                dictateExplanation(settings.hotkeyActivation)
+            } else {
+                descriptor.explanation
+            }
+        return SettingsRow(
+            id: "shortcut.\(descriptor.action.rawValue)",
+            label: descriptor.label,
+            explanation: explanation,
+            control: control,
+            icon: icon(for: descriptor.action))
     }
 
-    /// General: the floating button, the shortcut, sound, appearance, login and updating.
+    /// Double-tapping the Dictate keys keeps the microphone open, which only holding to talk offers.
+    static func handsFreeRow(_ settings: Settings) -> SettingsRow? {
+        guard settings.hotkeyActivation == .holdToTalk,
+            let binding = settings.shortcuts.first(for: .dictate)
+        else { return nil }
+        return SettingsRow(
+            id: "handsFree",
+            label: "Hands-free",
+            control: .status("On"),
+            badge: "NEW",
+            keyedExplanation: SettingsKeyedSentence(
+                before: "Double-tap", keys: SettingsShortcut.keycaps(for: binding),
+                after: "to keep listening · tap once to stop"),
+            style: .inset)
+    }
 
+    /// General: the shortcuts, the floating button, sound and login, updating, and the two features.
     private static func general(
         _ settings: Settings, _ capabilities: SettingsCapabilities
     ) -> SettingsPane {
-        SettingsPane(
+        var shortcuts = ShortcutRegistry.all.map { shortcutRow($0, settings, capabilities) }
+        if let handsFree = handsFreeRow(settings) {
+            shortcuts.insert(handsFree, at: 1)
+        }
+        shortcuts.append(
+            SettingsRow(
+                id: "activation",
+                label: "How holding works",
+                control: .segmented(
+                    options: HotkeyActivation.allCases.map(activationOption),
+                    selectedID: settings.hotkeyActivation.rawValue),
+                icon: .symbol("hand.raised", .info)))
+
+        return SettingsPane(
             tab: .general,
-            title: "General",
+            title: title(of: .general),
             banner: nil,
             groups: [
-                SettingsGroup(
-                    id: "features",
-                    title: nil,
-                    rows: [
-                        toggleRow(
-                            .dictationEnabled,
-                            label: "Dictation",
-                            explanation: "Off, the shortcut and the floating button do nothing.",
-                            settings, capabilities),
-                        toggleRow(
-                            .clipboardEnabled,
-                            label: "Clipboard",
-                            explanation: "Off, copies are not kept and the clipboard shortcut is released.",
-                            settings, capabilities),
-                    ]),
-                SettingsGroup(
-                    id: "shortcut",
-                    title: nil,
-                    rows: [] + ShortcutRegistry.all.map { shortcutRow($0, settings, capabilities) } + [
-                        SettingsRow(
-                            id: "activation",
-                            label: "Activation",
-                            explanation:
-                                "Hold: release to finish. Toggle: press once to start, again to stop.",
-                            control: .segmented(
-                                options: HotkeyActivation.allCases.map(activationOption),
-                                selectedID: settings.hotkeyActivation.rawValue)
-                        )
-                    ]),
+                SettingsGroup(id: "shortcut", title: "Shortcuts", rows: shortcuts),
                 SettingsGroup(
                     id: "floatingButton",
                     title: "Floating button",
@@ -162,45 +237,80 @@ public enum SettingsPresenter {
                         toggleRow(
                             .showsFloatingButton,
                             label: "Show the floating button",
-                            explanation: "Press and hold it to dictate, exactly like the shortcut.",
-                            settings, capabilities),
+                            explanation: "Press and hold it to dictate",
+                            settings, capabilities
+                        ).with(icon: .symbol("waveform", .dictation)),
                         SettingsRow(
                             id: "anchor",
                             label: "Position",
-                            control: .anchorPicker(selected: settings.floatingButtonAnchor),
+                            control: .menu(
+                                options: DockAnchor.allCases.map(anchorOption),
+                                selectedID: settings.floatingButtonAnchor.rawValue),
                             // The grip switch's dependency: nothing to position while there is no button.
                             unavailability: settings.showsFloatingButton
-                                ? nil : "Turn the floating button on before choosing where it sits."
-                        ),
+                                ? nil : "Turn the floating button on before choosing where it sits.",
+                            icon: .symbol("macbook", .neutral)),
                         toggleRow(
                             .shrinksToGripWhenIdle,
-                            label: "Shrink it to a grip until I point at it",
-                            settings, capabilities),
+                            label: "Shrink to a grip until I point at it",
+                            settings, capabilities
+                        ).with(icon: .symbol("waveform.path.ecg", .info)),
                         toggleRow(
                             .minimisesWhileDictating,
                             label: "Get Uttrflow out of the way while I dictate",
                             explanation:
                                 "Minimises the window so you can see what you are typing into.",
-                            settings, capabilities),
+                            settings, capabilities
+                        ).with(icon: .symbol("sparkles", .suggestion)),
                     ]),
                 SettingsGroup(
-                    id: "appearance",
-                    title: nil,
-                    rows: [appearanceRow(settings)]),
-                SettingsGroup(
                     id: "system",
-                    title: nil,
+                    title: "Sound & startup",
                     rows: [
                         toggleRow(
                             .playsSoundWhenRecordingStarts,
                             label: "Play a sound when recording starts",
-                            settings, capabilities),
+                            settings, capabilities
+                        ).with(icon: .symbol("bolt", .amber)),
                         toggleRow(
-                            .opensAtLogin, label: "Open at login", settings, capabilities),
+                            .opensAtLogin, label: "Open at login", settings, capabilities
+                        ).with(icon: .symbol("power", .dictation)),
                     ]),
                 updates(settings, capabilities),
+                SettingsGroup(
+                    id: "features",
+                    title: "Features",
+                    rows: [
+                        toggleRow(
+                            .dictationEnabled,
+                            label: "Dictation",
+                            explanation: "Off, the shortcut and the floating button do nothing.",
+                            settings, capabilities
+                        ).with(icon: .symbol("mic", .dictation)),
+                        toggleRow(
+                            .clipboardEnabled,
+                            label: "Clipboard",
+                            explanation: "Off, copies are not kept and the clipboard shortcut is released.",
+                            settings, capabilities
+                        ).with(icon: .symbol("list.clipboard", .suggestion)),
+                    ]),
             ],
             callout: nil)
+    }
+
+    /// One place the floating button can park, as a pop-up option.
+    private static func anchorOption(_ anchor: DockAnchor) -> SettingsOption {
+        SettingsOption(id: anchor.rawValue, title: title(of: anchor), change: .anchor(anchor))
+    }
+
+    /// What a parking place is called.
+    static func title(of anchor: DockAnchor) -> String {
+        switch anchor {
+        case .bottomLeft: "Bottom left"
+        case .bottomCentre: "Bottom centre"
+        case .bottomRight: "Bottom right"
+        case .rightEdge: "Right edge"
+        }
     }
 
     /// Updating: the version, a way to ask now, and whether to be asked first, feed or no feed.
@@ -213,7 +323,10 @@ public enum SettingsPresenter {
         var rows: [SettingsRow] = []
 
         if let version = capabilities.versionDescription {
-            rows.append(SettingsRow(id: "version", label: "Version", control: .text(version)))
+            rows.append(
+                SettingsRow(
+                    id: "version", label: "Version", control: .text(version),
+                    icon: .symbol("cpu", .mint)))
         }
 
         rows.append(
@@ -223,7 +336,8 @@ public enum SettingsPresenter {
                 explanation: capabilities.canCheckForUpdates
                     ? "Uttrflow also checks on its own every six hours." : nil,
                 control: .action(title: "Check Now", change: .checkForUpdatesNow),
-                unavailability: capabilities.canCheckForUpdates ? nil : noFeed))
+                unavailability: capabilities.canCheckForUpdates ? nil : noFeed,
+                icon: .symbol("arrow.triangle.2.circlepath", .info)))
 
         rows.append(
             toggleRow(
@@ -231,7 +345,8 @@ public enum SettingsPresenter {
                 label: "Install updates automatically",
                 explanation:
                     "Off means Uttrflow asks first. Either way it never installs mid-dictation.",
-                settings, capabilities))
+                settings, capabilities
+            ).with(icon: .symbol("checkmark.shield", .dictation)))
 
         return SettingsGroup(id: "updates", title: "Updates", rows: rows)
     }
@@ -249,63 +364,89 @@ public enum SettingsPresenter {
 
     // MARK: - Languages
 
-    /// Languages: which of the offered languages Uttrflow listens for.
+    /// The row saying which languages Uttrflow listens for, as chips with the rest to add.
+    static func listenForRow(_ settings: Settings) -> SettingsRow {
+        let spoken = settings.profile.preferredLanguages
+        let offered = SettingsLanguage.offered
+        return SettingsRow(
+            id: "spokenLanguages",
+            label: "Listen for",
+            explanation: "Uttrflow needs at least one",
+            control: .languages(
+                chips: offered.filter { spoken.contains($0.code) }.map { language in
+                    SettingsChip(
+                        id: language.id, title: language.name,
+                        // The last language cannot come off, so its chip offers no ×.
+                        removal: spoken.count > 1 ? .spokenLanguage(language.code, isSpoken: false) : nil)
+                },
+                add: offered.filter { !spoken.contains($0.code) }.map { language in
+                    SettingsOption(
+                        id: language.id, title: language.name,
+                        change: .spokenLanguage(language.code, isSpoken: true))
+                }),
+            icon: .symbol("globe", .info))
+    }
+
+    /// The tidying row, shared by every screen that offers the level.
+    static func tidyingRow(
+        _ level: SettingsTidyingLevel, _ capabilities: SettingsCapabilities
+    ) -> SettingsRow {
+        SettingsRow(
+            id: "tidyingLevel",
+            label: SettingsTidyingLevel.rowLabel,
+            explanation: SettingsTidyingLevel.rowExplanation,
+            control: .segmented(
+                options: SettingsTidyingLevel.allCases.map { option in
+                    SettingsOption(id: option.rawValue, title: option.title, change: .tidying(option))
+                },
+                selectedID: level.rawValue),
+            unavailability: SettingsEditor.unavailability(ofTidying: .standard, given: capabilities),
+            icon: .symbol("wand.and.stars", .suggestion))
+    }
+
+    /// The sentence the example is spoken as; it needs filler and a slip to show anything.
+    static let exampleSpoken = "um so i think we should uh ship it on friday"
+
+    /// The example at each level; a `switch`, so a third level cannot be added without writing its line.
+    static func tidied(at level: SettingsTidyingLevel) -> String {
+        switch level {
+        case .light: "Um, so I think we should, uh, ship it on Friday."
+        case .standard: "I think we should ship it on Friday."
+        }
+    }
+
+    /// The example as the level in force writes it.
+    static func tidyExample(_ level: SettingsTidyingLevel) -> SettingsTidyExample {
+        SettingsTidyExample(
+            groupID: "tidying", spoken: exampleSpoken,
+            writtenLabel: "Uttrflow writes · \(level.title)", written: tidied(at: level))
+    }
+
+    /// Languages: which languages Uttrflow listens for, and how much it tidies, shown on an example.
     private static func languages(
         _ settings: Settings, _ capabilities: SettingsCapabilities
     ) -> SettingsPane {
-        let spoken = settings.profile.preferredLanguages
         let level = SettingsTidyingLevel(preference: settings.engines.transformerPreference)
         return SettingsPane(
             tab: .languages,
-            title: "Languages",
+            title: title(of: .languages),
             banner: nil,
             groups: [
-                SettingsGroup(
-                    id: "spoken",
-                    title: "Languages you speak",
-                    rows: SettingsLanguage.offered.map { language in
-                        let isSpoken = spoken.contains(language.code)
-                        return SettingsRow(
-                            id: language.id,
-                            label: language.name,
-                            explanation: language.endonym,
-                            control: .tick(
-                                isTicked: isSpoken,
-                                change: .spokenLanguage(language.code, isSpoken: !isSpoken)),
-                            // The last language cannot come off, so the row says so before it is tried.
-                            unavailability: isSpoken && spoken.count == 1
-                                ? "Uttrflow needs at least one language to listen for." : nil)
-                    }),
-                SettingsGroup(
-                    id: "tidying",
-                    title: "Tidying up",
-                    rows: [
-                        SettingsRow(
-                            id: "tidyingLevel",
-                            label: SettingsTidyingLevel.rowLabel,
-                            explanation: SettingsTidyingLevel.rowExplanation,
-                            control: .segmented(
-                                options: SettingsTidyingLevel.allCases.map { option in
-                                    SettingsOption(
-                                        id: option.rawValue, title: option.title,
-                                        change: .tidying(option))
-                                },
-                                selectedID: level.rawValue),
-                            unavailability: SettingsEditor.unavailability(
-                                ofTidying: .standard, given: capabilities))
-                    ]),
+                SettingsGroup(id: "spoken", title: "Languages you speak", rows: [listenForRow(settings)]),
+                SettingsGroup(id: "tidying", title: "Tidying up", rows: [tidyingRow(level, capabilities)]),
             ],
             callout: SettingsCallout(
-                symbolName: "globe",
+                symbolName: "info.circle",
                 message:
-                    "Mixing English and Hindi in one sentence is expected and handled. Tidying up "
-                    + "is strongest in English today. Hindi is written in Latin letters the way people "
-                    + "type it — never Devanagari, never translated."))
+                    "Mixing English and Hindi in one sentence is expected and handled. Hindi is "
+                    + "written in Latin letters the way people type it, never Devanagari, never "
+                    + "translated."),
+            example: tidyExample(level))
     }
 
     // MARK: - Dictation
 
-    /// Dictation: how much is tidied, how it is transcribed, and what to forget.
+    /// Dictation: how it is transcribed, where the words go, the clean-up steps, and what was learned.
     private static func dictation(
         _ settings: Settings,
         _ capabilities: SettingsCapabilities,
@@ -314,7 +455,7 @@ public enum SettingsPresenter {
         let quality = SettingsTranscriptionQuality(engine: settings.engines.speech)
         return SettingsPane(
             tab: .dictation,
-            title: "Dictation",
+            title: title(of: .dictation),
             banner: nil,
             groups: [
                 SettingsGroup(
@@ -332,33 +473,45 @@ public enum SettingsPresenter {
                                 selectedID: quality.rawValue),
                             // Off only when neither option can run, and moving it would achieve nothing.
                             unavailability: capabilities.readySpeechEngines.isEmpty
-                                ? "This option needs a download that has not finished yet." : nil)
+                                ? "This option needs a download that has not finished yet." : nil,
+                            icon: .symbol("waveform", .dictation))
                     ]),
-                SettingsDestinations.steps(settings.cleaning),
                 SettingsDestinations.places(
                     settings.destinations, lastApp: personalisation.lastDictationApp),
+                SettingsDestinations.steps(settings.cleaning),
                 SettingsGroup(
                     id: "learned",
                     title: "What Uttrflow has picked up",
-                    rows: [forgetLearnedRow(personalisation)]),
+                    rows: [learnedWordsRow(personalisation)]),
                 pages,
             ],
             callout: SettingsCallout(
-                symbolName: "gauge",
+                symbolName: "info.circle",
                 message:
                     "Dictation runs on this Mac, so it works with or without an internet "
-                    + "connection."))
+                    + "connection.",
+                tint: .dictation))
     }
 
-    /// The main window's pages that have no sidebar row, each a row that opens it.
+    /// How many words Uttrflow knows from the user, and the way to the page that lists them.
+    static func learnedWordsRow(_ personalisation: SettingsPersonalisation) -> SettingsRow {
+        let words = personalisation.learnedWords + personalisation.addedWords
+        return SettingsRow(
+            id: "learnedWords",
+            label: "Words it learned from you",
+            explanation: words == 0
+                ? "Names and terms appear here as you dictate them"
+                : counted(words, "name or term", "names and terms"),
+            control: .action(title: "Open Dictionary", change: .openPage(.dictionary)),
+            icon: .symbol("book.closed", .amber))
+    }
+
+    /// The main window's page that has no sidebar row and no tab here, as a row that opens it.
     static let pages = SettingsGroup(
         id: "pages",
         title: "More in the Uttrflow window",
         rows: [
-            pageRow(.style, explanation: "How much tidying Uttrflow does to what you said."),
-            pageRow(.corrections, explanation: "What your dictionary changed after it heard you."),
-            pageRow(
-                .diagnostics, explanation: "What is installed, what is allowed, and how fast it runs."),
+            pageRow(.corrections, explanation: "What your dictionary changed after it heard you.")
         ])
 
     /// A row that opens one page of the main window.
@@ -376,7 +529,7 @@ public enum SettingsPresenter {
 
     // MARK: - Suggestions
 
-    /// What tab-to-complete does, where it does it, and every place it has been switched off.
+    /// The master switch, the quiet switch and the pause, then where suggestions are left alone.
     private static func suggestions(
         _ settings: Settings,
         _ personalisation: SettingsPersonalisation,
@@ -385,28 +538,31 @@ public enum SettingsPresenter {
     ) -> SettingsPane {
         SettingsPane(
             tab: .suggestions,
-            title: "AI suggestions",
+            title: title(of: .suggestions),
             banner: suggestionModelBanner(settings, capabilities),
             groups: [
                 SettingsGroup(
                     id: "suggestions",
-                    title: nil,
+                    title: "AI suggestions",
                     rows: [
                         toggleRow(
                             .suggestionsEnabled,
-                            label: "Finish what I am typing",
+                            label: "Turn on AI suggestions",
                             explanation: suggestionsExplanation,
-                            settings, .everything),
+                            settings, .everything
+                        ).with(icon: .symbol("power", .suggestion)),
                         toggleRow(
                             .quietSuggestions,
                             label: "Only suggest when it is sure",
                             explanation: "Never offers a list to choose between.",
-                            settings, .everything),
+                            settings, .everything
+                        ).with(icon: .symbol("bolt", .amber)),
                         pauseRow(settings, moment),
                     ]),
                 applicationGroup(settings, personalisation),
-            ],
-            callout: SettingsCallout(symbolName: "lock", message: suggestionsPromise))
+                acceptKeyGroup(settings, personalisation),
+            ].compactMap(\.self),
+            callout: SettingsCallout(symbolName: "lock", message: suggestionsPromise, tint: .suggestion))
     }
 
     /// What switching suggestions on lets Uttrflow read, write and keep.
@@ -415,12 +571,12 @@ public enum SettingsPresenter {
         + "line from lines you have sent before, from this Mac, or written by AI that runs on it. "
         + "Remembers the lines you send. Off until you ask for it."
 
-    /// Where everything suggestions read and keep stays, and where to turn them off or forget them.
+    /// Where suggestions run, where everything they read and keep stays, and where to turn them off or forget them.
     static let suggestionsPromise =
-        "What it reads stays on this Mac. The lines it remembers are kept in Uttrflow's own "
-        + "folder. Nothing is uploaded, and password, one-time-code, PIN, card security "
-        + "code and recovery-answer fields are never read. "
-        + "Turn it off for one application, or forget what it learned there, under Applications below."
+        "Suggestions work in every app except the ones listed. What it reads stays on this Mac. "
+        + "The lines it remembers are kept in Uttrflow's own folder. Nothing is uploaded, and "
+        + "password, one-time-code, PIN, card security code and recovery-answer fields are never "
+        + "read. Turn it off for one application, or forget what it learned there, in the lists above."
 
     /// Says what the model is doing, since a switch that is on and silent is indistinguishable from broken.
     static func suggestionModelBanner(
@@ -465,24 +621,25 @@ public enum SettingsPresenter {
         let remaining = settings.suggestions.pauseRemaining(at: moment)
         return SettingsRow(
             id: "pauseSuggestions",
-            label: "Pause everywhere",
+            label: "Pause for a while",
             explanation: pauseSentence(remaining),
             control: .action(
-                title: remaining == nil ? "Pause for 30 Minutes" : "Resume",
+                title: remaining == nil ? "Pause 30 min" : "Resume",
                 change: .pauseSuggestions(isOn: remaining == nil)),
-            unavailability: settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff)
+            unavailability: settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff,
+            icon: .symbol("pause", .mint))
     }
 
     /// What a running pause has left, rounded up so a pause never reads as "0 minutes left".
     static func pauseSentence(_ remaining: Double?) -> String {
         guard let remaining else {
-            return "Stops for half an hour, then comes back on its own."
+            return "Stops for 30 minutes, then comes back on its own."
         }
         let minutes = max(1, Int((remaining / 60).rounded(.up)))
         return "Paused. Comes back on its own in \(counted(minutes, "minute", "minutes"))."
     }
 
-    /// Every application the screen knows of, each with the switch that turns suggestions back on.
+    /// Every application suggestions are off in, each with the button that turns them back on.
     static func applicationGroup(
         _ settings: Settings, _ personalisation: SettingsPersonalisation
     ) -> SettingsGroup {
@@ -490,48 +647,84 @@ public enum SettingsPresenter {
         let rows =
             preferences
             .knownApplications(learnedIn: personalisation.applicationsWithSuggestions)
-            .flatMap { applicationRows($0, preferences, settings, personalisation) }
+            .filter { !preferences.state(of: $0.bundleIdentifier).isOn }
+            .flatMap { application in
+                [offApplicationRow(application, preferences, settings)]
+                    + forgetRows(application, personalisation)
+            }
         return SettingsGroup(
-            id: "suggestionApplications", title: "Applications", rows: rows + [addApplicationRow(settings)])
+            id: "suggestionApplications", title: "Not used in these apps",
+            rows: rows + [addApplicationRow(settings)])
+    }
+
+    /// Every application suggestions run in that has a choice or a corpus to show, or nothing when none has.
+    static func acceptKeyGroup(
+        _ settings: Settings, _ personalisation: SettingsPersonalisation
+    ) -> SettingsGroup? {
+        let preferences = settings.suggestions
+        let off = settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff
+        let rows =
+            preferences
+            .knownApplications(learnedIn: personalisation.applicationsWithSuggestions)
+            .filter { preferences.state(of: $0.bundleIdentifier).isOn }
+            .flatMap { application in
+                [
+                    onApplicationRow(application, unavailability: off),
+                    acceptKeyRow(application, preferences, unavailability: off),
+                ] + forgetRows(application, personalisation)
+            }
+        guard !rows.isEmpty else { return nil }
+        return SettingsGroup(id: "suggestionKeys", title: "Used in these apps", rows: rows)
+    }
+
+    /// One application suggestions run in, and the button that leaves it alone from now on.
+    private static func onApplicationRow(
+        _ application: SuggestionApplication, unavailability: String?
+    ) -> SettingsRow {
+        let identifier = application.bundleIdentifier
+        return SettingsRow(
+            id: "suggestionsIn.\(identifier)",
+            label: application.name,
+            control: .action(
+                title: "Leave Alone", change: .suggestionsHere(application: identifier, isOn: false)),
+            unavailability: unavailability,
+            icon: .application(bundleIdentifier: identifier, name: application.name))
     }
 
     /// Turns suggestions off in an application before anything has been drawn or learned there.
     static func addApplicationRow(_ settings: Settings) -> SettingsRow {
         SettingsRow(
             id: "addSuggestionApplication",
-            label: "Turn off in another application",
-            explanation: "Keeps AI suggestions out of an application before anything is learned there.",
-            control: .action(title: "Add Application…", change: .chooseApplicationToTurnOffSuggestions),
-            unavailability: settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff)
+            label: "Add an app to leave alone",
+            control: .action(
+                title: "Add an app to leave alone", change: .chooseApplicationToTurnOffSuggestions),
+            unavailability: settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff,
+            style: .add)
     }
 
-    /// One application: its switch, the key that accepts there, and what it has taught.
-    private static func applicationRows(
+    /// One application suggestions are off in, and the button that takes it off the list.
+    private static func offApplicationRow(
         _ application: SuggestionApplication,
         _ preferences: SuggestionPreferences,
-        _ settings: Settings,
-        _ personalisation: SettingsPersonalisation
-    ) -> [SettingsRow] {
+        _ settings: Settings
+    ) -> SettingsRow {
         let identifier = application.bundleIdentifier
-        let state = preferences.state(of: identifier)
-        let off = settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff
-        var rows: [SettingsRow] = [
-            SettingsRow(
-                id: "suggestionsIn.\(identifier)",
-                label: application.name,
-                explanation: applicationSentence(state),
-                control: .applicationSwitch(
-                    isOn: state.isOn,
-                    change: .suggestionsHere(application: identifier, isOn: !state.isOn)),
-                unavailability: off)
-        ]
-        if state.isOn {
-            rows.append(acceptKeyRow(application, preferences, unavailability: off))
-        }
-        if personalisation.suggestions(from: identifier) > 0 {
-            rows.append(forgetSuggestionsRow(application, personalisation))
-        }
-        return rows
+        return SettingsRow(
+            id: "suggestionsIn.\(identifier)",
+            label: application.name,
+            explanation: applicationSentence(preferences.state(of: identifier)),
+            control: .action(
+                title: "Remove", change: .suggestionsHere(application: identifier, isOn: true)),
+            unavailability: settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff,
+            icon: .application(bundleIdentifier: identifier, name: application.name))
+    }
+
+    /// The forget row for an application that has taught something, or nothing.
+    private static func forgetRows(
+        _ application: SuggestionApplication, _ personalisation: SettingsPersonalisation
+    ) -> [SettingsRow] {
+        personalisation.suggestions(from: application.bundleIdentifier) > 0
+            ? [forgetSuggestionsRow(application, personalisation)] : []
     }
 
     /// Why an application is off, said only when the reason is not the user's own choice.
@@ -539,8 +732,7 @@ public enum SettingsPresenter {
         switch state {
         case .on: nil
         case .turnedOff: "You turned AI suggestions off here."
-        case .offByDefault:
-            "Off to begin with: its own completion already reads the whole file."
+        case .offByDefault: "Off here by default (it has its own suggestions)"
         }
     }
 
@@ -563,7 +755,8 @@ public enum SettingsPresenter {
                         change: .suggestionAcceptKey(application: identifier, key: offered))
                 },
                 selectedID: key.rawValue),
-            unavailability: unavailability)
+            unavailability: unavailability,
+            style: .inset)
     }
 
     /// The fifth level: everything one application taught, counted before it is taken.
@@ -585,52 +778,51 @@ public enum SettingsPresenter {
 
     // MARK: - Privacy
 
-    /// Privacy: the promise, the retention period, and what signing out does not take.
+    /// Privacy: what stays on this Mac and for how long, how Uttrflow looks, and starting over.
     private static func privacy(
         _ settings: Settings, _ capabilities: SettingsCapabilities,
         _ personalisation: SettingsPersonalisation
     ) -> SettingsPane {
         SettingsPane(
             tab: .privacy,
-            title: "Privacy",
-            banner: SettingsBanner(
-                symbolName: "lock",
-                title: "Your words stay on your Mac",
-                message: SettingsPresenter.privacyPromise),
+            title: title(of: .privacy),
+            banner: nil,
             groups: [
                 SettingsGroup(
                     id: "retention",
-                    title: nil,
-                    rows: [retentionRow(settings)]),
-                SettingsGroup(
-                    id: "usage",
-                    title: nil,
+                    title: "Your data",
                     rows: [
+                        SettingsRow(
+                            id: "onDevice",
+                            label: "Your words stay on your Mac",
+                            explanation: "Nothing you say is uploaded",
+                            control: .status("On-device"),
+                            icon: .symbol("checkmark.shield", .dictation)),
+                        retentionRow(settings),
                         toggleRow(
                             .sharesUsageStatistics,
                             label: "Share anonymous usage statistics",
                             explanation:
                                 "Only counts and timings are sent, never what you dictate.",
-                            settings, capabilities)
-                    ]),
-                SettingsGroup(
-                    id: "diagnostics",
-                    title: nil,
-                    rows: [
+                            settings, capabilities
+                        ).with(icon: .symbol("chart.bar", .info)),
                         toggleRow(
                             .sendsCrashReports,
                             label: "Send crash reports",
                             explanation: SettingsPresenter.crashReportsExplanation,
-                            settings, .everything)
+                            settings, .everything
+                        ).with(icon: .symbol("exclamationmark.bubble", .neutral)),
                     ]),
+                SettingsGroup(id: "appearance", title: "Appearance", rows: [appearanceRow(settings)]),
                 SettingsGroup(
                     id: "reset",
-                    title: nil,
-                    rows: [resetRow(personalisation)]),
+                    title: "Start over",
+                    rows: [forgetLearnedRow(personalisation), resetRow(personalisation)]),
             ],
             callout: SettingsCallout(
-                symbolName: "person.crop.circle",
-                message: SettingsPresenter.signingOutKeepsEverything))
+                symbolName: "lock",
+                message: "\(privacyPromise) \(signingOutKeepsEverything)",
+                tint: .dictation))
     }
 
     /// What a crash report carries, in the words the row shows. See `Docs/crash-reporting.md`.
@@ -645,7 +837,7 @@ public enum SettingsPresenter {
 
     /// The privacy promise, written once for every screen. See `Docs/ux-settings-model.md`.
     static let privacyPromise =
-        "\(recordingsPromise) The text is kept on this Mac and deleted automatically. We "
+        "\(recordingsPromise) The text is kept on this Mac until you delete it, or for the period you choose. We "
         + "never see it, and it is not tied to your account. Local history, clips, "
         + "suggestions and retry recordings kept on this Mac until deleted are excluded "
         + "from Mac backups that honour that setting."
@@ -655,20 +847,32 @@ public enum SettingsPresenter {
         "Audio is deleted the moment it becomes text, and kept on this Mac for a day only "
         + "if it couldn’t be, so you can retry."
 
-    /// Light, dark, or the same as the Mac, sat in General beside the rest of how the app looks.
+    /// The order the theme is offered in: following the Mac first, then the two fixed looks.
+    static let offeredAppearances: [AppAppearance] = [.system, .light, .dark]
+
+    /// What a theme is called on the segmented control.
+    static func title(of appearance: AppAppearance) -> String {
+        switch appearance {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    /// Light, dark, or the same as the Mac.
     static func appearanceRow(_ settings: Settings) -> SettingsRow {
         SettingsRow(
             id: "appearance",
-            label: "Appearance",
+            label: "Theme",
             explanation:
                 "Uttrflow is drawn dark unless you would rather have it light, or the same as your Mac.",
-            control: .menu(
-                options: AppAppearance.allCases.map { offered in
+            control: .segmented(
+                options: offeredAppearances.map { offered in
                     SettingsOption(
-                        id: offered.rawValue, title: offered.title,
-                        change: .appearance(offered))
+                        id: offered.rawValue, title: title(of: offered), change: .appearance(offered))
                 },
-                selectedID: settings.appearance.rawValue))
+                selectedID: settings.appearance.rawValue),
+            icon: .symbol("moon", .suggestion))
     }
 
     /// How long the text of a dictation survives, offering only periods the store round-trips.
@@ -677,16 +881,15 @@ public enum SettingsPresenter {
         return SettingsRow(
             id: "transcripts",
             label: "Keep transcripts for",
-            explanation:
-                "How long the finished text stays in your history, so you can copy or "
-                + "re-insert it. Deleted automatically after that.",
+            explanation: "Choose a limit to delete older ones automatically",
             control: .menu(
                 options: SettingsRetention.offeredDays.map { offered in
                     SettingsOption(
                         id: String(offered), title: SettingsRetention.title(days: offered),
                         change: .retention(days: offered))
                 },
-                selectedID: String(days)))
+                selectedID: String(days)),
+            icon: .symbol("clock", .info))
     }
 
     // MARK: - Forgetting
@@ -702,7 +905,8 @@ public enum SettingsPresenter {
             control: .removal(
                 SettingsRemoval(reset: .learnedWords, title: "Forget", confirmation: nil)),
             unavailability: SettingsEditor.unavailability(
-                of: .learnedWords, given: personalisation))
+                of: .learnedWords, given: personalisation),
+            icon: .symbol("book.closed", .amber))
     }
 
     /// What forgetting takes and what it keeps, counted. See `Docs/ux-settings-model.md`.
@@ -737,7 +941,8 @@ public enum SettingsPresenter {
                     title: "Reset…",
                     confirmation: resetConfirmation(personalisation))),
             unavailability: SettingsEditor.unavailability(
-                of: .everything, given: personalisation))
+                of: .everything, given: personalisation),
+            icon: .symbol("trash", .danger))
     }
 
     /// The question, with the real numbers in it.

@@ -162,7 +162,9 @@ struct HomeRecentTests {
     /// Home must not show a dictation the History page has already promised is deleted.
     @Test("anything past its retention is gone from home too")
     func retention() {
-        let page = HistoryFixture.home(entries: [HistoryFixture.entry("ancient", daysAgo: 400)])
+        let page = HistoryFixture.home(
+            entries: [HistoryFixture.entry("ancient", daysAgo: 400)],
+            settings: Settings(transcriptRetentionDays: 7))
         #expect(page.recent.isEmpty)
         #expect(page.subtitle == "Nothing dictated yet. Hold the shortcut anywhere and talk.")
     }

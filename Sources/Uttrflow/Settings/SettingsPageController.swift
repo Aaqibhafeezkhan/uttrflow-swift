@@ -1,18 +1,14 @@
-// Owns the Settings window.
+// Owns the Settings page's model, which the main window draws beside its sidebar.
 
-import AppKit
 import UttrflowCore
-import UttrflowDictionary
-import UttrflowHistory
 import UttrflowSettings
 import UttrflowUX
-import SwiftUI
 
-/// Owns the Settings window, kept alive between openings; opening it is the one moment the app activates.
+/// Owns the Settings page's model, kept alive between visits so a tab and a recording survive them.
 @MainActor
-final class SettingsWindowController: NSObject, NSWindowDelegate {
-    private let model: SettingsViewModel
-    private var window: NSWindow?
+final class SettingsPageController {
+    /// What the main window draws when it shows Settings.
+    let model: SettingsViewModel
     /// What the suggestion model is doing, kept so a capability refresh cannot drop it.
     private var suggestionModel: SuggestionModelReadiness = .notAsked
     /// Which shortcuts the window server refused, kept for the same reason.
@@ -44,18 +40,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             onShortcutRecording: onShortcutRecording)
     }
 
-    /// Applies settings changed elsewhere while preserving the window's current tab and UI state.
+    /// The tab the page is on, which the sidebar lights its Settings row for.
+    var tab: SettingsTab { model.session.tab }
+
+    /// Applies settings changed elsewhere while preserving the page's current tab and UI state.
     func synchronize(settings: UttrflowSettings.Settings) {
         model.synchronize(settings: settings)
     }
 
-    /// Opens the window and tells it who is signed in; handed over each time, since that can change.
-    func show(_ tab: SettingsTab = .general, identity: AccountIdentity? = nil) {
-        route(to: tab, identity: identity)
-        let window = window ?? makeWindow()
-        self.window = window
-        NSApplication.shared.activate()
-        window.makeKeyAndOrderFront(nil)
+    /// Points the page at `tab` and reads again what may have changed since it was last shown.
+    func open(_ tab: SettingsTab = .general) {
+        route(to: tab)
         model.refreshPersonalisation()
         refreshCapabilities()
     }
@@ -77,13 +72,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Points the window at `tab` for whoever is signed in, through the one tab change that ends a recording.
-    func route(to tab: SettingsTab, identity: AccountIdentity?) {
-        model.identity = identity
+    /// Points the page at `tab`, through the one tab change that ends a recording.
+    func route(to tab: SettingsTab) {
         model.select(tab)
     }
 
-    /// Told by the app as the weights are fetched and read, so a window already open redraws.
+    /// Told by the app as the weights are fetched and read, so a page already showing redraws.
     func setSuggestionModel(_ readiness: SuggestionModelReadiness) {
         suggestionModel = readiness
         model.session.capabilities.suggestionModel = readiness
@@ -95,52 +89,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         model.session.capabilities.unarmedShortcuts = unarmed
     }
 
-    /// Applies a change the app worked out on the window's behalf, through the window's own session.
+    /// Applies a change the app worked out on the page's behalf, through the page's own session.
     func apply(_ change: SettingsChange) {
         model.apply(change)
     }
 
-    func close() {
-        window?.performClose(nil)
-    }
-
-    /// Keeps the window hidden rather than released, so the shortcut recorder's state survives.
-    func windowWillClose(_ notification: Notification) {
+    /// The page went out of sight or its window lost the keyboard, so a recording there ends.
+    func surfaceDidLoseFocus() {
         model.shortcutRecordingSurfaceDidLoseFocus()
-        // The main window's sidebar lights its Settings row while this is open.
-        onClose?()
-    }
-
-    func windowDidResignKey(_ notification: Notification) {
-        model.shortcutRecordingSurfaceDidLoseFocus()
-    }
-
-    func windowDidResignMain(_ notification: Notification) {
-        model.shortcutRecordingSurfaceDidLoseFocus()
-    }
-
-    /// The window has gone; nothing was necessarily altered, but what the interface shows has.
-    var onClose: (() -> Void)?
-
-    private func makeWindow() -> NSWindow {
-        let window = NSWindow(
-            contentRect: NSRect(
-                x: 0, y: 0,
-                width: SettingsMetrics.windowWidth, height: SettingsMetrics.windowHeight),
-            // `.fullSizeContentView`, so the rail runs under the traffic lights as in first-run.
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered, defer: false)
-        window.title = "Uttrflow Settings"
-        window.titlebarAppearsTransparent = true
-        // The rail already says what this is; a title bar repeating it is chrome doing nothing.
-        window.titleVisibility = .hidden
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        let hosting = NSHostingView(rootView: SettingsRootView(model: model))
-        // See `MainWindowController.makeWindow`: the hosting view would size the window to the tallest pane.
-        hosting.sizingOptions = []
-        window.contentView = hosting
-        window.center()
-        return window
     }
 }

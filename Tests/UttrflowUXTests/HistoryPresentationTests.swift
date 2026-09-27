@@ -149,10 +149,12 @@ struct HistoryRetentionTests {
     /// A page that would draw a dictation older than the window can break the promise for the store.
     @Test("anything older than the window is not shown")
     func dropsExpiredEntries() {
-        let page = HistoryFixture.page(entries: [
-            HistoryFixture.entry("Kept", daysAgo: 6),
-            HistoryFixture.entry("Gone", daysAgo: 9),
-        ])
+        let page = HistoryFixture.page(
+            entries: [
+                HistoryFixture.entry("Kept", daysAgo: 6),
+                HistoryFixture.entry("Gone", daysAgo: 9),
+            ],
+            settings: Settings(transcriptRetentionDays: 7))
 
         #expect(page.days.flatMap(\.rows).map(\.text) == ["Kept"])
     }
@@ -170,17 +172,26 @@ struct HistoryRetentionTests {
 
     @Test("the notice says how long the text lasts, and that no audio is kept")
     func noticeWhenNothingIsRecorded() {
-        let page = HistoryFixture.page(entries: [])
+        let page = HistoryFixture.page(entries: [], settings: Settings(transcriptRetentionDays: 7))
         #expect(
             page.retentionNotice.sentence
                 == "Kept on this Mac for 7 days, then deleted. Recordings are never saved.")
         #expect(page.retentionNotice.link.intent == .go(.settings(.privacy)))
     }
 
+    @Test("the notice says text kept always stays until it is deleted")
+    func noticeWhenKeptAlways() {
+        let page = HistoryFixture.page(entries: [])
+        #expect(
+            page.retentionNotice.sentence
+                == "Kept on this Mac until you delete it. Recordings are never saved.")
+    }
+
     /// The app keeps a recording only until its words land, and the notice says exactly that.
     @Test("the notice says a recording stays only until its words land")
     func noticeWhenAudioIsKept() {
-        let page = HistoryFixture.page(entries: [], keepsRecordings: true)
+        let page = HistoryFixture.page(
+            entries: [], settings: Settings(transcriptRetentionDays: 7), keepsRecordings: true)
         #expect(
             page.retentionNotice.sentence
                 == "Kept on this Mac for 7 days, then deleted. A recording stays only until its words land.")
@@ -294,7 +305,8 @@ struct HistoryEmptyTests {
         #expect(never.emptyState?.title == "Nothing yet")
         #expect(never.emptyState?.message.contains("never leaves this Mac") == true)
 
-        let expired = HistoryFixture.page(entries: [HistoryFixture.entry(daysAgo: 30)])
+        let expired = HistoryFixture.page(
+            entries: [HistoryFixture.entry(daysAgo: 30)], settings: Settings(transcriptRetentionDays: 7))
         #expect(expired.emptyState?.title == "Nothing left to show")
         #expect(expired.emptyState?.message.contains("7 days") == true)
     }

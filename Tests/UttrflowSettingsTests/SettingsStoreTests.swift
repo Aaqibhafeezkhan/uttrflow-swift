@@ -58,7 +58,7 @@ struct SettingsTests {
         #expect(settings.minimisesWhileDictating)
         #expect(settings.playsSoundWhenRecordingStarts)
         #expect(settings.opensAtLogin)
-        #expect(settings.transcriptRetentionDays == 7)
+        #expect(settings.transcriptRetentionDays == Settings.defaultTranscriptRetentionDays)
         #expect(settings.cleaning == .default)
         #expect(settings.destinations == .none)
     }
@@ -162,7 +162,7 @@ struct SettingsTests {
         #expect(settings.hotkeyActivation == .pressToToggle)
         #expect(!settings.opensAtLogin)
         #expect(settings.floatingButtonAnchor == .bottomRight)
-        #expect(settings.transcriptRetentionDays == 7)
+        #expect(settings.transcriptRetentionDays == Settings.defaultTranscriptRetentionDays)
         #expect(settings.engines == .default)
         #expect(settings.profile == .default)
     }
@@ -237,7 +237,7 @@ struct SettingsTests {
             """
         )
 
-        #expect(settings.transcriptRetentionDays == 7)
+        #expect(settings.transcriptRetentionDays == Settings.defaultTranscriptRetentionDays)
     }
 
     /// Keyed decoding never asks for a key this build has no case for. See `Docs/settings-decoding.md`.
@@ -269,7 +269,7 @@ struct SettingsTests {
 
     @Test("keeps a retention the user actually chose", arguments: [1, 30, 365])
     func acceptedRetention(days: Int) {
-        #expect(Settings.retention(days) == days)
+        #expect(Settings.retention(days, default: Settings.defaultRetentionDays) == days)
     }
 
     /// Each of these decodes cleanly and could never fire, leaving nothing to press.
@@ -320,6 +320,14 @@ struct SettingsTests {
         let settings = try decode(#"{"transcriptRetentionDays": 1}"#)
 
         #expect(settings.transcriptRetentionDays == 1)
+        #expect(settings.clipboardRetentionDays == Settings.defaultRetentionDays)
+    }
+
+    @Test("keeps transcripts until they are deleted, and unkept clips for a week, when nothing is stored")
+    func defaultRetentionPeriods() throws {
+        let settings = try decode("{}")
+
+        #expect(settings.transcriptRetentionDays == Settings.keepAlwaysDays)
         #expect(settings.clipboardRetentionDays == Settings.defaultRetentionDays)
     }
 

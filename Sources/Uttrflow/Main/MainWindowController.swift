@@ -16,7 +16,6 @@ struct MainContent: Sendable, Equatable {
     var corrections: CorrectionsPresentation
     var insights: InsightsPresentation
     var snippets: SnippetsPresentation
-    var style: StylePagePresentation
     var diagnostics: DiagnosticsPresentation
     var account: AccountPagePresentation
     /// The dictation shortcut's keys, which an empty page draws as keycaps.
@@ -41,6 +40,10 @@ final class MainWindowModel {
     var isSidebarExpanded: Bool
     /// Rises when something outside the window asks for the search field; the header watches it and takes focus.
     var searchFocusRequest = 0
+    /// Whether the pane shows Settings rather than ``page``; the page is kept for when the user leaves.
+    var showsSettings = false
+    /// The Settings page's model, handed over the first time Settings is shown.
+    var settings: SettingsViewModel?
 
     init(page: MainTab = .home, content: MainContent, isSidebarExpanded: Bool = false) {
         self.page = page
@@ -66,11 +69,6 @@ final class MainWindowModel {
         case .corrections: content.corrections.chrome
         case .insights: content.insights.chrome
         case .snippets: content.snippets.chrome
-        case .style: content.style.chrome
-        case .diagnostics:
-            MainPageChrome(
-                title: SidebarPresenter.title(for: .diagnostics),
-                caption: DiagnosticsPresenter.caption)
         case .account: content.account.chrome
         }
     }
@@ -81,6 +79,8 @@ final class MainWindowModel {
 final class MainWindowController {
     /// Everything the pages can ask for, carried out by the app, which owns every window and the pasteboard.
     var onIntent: ((MainIntent) -> Void)?
+    /// The pane left Settings or the window lost the keyboard, so a shortcut being recorded there ends.
+    var onSettingsLostFocus: (() -> Void)?
     /// A search field was typed in. The app re-presents the page.
     var onSearch: ((String) -> Void)?
     /// A scope was picked. Same contract as ``onSearch``.
@@ -98,6 +98,8 @@ final class MainWindowController {
 
     /// The observer for the window's occlusion, removed with the window.
     private var occlusionObserver: (any NSObjectProtocol)?
+    /// The observer for the window losing the keyboard, which ends a recording on the Settings page.
+    private var resignKeyObserver: (any NSObjectProtocol)?
 
     private let model: MainWindowModel
     private var window: NSWindow?
@@ -107,6 +109,8 @@ final class MainWindowController {
     var isVisible: Bool { window?.isVisible == true }
     /// The page currently on screen, so the app can re-present the right one.
     var page: MainTab { model.page }
+    /// Whether the pane is showing Settings, which the sidebar lights its Settings row for.
+    var isShowingSettings: Bool { model.showsSettings }
     /// Whether the sidebar is showing its names, so the menu item can say which way choosing it will go.
     var isSidebarExpanded: Bool { model.isSidebarExpanded }
     /// What is in the snippet editor, so a save intent can be carried out against it.
@@ -131,7 +135,7 @@ final class MainWindowController {
     }
 
     /// Whether Find has anywhere to put the caret: a window on screen, on a page that has a search field.
-    var canFocusSearch: Bool { isVisible && model.chrome.search != nil }
+    var canFocusSearch: Bool { isVisible && (model.showsSettings || model.chrome.search != nil) }
 
     /// Puts the caret in the page's search field, which is what Edit ▸ Find does.
     func focusSearch() {
@@ -162,7 +166,23 @@ final class MainWindowController {
 
     /// Brings the window up on `page`, building it the first time; the one entry point for every caller.
     func show(_ page: MainTab) {
+        if model.showsSettings {
+            model.showsSettings = false
+            onSettingsLostFocus?()
+        }
         model.page = page
+        bringForward()
+    }
+
+    /// Brings the window up on the Settings page drawn from `settings`.
+    func showSettings(_ settings: SettingsViewModel) {
+        model.settings = settings
+        model.showsSettings = true
+        bringForward()
+    }
+
+    /// Builds the window the first time, then puts it in front of the user.
+    private func bringForward() {
         let window = window ?? makeWindow()
         self.window = window
         // Asked for explicitly: opened from the menu bar or the Dock, nothing else brings the app forward.
@@ -205,6 +225,14 @@ final class MainWindowController {
         hosting.sizingOptions = []
         window.contentView = hosting
         window.center()
+        resignKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.model.showsSettings else { return }
+                self.onSettingsLostFocus?()
+            }
+        }
         // Closing, minimising, hiding the app and being covered all arrive as a change of occlusion.
         occlusionObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main

@@ -15,6 +15,7 @@ import UttrflowSettings
 private let noon = Date(timeIntervalSince1970: 1_700_000_000)
 
 private let xcode = "com.apple.dt.xcode"
+private let vscode = "com.microsoft.vscode"
 private let notes = "com.apple.notes"
 
 /// Settings with the feature switched on, which is what most of these are about.
@@ -125,7 +126,7 @@ struct SettingsSuggestionsPaneTests {
         var settings = switchedOn()
         let ready = try #require(row("pauseSuggestions", in: pane(settings)))
         #expect(
-            ready.control == .action(title: "Pause for 30 Minutes", change: .pauseSuggestions(isOn: true)))
+            ready.control == .action(title: "Pause 30 min", change: .pauseSuggestions(isOn: true)))
 
         settings.suggestions.setPaused(true, at: noon)
         let running = try #require(
@@ -141,20 +142,20 @@ struct SettingsSuggestionsPaneTests {
         let after = try #require(
             row("pauseSuggestions", in: pane(settings, at: noon.addingTimeInterval(3_600))))
         #expect(
-            after.control == .action(title: "Pause for 30 Minutes", change: .pauseSuggestions(isOn: true)))
+            after.control == .action(title: "Pause 30 min", change: .pauseSuggestions(isOn: true)))
     }
 
     @Test("never counts a running pause down to nothing")
     func aRunningPauseIsNeverZeroMinutes() {
         #expect(SettingsPresenter.pauseSentence(1).contains("1 minute."))
-        #expect(SettingsPresenter.pauseSentence(nil).contains("half an hour"))
+        #expect(SettingsPresenter.pauseSentence(nil).contains("30 minutes"))
     }
 
     @Test("says why an application is off only when the user did not choose it")
     func explainsOnlyWhatTheUserDidNotChoose() {
         #expect(SettingsPresenter.applicationSentence(.on) == nil)
         #expect(SettingsPresenter.applicationSentence(.turnedOff)?.isEmpty == false)
-        #expect(SettingsPresenter.applicationSentence(.offByDefault)?.contains("whole file") == true)
+        #expect(SettingsPresenter.applicationSentence(.offByDefault)?.contains("its own suggestions") == true)
     }
 }
 
@@ -162,7 +163,7 @@ struct SettingsSuggestionsPaneTests {
 
 @Suite("Everything switched off is findable")
 struct SettingsSuggestionApplicationListTests {
-    @Test("lists all four shipped editors, each with a switch beside it")
+    @Test("lists both shipped editors, each with the button that takes it off the list")
     func theShippedEditorsAreListed() throws {
         let shown = pane(switchedOn())
         for editor in SuggestionApplications.offByDefault {
@@ -170,8 +171,8 @@ struct SettingsSuggestionApplicationListTests {
             #expect(listed.label == editor.name)
             #expect(
                 listed.control
-                    == .applicationSwitch(
-                        isOn: false,
+                    == .action(
+                        title: "Remove",
                         change: .suggestionsHere(application: editor.bundleIdentifier, isOn: true)))
         }
     }
@@ -184,7 +185,7 @@ struct SettingsSuggestionApplicationListTests {
         let listed = try #require(row("suggestionsIn.\(notes)", in: pane(settings)))
         #expect(
             listed.control
-                == .applicationSwitch(isOn: false, change: .suggestionsHere(application: notes, isOn: true)))
+                == .action(title: "Remove", change: .suggestionsHere(application: notes, isOn: true)))
     }
 
     @Test("lists an application that was switched off, so switching off cannot hide one")
@@ -196,24 +197,24 @@ struct SettingsSuggestionApplicationListTests {
 
     @Test("keeps the list reachable when the feature itself is off, saying what to do first")
     func theListIsThereWithTheFeatureOff() throws {
-        let listed = try #require(row("suggestionsIn.\(xcode)", in: pane(.default)))
+        let listed = try #require(row("suggestionsIn.\(vscode)", in: pane(.default)))
         #expect(listed.unavailability == SettingsEditor.suggestionsAreOff)
     }
 
     @Test("offers the accept key only for an application suggestions actually run in")
     func theAcceptKeyFollowsTheSwitch() throws {
         var settings = switchedOn()
-        #expect(row("suggestionAcceptKey.\(xcode)", in: pane(settings)) == nil)
+        #expect(row("suggestionAcceptKey.\(vscode)", in: pane(settings)) == nil)
 
-        settings.suggestions.set(xcode, isOn: true)
-        let key = try #require(row("suggestionAcceptKey.\(xcode)", in: pane(settings)))
+        settings.suggestions.set(vscode, isOn: true)
+        let key = try #require(row("suggestionAcceptKey.\(vscode)", in: pane(settings)))
         #expect(
             key.control
                 == .menu(
                     options: AcceptKey.allCases.map {
                         SettingsOption(
                             id: $0.rawValue, title: $0.title,
-                            change: .suggestionAcceptKey(application: xcode, key: $0))
+                            change: .suggestionAcceptKey(application: vscode, key: $0))
                     },
                     selectedID: AcceptKey.optionTab.rawValue))
     }
@@ -510,11 +511,14 @@ struct MenuBarFeatureTests {
 struct SettingsAddApplicationTests {
     private let bank = "com.example.bank"
 
-    @Test("The Applications group ends in an Add Application… row that asks the app to pick one")
+    @Test("The list of apps left alone ends in a row that asks the app to pick one")
     func theGroupOffersToAddOne() throws {
         let add = try #require(row("addSuggestionApplication", in: pane(switchedOn())))
         #expect(
-            add.control == .action(title: "Add Application…", change: .chooseApplicationToTurnOffSuggestions))
+            add.control
+                == .action(title: "Add an app to leave alone", change: .chooseApplicationToTurnOffSuggestions)
+        )
+        #expect(add.style == .add)
         #expect(add.isEnabled)
         let group = try #require(pane(switchedOn()).groups.first { $0.id == "suggestionApplications" })
         #expect(group.rows.last?.id == "addSuggestionApplication")
@@ -543,8 +547,7 @@ struct SettingsAddApplicationTests {
         let listed = try #require(row("suggestionsIn.\(bank)", in: pane(settings)))
         #expect(
             listed.control
-                == .applicationSwitch(
-                    isOn: false, change: .suggestionsHere(application: bank, isOn: true)))
+                == .action(title: "Remove", change: .suggestionsHere(application: bank, isOn: true)))
     }
 
     @Test(
@@ -558,7 +561,7 @@ struct SettingsAddApplicationTests {
             SuggestionApplication(bundleIdentifier: "com.example.uttrflow", name: "Uttrflow"),
             SuggestionApplication(bundleIdentifier: "com.example.alpha", name: "alpha"),
             SuggestionApplication(bundleIdentifier: "com.example.ALPHA", name: "alpha"),
-            SuggestionApplication(bundleIdentifier: xcode, name: "Xcode"),
+            SuggestionApplication(bundleIdentifier: vscode, name: "Visual Studio Code"),
         ]
         let offered = SuggestionApplicationChoices.offered(
             running, preferences: preferences, excluding: "com.example.Uttrflow")

@@ -7,7 +7,8 @@ struct DestinationTests {
     /// The tab bars are built from these, so an unmeant reordering shows up here, not in a screenshot.
     @Test("settings tabs are in the approved design's sidebar order")
     func settingsTabOrder() {
-        #expect(SettingsTab.allCases == [.general, .languages, .dictation, .suggestions, .privacy])
+        #expect(
+            SettingsTab.allCases == [.general, .languages, .dictation, .suggestions, .privacy, .diagnostics])
     }
 
     @Test("main tabs are in the order the window shows them")
@@ -15,8 +16,7 @@ struct DestinationTests {
         #expect(
             MainTab.allCases == [
                 .home,
-                .dictation, .history, .dictionary, .corrections, .insights, .snippets, .style, .diagnostics,
-                .account,
+                .dictation, .history, .dictionary, .corrections, .insights, .snippets, .account,
             ])
     }
 
@@ -40,6 +40,7 @@ struct DestinationTests {
     @Test("tabs persist under stable names")
     func rawValues() {
         #expect(SettingsTab.languages.rawValue == "languages")
-        #expect(MainTab.diagnostics.rawValue == "diagnostics")
+        #expect(SettingsTab.diagnostics.rawValue == "diagnostics")
+        #expect(MainTab.corrections.rawValue == "corrections")
     }
 }

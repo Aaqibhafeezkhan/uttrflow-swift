@@ -151,15 +151,14 @@ struct SettingsRequestWiringTests {
     @Test("the app routing Settings to another tab mid-recording restores the live shortcut")
     func externalTabRouteRestoresOnce() throws {
         var callbacks: [Bool] = []
-        let controller = SettingsWindowController(
+        let controller = SettingsPageController(
             store: RecordingStore(), personalisation: EmptyPersonalisation(), capabilities: .everything,
             onShortcutRecording: { callbacks.append($0) })
-        let model = try #require(
-            Mirror(reflecting: controller).descendant("model") as? SettingsViewModel)
+        let model = controller.model
 
-        controller.route(to: .general, identity: nil)
+        controller.route(to: .general)
         model.beginRecordingShortcut(.dictate)
-        controller.route(to: .privacy, identity: nil)
+        controller.route(to: .privacy)
 
         #expect(callbacks == [true, false])
         #expect(!model.session.recorder.isRecording)
@@ -319,7 +318,7 @@ private let samples: [Sample] = [
     Sample(.pauseSuggestions(isOn: true), from: suggesting),
     Sample(.checkForUpdatesNow),
     Sample(.chooseApplicationToTurnOffSuggestions, from: suggesting),
-    Sample(.openPage(.style)),
+    Sample(.openPage(.corrections)),
 ]
 
 /// Settings that start from whatever a sample needs, so a change is applied to ground it alters.
@@ -400,11 +399,10 @@ struct SettingsCapabilityProbeTests {
     @Test("the newest probe's answer stands even when an older probe answers after it")
     func newestProbeWins() async throws {
         let gate = ProbeGate()
-        let controller = SettingsWindowController(
+        let controller = SettingsPageController(
             store: RecordingStore(), personalisation: EmptyPersonalisation(), capabilities: .everything,
             probe: { _ in await gate.wait() })
-        let model = try #require(
-            Mirror(reflecting: controller).descendant("model") as? SettingsViewModel)
+        let model = controller.model
         var stale = SettingsCapabilities.everything
         stale.readyTransformers = [.rules]
         var fresh = SettingsCapabilities.everything

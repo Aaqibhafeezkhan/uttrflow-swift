@@ -3,11 +3,11 @@ public import Foundation
 public import UttrflowHistory
 public import UttrflowSettings
 
-/// Where a sidebar row leads; two cases because Settings is a window of its own, not a page.
+/// Where a sidebar row leads; two cases because Settings has tabs of its own.
 public enum SidebarDestination: Sendable, Equatable, Hashable {
     /// A page of the main window.
     case page(MainTab)
-    /// A tab of the Settings window.
+    /// A tab of the Settings page.
     case settings(SettingsTab)
 }
 
@@ -204,15 +204,16 @@ public enum SidebarPresenter {
         }
     }
 
-    /// Lights the page the main window is showing; Settings never lights, since it is its own window.
+    /// Lights the page the main window is showing; the Settings row lights on any of its tabs.
     static func isSelected(
         _ destination: SidebarDestination, given selection: SidebarDestination
     )
         -> Bool
     {
-        switch destination {
-        case .settings: false
-        case .page: destination == selection
+        switch (destination, selection) {
+        case (.settings, .settings): true
+        case (.settings, .page): false
+        case (.page, _): destination == selection
         }
     }
 
@@ -229,8 +230,6 @@ public enum SidebarPresenter {
             case .corrections: "Corrections"
             case .insights: "Insights"
             case .snippets: "Snippets"
-            case .style: "Style"
-            case .diagnostics: "Diagnostics"
             case .account: "Account"
             }
         }
@@ -252,8 +251,6 @@ public enum SidebarPresenter {
             case .corrections: "arrow.left.arrow.right"
             case .insights: "chart.bar"
             case .snippets: "chevron.left.forwardslash.chevron.right"
-            case .style: "sparkles"
-            case .diagnostics: "gauge.with.dots.needle.bottom.50percent"
             case .account: "person.crop.circle"
             }
         }
