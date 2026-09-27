@@ -183,9 +183,10 @@ counts. Installs onboarded before it keep ⌥Space, the earlier default, which i
 The settings file is what tells the two apart, and it did not always exist: settings are saved
 when something is changed, so an install whose user never opened Settings has none. At launch,
 before the first read, `UserDefaultsSettingsStore.pinDefaults(onboarded:)` saves one when it is
-missing — ⌥Space and a week of transcripts when the onboarding record says onboarding finished,
-the current defaults otherwise — so a later change of default never moves anybody. A saved file that names no dictation shortcut is read with
-⌥Space for the same reason. Reset in Settings gives back ⌃⌥, the current default, to everybody.
+missing or is no JSON object — ⌥Space and a week of transcripts when the onboarding record says
+onboarding finished, the current defaults otherwise — so a later change of default never moves
+anybody. A saved file that names no dictation shortcut is read with ⌥Space for the same reason.
+Reset in Settings gives back ⌃⌥, the current default, to everybody.
 
 ## What is testable
 

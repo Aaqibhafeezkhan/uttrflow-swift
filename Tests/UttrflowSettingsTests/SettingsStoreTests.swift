@@ -622,6 +622,26 @@ struct UserDefaultsSettingsStoreTests {
         #expect(store.load().transcriptRetentionDays == 7)
     }
 
+    @Test(
+        "gives an onboarded install whose blob cannot be read the earlier defaults",
+        arguments: ["not json", "[1, 2, 3]"])
+    func onboardedInstallWithCorruptBlobKeepsOptionSpace(blob: String) {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore(json: blob))
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load() == .earlierInstall)
+    }
+
+    @Test("gives a new install whose blob cannot be read the current defaults")
+    func newInstallWithCorruptBlobGetsTheDefault() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore(json: "not json"))
+
+        store.pinDefaults(onboarded: false)
+
+        #expect(store.load() == .default)
+    }
+
     @Test("leaves a saved shortcut alone, whether or not onboarding finished")
     func keepsAStoredShortcut() {
         for onboarded in [false, true] {
