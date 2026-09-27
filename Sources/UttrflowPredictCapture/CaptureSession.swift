@@ -90,6 +90,47 @@ public actor CaptureSession {
         return .recorded(text)
     }
 
+    /// How many acceptances are waiting for their write to be retried.
+    public func unwrittenAcceptanceCount() -> Int { unwrittenAcceptances.count }
+
+    /// Writes an acceptance's line and then its count, skipping the line when it already landed.
+    private func write(_ acceptance: UnwrittenAcceptance) async throws {
+        var remaining = acceptance
+        do {
+            // Recorded before the acceptance is counted, so a new line's first acceptance is not lost.
+            if !remaining.lineRecorded {
+                try await sink.record(
+                    remaining.text, in: remaining.surface, after: remaining.previous, selfSourced: true,
+                    at: remaining.moment)
+                remaining.lineRecorded = true
+            }
+            try await sink.recordAccepted(remaining.text, in: remaining.surface)
+        } catch {
+            throw AcceptanceWriteFailure(remaining: remaining, underlying: error)
+        }
+    }
+
+    /// Keeps a failed acceptance for a retry, dropping the oldest past the limit.
+    private func hold(_ acceptance: UnwrittenAcceptance) {
+        unwrittenAcceptances.append(acceptance)
+        if unwrittenAcceptances.count > Self.unwrittenAcceptanceLimit { unwrittenAcceptances.removeFirst() }
+    }
+
+    /// Retries held acceptances in order, stopping at the first that fails again.
+    private func retryUnwrittenAcceptances() async {
+        while let next = unwrittenAcceptances.first {
+            do {
+                try await write(next)
+                unwrittenAcceptances.removeFirst()
+            } catch let failure as AcceptanceWriteFailure {
+                unwrittenAcceptances[0] = failure.remaining
+                return
+            } catch {
+                return
+            }
+        }
+    }
+
     /// What the user has decided about capture so far.
     public func decisions() -> CapturePreferences { preferences }
 
@@ -257,6 +298,28 @@ struct UnwrittenCommit: Sendable {
 private struct CommitWriteFailure: Error {
     /// The value as far as its write got.
     let remaining: UnwrittenCommit
+    /// What the sink threw.
+    let underlying: any Error
+}
+
+/// An acceptance the corpus has not fully taken yet, and how far its write got.
+struct UnwrittenAcceptance: Sendable {
+    /// The completion the person took.
+    let text: String
+    /// Where it was taken.
+    let surface: Surface
+    /// The line it followed when it was taken.
+    let previous: String?
+    /// When it was taken.
+    let moment: Date
+    /// True once the line itself is in the corpus, so a retry only counts the acceptance.
+    var lineRecorded = false
+}
+
+/// A failed acceptance write, carrying what is left of it to retry.
+private struct AcceptanceWriteFailure: Error {
+    /// The acceptance as far as it got.
+    let remaining: UnwrittenAcceptance
     /// What the sink threw.
     let underlying: any Error
 }
