@@ -1,4 +1,4 @@
-// The backend, profile cache and local-account store, paired.
+// The backend and profile cache, paired.
 
 import Foundation
 import UttrflowAccount
@@ -8,8 +8,6 @@ import UttrflowUX
 struct OnboardingAccountLayer {
     let authentication: any AuthenticationService
     let profiles: any ProfileCache
-    /// Where the choice to work without an account is kept; one store, read by three windows.
-    let local: any LocalAccountStore
     /// Where usage reports go; a recording sender, so a development build sends nothing anywhere.
     var telemetry: any TelemetrySending = RecordingTelemetrySender()
 
@@ -42,7 +40,6 @@ struct OnboardingAccountLayer {
         return OnboardingAccountLayer(
             authentication: authentication,
             profiles: UserDefaultsProfileCache(),
-            local: UserDefaultsLocalAccountStore(),
             telemetry: HTTPTelemetrySender(
                 baseURL: baseURL, transport: transport,
                 bearer: { await authentication.accessTokenIfSignedIn() }))
@@ -53,7 +50,6 @@ struct OnboardingAccountLayer {
         let service = InMemoryAuthenticationService()
         return OnboardingAccountLayer(
             authentication: service,
-            profiles: UserDefaultsProfileCache(verifier: service.verifier),
-            local: UserDefaultsLocalAccountStore())
+            profiles: UserDefaultsProfileCache(verifier: service.verifier))
     }
 }

@@ -34,19 +34,19 @@ struct OnboardingFlowTests {
     }
 
     /// What the Account page's Sign In reaches.
-    @Test("resuming opens on sign-in when nobody is signed in")
+    @Test("opens on sign-in when nobody is signed in, whatever else is granted")
     func resumeOpensOnSignIn() async {
         let harness = Harness(microphone: .granted, accessibility: .granted, signedIn: false)
-        await harness.flow.resume()
+        await harness.flow.start()
 
         #expect(harness.step == .signIn)
     }
 
     /// Signing back in and finding the app still mute would be worse than one extra page.
-    @Test("resuming still walks everything after sign-in, not only sign-in")
+    @Test("a signed-in start still walks everything after sign-in, not only sign-in")
     func resumeStillAsksForPermissions() async {
         let harness = Harness(microphone: .notDetermined, accessibility: .granted, signedIn: true)
-        await harness.flow.resume()
+        await harness.flow.start()
 
         #expect(harness.step == .microphone)
     }
@@ -470,7 +470,7 @@ struct OnboardingFlowTests {
         let harness = Harness(
             microphone: .granted, accessibility: .granted, settings: Settings(opensAtLogin: false),
             hasFinished: true, signedIn: false)
-        await harness.flow.resume()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
         await harness.returnFromBrowser()
         #expect(harness.step == .ready)
@@ -484,7 +484,7 @@ struct OnboardingFlowTests {
     func finishingDoesNotRevertAChangeMadeWhileItStood() async {
         let harness = Harness(
             microphone: .granted, accessibility: .granted, hasFinished: true)
-        await harness.flow.resume()
+        await harness.flow.start()
         #expect(harness.step == .ready)
 
         let chosen = HotkeyBinding(keyCode: 36, modifiers: [.command, .shift])
@@ -501,7 +501,7 @@ struct OnboardingFlowTests {
     func lastPageFollowsAShortcutChangedWhileItStood() async {
         let harness = Harness(
             microphone: .granted, accessibility: .granted, hasFinished: true)
-        await harness.flow.resume()
+        await harness.flow.start()
 
         var elsewhere = harness.settingsStore.load()
         elsewhere.hotkey = HotkeyBinding(keyCode: 36, modifiers: [.command, .shift])
@@ -568,7 +568,7 @@ struct OnboardingFlowTests {
         await harness.flow.start()
         #expect(harness.step == .microphone)
 
-        for stray: OnboardingIntent in [.cancelSignIn, .reopenBrowser, .cancelInstall, .continueOnThisMac] {
+        for stray: OnboardingIntent in [.cancelSignIn, .reopenBrowser, .cancelInstall] {
             await harness.flow.perform(stray)
             #expect(harness.step == .microphone, "\(stray) dragged the user off the page")
         }

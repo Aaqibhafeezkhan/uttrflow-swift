@@ -134,13 +134,10 @@ public enum HomeAccount: Sendable, Equatable {
     /// Nobody is signed in, so the corner offers the way in rather than a monogram.
     case signedOut(open: MainAction)
 
-    /// Nobody needs to sign in: this person chose this Mac, so the monogram is drawn unfilled.
-    case onThisMac(initials: String, name: String, open: MainAction)
-
     /// Where the chip goes, whichever state it is in.
     public var open: MainAction {
         switch self {
-        case .signedIn(_, _, let open), .onThisMac(_, _, let open), .signedOut(let open): open
+        case .signedIn(_, _, let open), .signedOut(let open): open
         }
     }
 }
@@ -241,8 +238,6 @@ public struct HomeSnapshot: Sendable, Equatable {
     public let entries: [HistoryEntry]
     /// The session on this Mac; absent when nobody has signed in.
     public let account: Account?
-    /// The choice to work without an Uttrflow account; read only when ``account`` is absent.
-    public let local: LocalAccount?
     /// The name macOS knows this person by; passed in so a test controls it.
     public let systemName: String?
     /// The dictation shortcut, already written out.
@@ -263,7 +258,6 @@ public struct HomeSnapshot: Sendable, Equatable {
         permissions: [PermissionKind: PermissionStatus] = [:],
         entries: [HistoryEntry] = [],
         account: Account? = nil,
-        local: LocalAccount? = nil,
         systemName: String? = nil,
         shortcut: String,
         settings: Settings = .default,
@@ -275,7 +269,6 @@ public struct HomeSnapshot: Sendable, Equatable {
         self.permissions = permissions
         self.entries = entries
         self.account = account
-        self.local = local
         self.systemName = systemName
         self.shortcut = shortcut
         self.settings = settings
@@ -432,18 +425,11 @@ public enum HomePresenter {
 
     // MARK: - Who is here
 
-    /// The initials in the corner, from the account's name, then the Mac's, never invented.
+    /// The initials in the corner, from the account's name, never invented.
     static func account(for snapshot: HomeSnapshot) -> HomeAccount {
         guard let account = snapshot.account else {
-            guard let local = snapshot.local else {
-                // Straight to signing in, because that is what the chip says.
-                return .signedOut(open: MainAction(title: "Sign in", intent: .signIn))
-            }
-            // The Account page's own identity for this Mac, so both draw the same monogram.
-            let identity = AccountPagePresenter.identity(for: local)
-            return .onThisMac(
-                initials: identity.initials, name: firstWord(of: identity.name),
-                open: MainAction(title: "Account", intent: .show(.account)))
+            // Straight to signing in, because that is what the chip says.
+            return .signedOut(open: MainAction(title: "Sign in", intent: .signIn))
         }
 
         // The Account page's own name for them, so the corner never shows somebody the page does not.

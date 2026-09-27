@@ -197,6 +197,12 @@ final class MainWindowController {
         window?.orderOut(nil)
     }
 
+    /// Closes the window for good, as signing out does; the controller is not shown again.
+    func close() {
+        window?.close()
+        window = nil
+    }
+
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: MainMetrics.windowSize),

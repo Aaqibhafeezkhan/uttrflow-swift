@@ -22,7 +22,6 @@ extension HistoryFixture {
         plan: Plan = .free,
         access: DictationAccess = .allowed,
         picture: Data? = nil,
-        local: LocalAccount? = nil,
         memberSince: Date? = nil,
         macName: String? = nil
     ) -> AccountPagePresentation {
@@ -33,94 +32,9 @@ extension HistoryFixture {
                         account: $0, plan: plan,
                         expiresAt: now.addingTimeInterval(86_400), signature: "signed")
                 },
-                access: access, now: now, picture: picture, local: local,
+                access: access, now: now, picture: picture,
                 memberSince: memberSince, macName: macName),
             locale: locale)
-    }
-
-    /// Somebody who chose this Mac over an account, with no entitlement anywhere.
-    static func macAccountPage(
-        name: String? = "Naveen Bhatt", macName: String? = "Studio Mac"
-    ) -> AccountPagePresentation {
-        accountPage(
-            account: nil, access: .allowedOnThisMac,
-            local: LocalAccount(name: name, since: now), macName: macName)
-    }
-}
-
-@Suite("Account: working on this Mac")
-struct MacAccountPageTests {
-    /// Repeating the invitation to somebody who has already answered it is the app not listening.
-    @Test("draws an account rather than the invitation to make one")
-    func drawnAsAnAccount() {
-        let page = HistoryFixture.macAccountPage()
-        #expect(page.emptyState == nil)
-        #expect(page.identity?.name == "Naveen Bhatt")
-        #expect(page.identity?.initials == "N")
-        #expect(page.identity?.provider == "This Mac")
-        #expect(page.identity?.providerID == nil, "nobody signed this person in")
-        #expect(page.identity?.emailAddress == nil, "no provider means no address to show")
-    }
-
-    /// There is no subscription behind a Mac account, so nothing may read as a plan.
-    @Test("claims no plan, because there is none")
-    func noPlanIsClaimed() {
-        let page = HistoryFixture.macAccountPage()
-        let wording = page.facts.flatMap { [$0.label, $0.value] }.joined(separator: " ")
-        for claim in ["Pro", "Free", "subscribed", "trial"] {
-            #expect(!wording.contains(claim), "the Mac account page hints at \(claim)")
-        }
-    }
-
-    /// The way out has to be on the page, or the choice is one-way.
-    @Test("offers signing in, and says what it would change")
-    func signingInIsOffered() {
-        let page = HistoryFixture.macAccountPage()
-        #expect(page.action?.intent == .signIn, "there is no session to sign out of")
-        #expect(page.action?.title == "Sign in")
-        #expect(page.action?.isDestructive == false)
-        #expect(page.actionHelp?.contains("leaves everything on this Mac") == true)
-    }
-
-    /// No provider and no address, so the list says so and then says when and where.
-    @Test("lists no account, since when, and this Mac")
-    func facts() {
-        let page = HistoryFixture.macAccountPage()
-        #expect(page.facts.map(\.kind) == [.signIn, .since, .thisMac])
-        #expect(page.facts[0].value == "No account — this Mac only")
-        #expect(page.facts[2].value == "Studio Mac")
-        #expect(HistoryFixture.macAccountPage(macName: nil).facts.map(\.kind) == [.signIn, .since])
-    }
-
-    @Test("says when this arrangement started, in the reader's own calendar")
-    func saysSince() {
-        #expect(
-            HistoryFixture.macAccountPage().facts.first { $0.kind == .since }?.value
-                == AccountPagePresenter.since(HistoryFixture.now, locale: HistoryFixture.locale))
-    }
-
-    /// A Mac that will not say whose it is still gets a page, with a monogram that claims nobody.
-    @Test("draws a Mac with no owner's name on it")
-    func noName() {
-        let page = HistoryFixture.macAccountPage(name: nil)
-        #expect(page.identity?.name == "This Mac")
-        #expect(page.identity?.initials == "?")
-    }
-
-    /// The signed value wins every time; an unsigned one must not talk the page out of a session.
-    @Test("a real account is drawn even when a Mac account is also present")
-    func realAccountWins() {
-        let page = HistoryFixture.accountPage(
-            local: LocalAccount(name: "Somebody Else", since: HistoryFixture.now))
-        #expect(page.identity?.name == "Naveen Bhatt")
-        #expect(page.identity?.providerID == .google)
-        #expect(page.action?.intent == .signOut)
-    }
-
-    /// This page explains itself from top to bottom, so a banner would be the same sentence twice.
-    @Test("carries no notice, because the page is the explanation")
-    func noNotice() {
-        #expect(HistoryFixture.macAccountPage().notice == nil)
     }
 }
 
