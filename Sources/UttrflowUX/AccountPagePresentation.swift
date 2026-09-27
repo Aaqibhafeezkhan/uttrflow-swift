@@ -141,15 +141,15 @@ public enum AccountPagePresenter {
 
     /// The promise in the privacy screen's words; it never says "recordings", since none is kept.
     public static let localDataPromise = """
-        The account is an identity and nothing more. Your transcripts, Dictionary, \
-        Corrections and Snippets are files on this Mac — signing out leaves every one of them \
+        The account is an identity and nothing more. Your transcripts, Dictionary \
+        and Snippets are files on this Mac — signing out leaves every one of them \
         exactly where it is. Audio is never one of them: it is discarded as it becomes text.
         """
 
     /// What Sign out does, as its tooltip.
     public static let signOutHelp = """
         Uttrflow stops until you sign in again, which needs the network. Your transcripts, \
-        Dictionary, Corrections and Snippets stay on this Mac.
+        Dictionary and Snippets stay on this Mac.
         """
 
     /// What Sign in does for somebody on this Mac, as its tooltip.
