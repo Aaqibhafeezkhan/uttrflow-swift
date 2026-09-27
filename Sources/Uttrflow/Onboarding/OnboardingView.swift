@@ -120,7 +120,12 @@ struct OnboardingCard: View {
                         endPoint: .bottom),
                     lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.65), radius: 30, y: 30)
+        // Cast by a still shape behind the opaque card, so the moving aurora inside never re-renders the shadow.
+        .background {
+            RoundedRectangle(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous)
+                .fill(.black)
+                .shadow(color: .black.opacity(0.65), radius: 30, y: 30)
+        }
         .animation(.smooth(duration: 0.26), value: page.title)
         .help(page.explanation ?? "")
     }
