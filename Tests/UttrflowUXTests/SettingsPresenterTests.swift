@@ -474,7 +474,9 @@ struct SettingsPrivacyPaneTests {
         let row = try #require(privacy().row(SettingsToggleField.sharesUsageStatistics.rawValue))
         #expect(row.control == .toggle(field: .sharesUsageStatistics, isOn: true))
         #expect(row.isEnabled)
-        #expect(row.explanation?.contains("never what you dictate") == true)
+        #expect(row.label == "Share usage statistics")
+        #expect(row.explanation?.contains("linked to your account") == true)
+        #expect(row.explanation?.contains("Never what you dictate") == true)
 
         let updated = try SettingsEditor.apply(.toggle(.sharesUsageStatistics, isOn: false), to: .default)
         #expect(!updated.sharesUsageStatistics)

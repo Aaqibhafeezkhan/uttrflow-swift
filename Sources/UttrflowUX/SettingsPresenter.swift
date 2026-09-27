@@ -802,9 +802,10 @@ public enum SettingsPresenter {
                         retentionRow(settings),
                         toggleRow(
                             .sharesUsageStatistics,
-                            label: "Share anonymous usage statistics",
+                            label: "Share usage statistics",
                             explanation:
-                                "Only counts and timings are sent, never what you dictate.",
+                                "Counts and timings, linked to your account when you are signed in. "
+                                + "Never what you dictate.",
                             settings, capabilities
                         ).with(icon: .symbol("chart.bar", .info)),
                         toggleRow(

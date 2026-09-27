@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         info: Bundle.main.infoDictionary ?? [:], sdk: LiveCrashReportingSDK())
     /// Keeps the pipeline's stage timings for the session, which is what the diagnostics page reports on.
     private let diagnostics = DiagnosticsRecorder()
-    /// Anonymous counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
+    /// Counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
     private var telemetry: UsageTelemetry?
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
     private let secureInput = SecureInputWatch()

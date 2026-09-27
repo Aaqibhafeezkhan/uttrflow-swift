@@ -67,7 +67,7 @@ public struct Settings: Sendable, Equatable, Codable {
     /// Whether a found update installs itself or waits to be asked; `UpdateGate` picks the moment.
     public var installsUpdatesAutomatically: Bool
 
-    /// Whether anonymous counts and timings are sent; never what was dictated. See `Docs/account-telemetry.md`.
+    /// Whether counts and timings are sent, tied to the signed-in account. See `Docs/account-telemetry.md`.
     public var sharesUsageStatistics: Bool
     /// Whether crash and hang reports go to Uttrflow; off until the user turns it on. See `Docs/crash-reporting.md`.
     public var sendsCrashReports: Bool
