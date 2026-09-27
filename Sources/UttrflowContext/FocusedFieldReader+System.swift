@@ -127,7 +127,8 @@ public enum FocusedFieldReader {
         let declaredSecure = SecureField.isDeclaredSecure(
             role: role, subrole: subrole, identifier: identifier, placeholder: placeholder,
             description: description)
-        let range = SurfaceProbe.selectedRange(field)
+        // A web field that refuses the character range still says where its selection is in text markers.
+        let range = SurfaceProbe.selectedRange(field) ?? (declaredSecure ? nil : markerSelection(field))
         let read = declaredSecure ? (value: nil, selection: nil) : boundedValue(of: field, at: range)
         let value = read.value
         let secure = declaredSecure || (value.map(SecureField.looksMasked) ?? false)
@@ -143,7 +144,7 @@ public enum FocusedFieldReader {
         do {
             tail = (
                 try unlessSuperseded(isWanted) { document(of: field) },
-                try unlessSuperseded(isWanted) { range.flatMap { caret(field, at: $0) } },
+                try unlessSuperseded(isWanted) { caret(field, at: range) },
                 try unlessSuperseded(isWanted) { windowFrame(of: field) },
                 try unlessSuperseded(isWanted) { fieldFrame(of: field) },
                 try unlessSuperseded(isWanted) { windowTitle(of: field) }
@@ -161,9 +162,9 @@ public enum FocusedFieldReader {
             document: tail.document,
             value: secure ? nil : value,
             selection: read.selection,
-            caret: range.flatMap { caret(field, at: $0) }.map { flip($0, below: flipped) },
-            window: windowFrame(of: field).map { flip($0, below: flipped) },
-            field: fieldFrame(of: field).map { flip($0, below: flipped) },
+            caret: tail.caret.map { flip($0, below: flipped) },
+            window: tail.window.map { flip($0, below: flipped) },
+            field: tail.frame.map { flip($0, below: flipped) },
             pointSize: style?.size,
             fontFamily: style?.family,
             textColor: style?.color,
@@ -235,33 +236,13 @@ public enum FocusedFieldReader {
         return frame
     }
 
-    /// The caret's screen rectangle, read off the glyph beside it because its own zero-length bounds lies.
-    private static func caret(_ field: AXUIElement, at range: CFRange) -> CGRect? {
-        // A real selection, unlike a caret, reports its own bounds honestly.
-        if range.length > 0, let rect = SurfaceProbe.bounds(field, at: range), rect.height > 0 { return rect }
-        let location = range.location
-        // The caret sits at the trailing edge of the glyph before it, which is what typing just moved past.
-        if location > 0,
-            let before = SurfaceProbe.bounds(field, at: CFRange(location: location - 1, length: 1)),
-            before.height > 0
-        {
-            return CGRect(x: before.maxX, y: before.minY, width: 0, height: before.height)
-        }
-        // At the very start there is no glyph before, so the caret takes the leading edge of the one after.
-        if let at = SurfaceProbe.bounds(field, at: CFRange(location: location, length: 1)), at.height > 0 {
-            return CGRect(x: at.minX, y: at.minY, width: 0, height: at.height)
-        }
-        // An empty line has no glyph beside the caret, so its own bounds is all there is.
-        if let rect = SurfaceProbe.bounds(field, at: range), rect.height > 0 { return rect }
-        // A web field answers glyph bounds with a zero-size rectangle, but its selection's text-marker range still has a place on screen.
-        if let rect = markerBounds(field), rect.height > 0 {
-            return CGRect(x: rect.minX, y: rect.minY, width: 0, height: rect.height)
-        }
-        // An editor that draws its own text keeps a one-pixel field at the caret for input methods, so that field's frame is the caret.
-        if let frame = AXNode(field).answers.frame, FocusedFieldSnapshot.isCaretShaped(frame) {
-            return CGRect(x: frame.minX, y: frame.minY, width: 0, height: frame.height)
-        }
-        return nil
+    /// The caret's screen rectangle, from the selection where the field answers it and from the text marker where it does not.
+    private static func caret(_ field: AXUIElement, at range: CFRange?) -> CGRect? {
+        let locator = CaretLocator(
+            bounds: { SurfaceProbe.bounds(field, at: CFRange(location: $0, length: $1)) },
+            markerBounds: { markerBounds(field) },
+            frame: { AXNode(field).answers.frame })
+        return locator.caret(at: range.map { (location: $0.location, length: $0.length) })
     }
 
     /// What a field says about its own type, either half of which it may leave out.
@@ -495,6 +476,30 @@ public enum FocusedFieldReader {
     private static let axFontSizeKey = "AXFontSize"
     private static let axFontFamilyKey = "AXFontFamily"
     private static let axForegroundColorKey = "AXForegroundColor"
+
+    /// The selection as a character range, measured in text markers from the field's start, for a field that refuses `AXSelectedTextRange`.
+    private static func markerSelection(_ field: AXUIElement) -> CFRange? {
+        var selected: AnyObject?
+        guard
+            AXUIElementCopyAttributeValue(field, "AXSelectedTextMarkerRange" as CFString, &selected)
+                == .success,
+            let selected, CFGetTypeID(selected) == AXTextMarkerRangeGetTypeID(),
+            let whole = SurfaceProbe.parameterized(field, "AXTextMarkerRangeForUIElement", field),
+            CFGetTypeID(whole) == AXTextMarkerRangeGetTypeID()
+        else { return nil }
+        // Checked by type ID above; `as?` on a Core Foundation type always succeeds.
+        let selection = unsafeDowncast(selected, to: AXTextMarkerRange.self)
+        let start = AXTextMarkerRangeCopyStartMarker(unsafeDowncast(whole, to: AXTextMarkerRange.self))
+        let before = AXTextMarkerRangeCreate(nil, start, AXTextMarkerRangeCopyStartMarker(selection))
+        guard let location = markerLength(field, before), let length = markerLength(field, selection)
+        else { return nil }
+        return CFRange(location: location, length: length)
+    }
+
+    /// How many characters a text-marker range spans, or nothing where the field will not count them.
+    private static func markerLength(_ field: AXUIElement, _ range: AXTextMarkerRange) -> Int? {
+        (SurfaceProbe.parameterized(field, "AXLengthForTextMarkerRange", range) as? NSNumber)?.intValue
+    }
 
     /// The screen rectangle of the selection's text-marker range, which web content answers where it answers nothing for a character range.
     private static func markerBounds(_ field: AXUIElement) -> CGRect? {
