@@ -30,12 +30,15 @@ struct OnboardingBackdrop: View {
 /// One mood's conic gradient, blurred soft and turning once every forty seconds when the Mac allows motion.
 private struct OnboardingAurora: View {
     let mood: OnboardingMood
+    /// Whether its window is the one being used; starts still so a window opened behind others never moves.
+    @State private var attended = false
 
     var body: some View {
         let motion = MotionBudgetObserver.shared.budget
         TimelineView(
             .animation(
-                minimumInterval: OnboardingMetrics.auroraFrameInterval, paused: !motion.demonstrationMoves)
+                minimumInterval: OnboardingMetrics.auroraFrameInterval,
+                paused: !attended || !motion.demonstrationMoves)
         ) { timeline in
             GeometryReader { proxy in
                 AngularGradient(
@@ -50,6 +53,7 @@ private struct OnboardingAurora: View {
         }
         .opacity(opacity)
         .drawingGroup()
+        .onWindowAttentionChange(includingMotionBudget: false) { attended = $0 }
     }
 
     /// How far round the aurora has turned, one turn every forty seconds.
@@ -158,13 +162,15 @@ struct OnboardingWaveform: View {
     let wave: OnboardingWave
     /// How many bars are drawn.
     var count = 44
+    /// Whether its window is the one being used; starts still so a window opened behind others never moves.
+    @State private var attended = false
 
     var body: some View {
         let motion = MotionBudgetObserver.shared.budget
         TimelineView(
             .animation(
                 minimumInterval: MotionBudget.demonstrationFrameInterval,
-                paused: wave == .still || !motion.demonstrationMoves)
+                paused: wave == .still || !attended || !motion.demonstrationMoves)
         ) { timeline in
             Canvas { context, size in
                 let time = motion.demonstrationMoves ? timeline.date.timeIntervalSinceReferenceDate : 0
@@ -178,6 +184,7 @@ struct OnboardingWaveform: View {
                     .init(color: .black, location: 0.7), .init(color: .clear, location: 1),
                 ], startPoint: .leading, endPoint: .trailing)
         }
+        .onWindowAttentionChange(includingMotionBudget: false) { attended = $0 }
         .accessibilityHidden(true)
     }
 
