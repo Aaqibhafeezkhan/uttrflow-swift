@@ -23,7 +23,7 @@ struct TapStateRingTests {
 
     /// Distinct keys to fill the ring with, so the order they come out in can be read.
     private static let keys: [ArmedKeys] = [
-        .tab, .optionTab, .rightArrow, .return, .escape, .downArrow, .upArrow,
+        .tab, .optionTab, .rightArrow, .return, .escape, .optionDownArrow, .optionUpArrow,
     ]
 
     /// The event the drain reports for a key.
@@ -84,17 +84,17 @@ struct TapStateRingTests {
     @Test("a rejected arrow does not arm Return, so a full ring never blocks it")
     func rejectedArrowDoesNotArmReturn() {
         let state = Self.makeState()
-        state.armed.store(ArmedKeys.downArrow.rawValue | ArmedKeys.tab.rawValue, ordering: .relaxed)
+        state.armed.store(ArmedKeys.optionDownArrow.rawValue | ArmedKeys.tab.rawValue, ordering: .relaxed)
         for _ in 0..<TapState.capacity { #expect(state.takeIfArmed(.tab)) }
-        #expect(!state.takeIfArmed(.downArrow))
+        #expect(!state.takeIfArmed(.optionDownArrow))
         #expect(state.armed.load(ordering: .relaxed) & ArmedKeys.return.rawValue == 0)
     }
 
     @Test("a captured arrow arms Return")
     func capturedArrowArmsReturn() {
         let state = Self.makeState()
-        state.armed.store(ArmedKeys.downArrow.rawValue, ordering: .relaxed)
-        #expect(state.takeIfArmed(.downArrow))
+        state.armed.store(ArmedKeys.optionDownArrow.rawValue, ordering: .relaxed)
+        #expect(state.takeIfArmed(.optionDownArrow))
         #expect(state.armed.load(ordering: .relaxed) & ArmedKeys.return.rawValue != 0)
     }
 

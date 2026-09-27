@@ -31,13 +31,15 @@ terminal or an editor to dictation and to AI suggestions at once.
 A suggestion on screen does **not** entitle us to Return. Stealing it runs a command in a
 terminal and sends a half-written message in a chat box, and both are unrecoverable in a
 way that a missed completion is not. So Return passes through untouched until the user has
-pressed Down at least once — the moment they are demonstrably navigating our list rather
+pressed ⌥↓ at least once — the moment they are demonstrably navigating our list rather
 than finishing their own line. `SuggestionSelection.hasMoved` is that fact and nothing
 else.
 
-The same reasoning applies to Up, which is shell history before it is anything of ours: it
-is claimed only once the list is being walked. A single suggestion is not a list at all,
-so neither arrow nor Return is ever claimed for one — Tab is the only way to take it.
+**A bare ↓ or ↑ is never ours.** In a multi-line editor Down moves to the next line, and in
+an IDE it walks the IDE's own completion popup; a choice looks exactly like a single ghost,
+so nothing on screen would say Down had been taken. The list opens and walks on ⌥↓, and ⌥↑
+walks back once it is open. A single suggestion is not a list at all, so neither arrow nor
+Return is ever claimed for one — Tab is the only way to take it.
 
 ## The escape ladder
 
@@ -76,7 +78,7 @@ posts the same key with the same modifiers, tagged so the tap lets it through.
 
 A swallowed keystroke is written into a fixed ring buffer of 64 entries and a dispatch
 source is signalled; the decision runs on that source's queue. The ring is what keeps two
-quick presses of Down from coalescing into one, which a source's own OR-ed data would do.
+quick presses of ⌥↓ from coalescing into one, which a source's own OR-ed data would do.
 
 The tap gets its own thread with its own run loop. A tap serviced by the main run loop is
 a tap that stalls behind whatever the app is drawing, and the system's answer to a stalled
@@ -203,8 +205,8 @@ the list's footer and the VoiceOver label — it is built from the field's `Acce
 terminal reads `→` and an editor `⌥⇥`. A `⇥` once drawn in a terminal sent the user to
 press the shell's own completion key and conclude accepting was broken.
 
-**A choice is one line until Down is pressed.** A `.choice` draws only the leader's
-continuation on the caret's line, exactly like a `.certain`. The first ↓ opens the list
+**A choice is one line until ⌥↓ is pressed.** A `.choice` draws only the leader's
+continuation on the caret's line, exactly like a `.certain`. The first ⌥↓ opens the list
 under the line — every candidate as `↳ text`, the highlighted one at ghost strength and
 the rest dimmer, then `take · next · dismiss` — and the list stays open while the highlight
 walks round, collapsing again only when the suggestion changes.
