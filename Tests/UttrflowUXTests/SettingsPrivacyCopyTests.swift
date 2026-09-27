@@ -58,7 +58,7 @@ private func everyUserFacingString() -> [String] {
                     ].compactMap(\.self)
                 case .action(let title, _):
                     strings += [title]
-                case .text(let value), .status(let value):
+                case .text(let value), .placeholder(let value), .status(let value):
                     strings += [value]
                 case .languages(let chips, let add):
                     strings += chips.map(\.title) + add.map(\.title)
