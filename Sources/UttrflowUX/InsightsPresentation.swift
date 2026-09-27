@@ -343,8 +343,8 @@ public enum InsightsPresenter {
             symbolName: "chart.bar",
             title: "Not enough to chart yet",
             message: """
-                Insights compare this week against your own baseline, so they wait until there \
-                are \(daysBeforeCharting) days to compare. Uttrflow has \(spoken).
+                Dictate on \(daysBeforeCharting) different days and your charts appear. \
+                \(spoken) of \(daysBeforeCharting) days so far.
                 """,
             chips: entries.isEmpty
                 ? []
@@ -360,11 +360,7 @@ public enum InsightsPresenter {
                 fraction: Double(spoken) / Double(daysBeforeCharting),
                 leading: "\(spoken) of \(daysBeforeCharting) days",
                 trailing: remaining(spoken: spoken, now: now, calendar: calendar, locale: locale),
-                steps: daysBeforeCharting),
-            footnote: """
-                The figures Uttrflow can honestly give this early are given. The rest waits \
-                rather than guessing.
-                """)
+                steps: daysBeforeCharting))
     }
 
     /// "Charts appear on Tuesday", or "next Tuesday" a week ahead, assuming each day left is spoken on.
