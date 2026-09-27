@@ -179,4 +179,65 @@ struct DestructiveCommandTests {
         #expect(!DestructiveCommand.matches("kubectl -n delete get pods"))
         #expect(!DestructiveCommand.matches("kubectl get pod delete"))
     }
+
+    @Test(
+        "A switch that throws away uncommitted changes is destructive, however its flags are written.",
+        arguments: [
+            "git switch -f main", "git switch --force main", "git switch --discard-changes main",
+            "git switch -fc topic", "git switch -qf main", "git -C repo switch -f main",
+            "git -c core.x=y switch --discard-changes main", "sudo git switch --force main",
+        ])
+    func forcedSwitchIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A switch that keeps the working tree is ordinary, even where a branch name holds an f.",
+        arguments: [
+            "git switch main", "git switch -c new", "git switch -c fix-login", "git switch -cfix-login",
+            "git switch -C feature", "git switch --detach v1.0", "git switch -", "git checkout -bfeature",
+            "git commit -m 'switch -f later'",
+        ])
+    func ordinarySwitchIsLeftAlone(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "An rsync that deletes files is destructive, whichever delete flag it carries.",
+        arguments: [
+            "rsync -a --delete src/ backup/", "rsync -a --delete-after src/ backup/",
+            "rsync -a --delete-excluded src/ backup/", "rsync -a --delete-before src/ backup/",
+            "rsync -a --delete-during src/ backup/", "rsync -a --delete-delay src/ backup/",
+            "rsync -a --del src/ backup/", "rsync -a --remove-source-files src/ backup/",
+            "sudo rsync -av --delete ~/work/ /Volumes/backup/work/",
+        ])
+    func deletingRsyncIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "An output redirection that empties a file first is destructive.",
+        arguments: [
+            "echo x > notes.txt", "echo \"\" > notes.txt", "> notes.txt", "sort data.csv >| data.csv",
+            "ls 1> listing.txt", "make &> build.log", "echo x >notes.txt", "cat a.txt > b.txt && ls",
+            "make 2>&1 | tee build.log",
+        ])
+    func truncatingRedirectionIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "An rsync that deletes nothing, and a redirection that empties no file, are ordinary.",
+        arguments: [
+            "rsync -a src dst", "rsync -av --progress src/ backup/", "echo x >> notes.txt",
+            "make 2> errors.log", "make 2>&1 | tee", "echo x >&2", "make > /dev/null",
+            "make > /dev/null 2>&1", "echo x > /dev/stderr", "make &>> build.log", "sort < data.csv",
+            "grep '>' notes.txt", "make | tee -a build.log", "make | tee --append build.log", "make | tee",
+        ])
+    func harmlessRsyncAndRedirectionAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
