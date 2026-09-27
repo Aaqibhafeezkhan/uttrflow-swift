@@ -262,7 +262,17 @@ replaces, and a stopped loop draws nothing. The view is not animated: a new sugg
 replaces the old one whole, measured before the panel is placed, so the two are never
 drawn in the same spot at once.
 
-**A ghost is withdrawn by anything that may move the caret** — a key, a click, a scroll, the
+**A key that types the ghost's next letters keeps it.** On a plain append with the highlight
+unmoved, `SuggestionSession.typedThrough` carries the offer past the key and the panel moves the
+rest of the ghost by exactly the width the typed letters took off it, in one frame change and
+without hiding it; the turn the key wakes reads the new line and redraws only if it differs.
+
+**A ghost is drawn whole or not at all.** The panel measures the ghost line at its full width
+in the view it draws and refuses one wider than the room to the field's edge, and a ghost
+that is not on screen whole claims no key, so Tab never inserts what was not shown. Drawing
+the offer already on screen, at the same caret within a point, lays out and places nothing.
+
+**Any other key withdraws the ghost, as does anything else that may move the caret** — a click, a scroll, the
 application in front changing, a Space change or the display sleeping. Each one hides the
 panel, disarms the keys and calls `SuggestionSession.invalidate`, which voids every answer
 still being worked out: `resolve`, `resolveGenerated` and `expandGenerated` return nothing
