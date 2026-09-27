@@ -182,6 +182,26 @@ enum BrandPalette {
         static let onAccentInk = BrandTone(dark: 0x0B_0C10, light: 0x10_1316)
         /// The unfilled track of the floating button's download ring.
         static let dockRingTrack = BrandLayer(tone: textStrong, darkOpacity: 0.18, lightOpacity: 0.16)
+        /// A primary button's fill: white when dark, ink when light.
+        static let primaryFill = BrandTone(dark: 0xFF_FFFF, light: 0x10_1316)
+        /// The words on a primary button.
+        static let primaryInk = BrandTone(dark: 0x0B_0C10, light: 0xFE_FEFE)
+        /// The words on a destructive button, over its own red wash.
+        static let destructiveInk = BrandTone(dark: 0xFF_8A8C, light: 0xB0_161A)
+        /// A secondary button's fill.
+        static let quietFill = BrandLayer(tone: textStrong, darkOpacity: 0.08, lightOpacity: 0.072)
+        /// A confirmation sheet's glass.
+        static let sheetGlass = BrandLayer(
+            tone: BrandTone(dark: 0x12_1020, light: 0xFE_FEFC), darkOpacity: 0.96, lightOpacity: 0.93)
+        /// A corner notice's glass, a little clearer than a sheet's.
+        static let toastGlass = BrandLayer(
+            tone: BrandTone(dark: 0x12_1020, light: 0xFE_FEFC), darkOpacity: 0.9, lightOpacity: 0.93)
+        /// The veil over a window while a sheet asks its question.
+        static let scrim = BrandLayer(
+            tone: BrandTone(dark: 0x05_050A, light: 0xF2_F1EC), darkOpacity: 0.55, lightOpacity: 0.55)
+        /// The shadow under a sheet or a corner notice.
+        static let floatShadow = BrandLayer(
+            tone: BrandTone(0x00_0000), darkOpacity: 0.7, lightOpacity: 0.12)
 
         /// The clipboard panel's glass and inks. See `Docs/app-quick-panel.md`.
         enum Panel {
