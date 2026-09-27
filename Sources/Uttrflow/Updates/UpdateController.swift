@@ -130,7 +130,7 @@ final class UpdateController: NSObject {
         }
     }
 
-    /// The menu's "Check for Updates…"; bypasses the startup grace period and puts a window in front.
+    /// Settings' "Check Now"; bypasses the startup grace period and puts a window in front.
     func checkForUpdates() {
         guard Self.isConfigured else { return }
         begin(automatically: updater.automaticallyDownloadsUpdates)
