@@ -171,7 +171,7 @@ public enum SettingsPresenter {
                 unarmed
             } else if settings.shortcutsReturnedToDefault.contains(descriptor.action) {
                 returnedToDefault
-            } else if binding?.heldModifier != nil {
+            } else if binding?.isFunctionHold == true {
                 // Only Fn, which macOS has its own plans for. See `Docs/ux-settings-model.md`.
                 """
                 If pressing fn also opens Emoji or Apple's dictation, \
