@@ -24,49 +24,84 @@ struct ModelPassTests {
 
     @Test("A fresh pass is asked for when nothing is remembered.")
     func asksWhenEmpty() {
-        #expect(ModelPass().plan(for: query("git")) == .ask)
+        #expect(ModelPass().plan(for: query("git"), at: nil) == .ask)
     }
 
-    @Test("An earlier answer is reused while the line begins it, case-folded, without the typed line itself.")
+    @Test("An earlier answer is reused while the line types on from it, without the typed line itself.")
     func reusesKept() {
         var pass = ModelPass()
-        pass.remember(["git status", "Git stash", "git"], for: query("g"))
-        #expect(pass.plan(for: query("GIT ST")) == .reuse(["git status", "Git stash"]))
-        #expect(pass.plan(for: query("git")) == .reuse(["git status", "Git stash"]))
-        #expect(pass.plan(for: query("ls")) == .ask)
-        #expect(pass.plan(for: query("git", in: other)) == .ask)
+        pass.remember(["git status", "Git stash", "git"], for: query("g"), at: nil)
+        #expect(pass.plan(for: query("git st"), at: nil) == .reuse(["git status", "Git stash"]))
+        #expect(pass.plan(for: query("git"), at: nil) == .reuse(["git status", "Git stash"]))
+        #expect(pass.plan(for: query("ls"), at: nil) == .ask)
+        #expect(pass.plan(for: query("git", in: other), at: nil) == .ask)
     }
 
-    @Test("An empty or failed line is skipped only on that exact line and field.")
+    @Test("A line that deletes back past the answered one is asked again, and the answer is forgotten.")
+    func backspaceForgets() {
+        var pass = ModelPass()
+        let asked = query("I will send the rep")
+        pass.remember(["I will send the report tomorrow"], for: asked, at: nil)
+        let deleted = query("I will send the ")
+        #expect(pass.plan(for: deleted, at: nil) == .ask)
+        pass.follow(deleted, at: nil)
+        #expect(pass.lastGenerated == nil)
+        #expect(pass.plan(for: asked, at: nil) == .ask)
+    }
+
+    @Test("The same words on another line, after other text, are asked again, and the answer is forgotten.")
+    func anotherLineForgets() {
+        var pass = ModelPass()
+        let line = query("Meeting with")
+        pass.remember(["Meeting with the design team"], for: line, at: "Monday agenda")
+        #expect(pass.plan(for: line, at: "Monday agenda") == .reuse(["Meeting with the design team"]))
+        #expect(pass.plan(for: line, at: "Budget review notes") == .ask)
+        #expect(pass.plan(for: line, at: nil) == .ask)
+        pass.follow(line, at: "Budget review notes")
+        #expect(pass.lastGenerated == nil)
+    }
+
+    @Test("Typing on from the answered line keeps the answer.")
+    func typingOnKeeps() {
+        var pass = ModelPass()
+        pass.remember(["Meeting with the design team"], for: query("Meeting"), at: "agenda")
+        pass.follow(query("Meeting with"), at: "agenda")
+        #expect(pass.lastGenerated != nil)
+        #expect(
+            pass.plan(for: query("Meeting with"), at: "agenda") == .reuse(["Meeting with the design team"]))
+    }
+
+    @Test("An empty or failed line is skipped only on that exact line, field and place.")
     func skipsEmpty() {
         var pass = ModelPass()
-        pass.remember([], for: query("xyz"))
-        #expect(pass.plan(for: query("xyz")) == .skip)
-        #expect(pass.plan(for: query("xyzw")) == .ask)
-        #expect(pass.plan(for: query("xyz", in: other)) == .ask)
-        pass.rememberEmpty(query("abc"))
-        #expect(pass.plan(for: query("abc")) == .skip)
-        #expect(pass.plan(for: query("xyz")) == .ask)
+        pass.remember([], for: query("xyz"), at: nil)
+        #expect(pass.plan(for: query("xyz"), at: nil) == .skip)
+        #expect(pass.plan(for: query("xyz"), at: "earlier text") == .ask)
+        #expect(pass.plan(for: query("xyzw"), at: nil) == .ask)
+        #expect(pass.plan(for: query("xyz", in: other), at: nil) == .ask)
+        pass.rememberEmpty(query("abc"), at: nil)
+        #expect(pass.plan(for: query("abc"), at: nil) == .skip)
+        #expect(pass.plan(for: query("xyz"), at: nil) == .ask)
     }
 
     @Test("An empty answer keeps the earlier one, which still wins over the empty mark.")
     func emptyKeepsEarlier() {
         var pass = ModelPass()
-        pass.remember(["git status"], for: query("g"))
-        pass.remember([], for: query("git s"))
-        #expect(pass.plan(for: query("git s")) == .reuse(["git status"]))
+        pass.remember(["git status"], for: query("g"), at: nil)
+        pass.remember([], for: query("git s"), at: nil)
+        #expect(pass.plan(for: query("git s"), at: nil) == .reuse(["git status"]))
     }
 
     @Test("A new field or an emptied line forgets both memories, and anything else keeps them.")
     func freshStart() {
         var pass = ModelPass()
-        pass.remember(["git status"], for: query("g"))
-        pass.rememberEmpty(query("zz"))
+        pass.remember(["git status"], for: query("g"), at: nil)
+        pass.rememberEmpty(query("zz"), at: nil)
         pass.freshStart(surfaceChanged: false, lineIsEmpty: false)
         #expect(pass.lastGenerated != nil && pass.lastEmpty != nil)
         pass.freshStart(surfaceChanged: true, lineIsEmpty: false)
         #expect(pass.lastGenerated == nil && pass.lastEmpty == nil)
-        pass.remember(["git status"], for: query("g"))
+        pass.remember(["git status"], for: query("g"), at: nil)
         pass.freshStart(surfaceChanged: false, lineIsEmpty: true)
         #expect(pass.lastGenerated == nil)
     }

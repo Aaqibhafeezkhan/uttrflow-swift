@@ -292,10 +292,13 @@ When the corpus and the machine both have nothing for the line and the generator
 `isReady`, the turn takes the model path in `SuggestionCoordinator.generate` instead of
 `resolve`:
 
-- **Reuse first.** The model's last answer for this field is kept, and while the line still
-  begins one of its lines — typing on, or backspacing — that answer is drawn again and no
-  pass runs. An empty answer is remembered against the exact line it was given for, so a
-  tick does not ask the same question again; the next keystroke asks afresh.
+- **Reuse first, only while typing on.** The model's last answer is kept with the line it
+  was given for and the text before that line. While the user types forward from that line,
+  in the same field and after the same text, the answer is drawn again with no pass, after
+  it meets the machine's gate again. A deletion, a move to another line, or a change to the
+  text before the line forgets it, so a continuation the user deleted is not offered back and
+  one written for one place is not offered in another. An empty answer is remembered against
+  the exact line and place it was given for, so a tick does not ask the same question again.
 - **120 ms debounce.** A pass sleeps what is left of `generationDebounceInMilliseconds`
   since the key was pressed, which is nothing when the pause was already that long; the
   next keystroke still cancels the pass, so a burst still costs one pass for its last

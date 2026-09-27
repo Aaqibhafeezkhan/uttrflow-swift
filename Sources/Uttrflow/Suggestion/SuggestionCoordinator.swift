@@ -471,7 +471,7 @@ final class SuggestionCoordinator {
             switch options {
             case .none:
                 Self.log.debug("\(SuggestionLog.optionsNone(typed: query.typed), privacy: .public)")
-                modelPass.rememberEmpty(query)
+                modelPass.rememberEmpty(query, at: SuggestionMoment.place(of: snapshot))
                 guard
                     let quiet = session.resolveGenerated(
                         [], for: query, elapsedMilliseconds: since(started), whenEmpty: .notOnThisMachine)
@@ -553,9 +553,17 @@ final class SuggestionCoordinator {
         let completions: [String]
         // Whether the model wrote lines and the machine denied every one, which is a silence with its own name.
         var invented = false
-        switch modelPass.plan(for: query) {
+        var reused = false
+        let place = SuggestionMoment.place(of: snapshot)
+        // A deletion, another line or changed text before it leaves the last answer describing a line that is gone.
+        modelPass.follow(query, at: place)
+        switch modelPass.plan(for: query, at: place) {
         case .reuse(let kept):
-            completions = kept
+            // A kept line meets the machine again, since what it names may have changed since it was written.
+            entering(.attest, turn: number)
+            completions = await attested(kept, for: query)
+            guard turns.isCurrent(number) else { return }
+            reused = true
         case .skip:
             return
         case .ask:
@@ -580,7 +588,7 @@ final class SuggestionCoordinator {
             switch answer {
             case .failure(let error):
                 // A failed pass is remembered like an empty one, so a tick never re-runs the failure, but it is never logged as one.
-                modelPass.rememberEmpty(query)
+                modelPass.rememberEmpty(query, at: place)
                 Self.log.error(
                     "\(SuggestionLog.generateFailed(typed: query.typed, error: error), privacy: .public)")
                 return
@@ -589,7 +597,7 @@ final class SuggestionCoordinator {
                 let standing = await attested(lines, for: query)
                 guard turns.isCurrent(number) else { return }
                 invented = !lines.isEmpty && standing.isEmpty
-                modelPass.remember(standing, for: query)
+                modelPass.remember(standing, for: query, at: place)
                 completions = standing
             }
         }
@@ -603,6 +611,8 @@ final class SuggestionCoordinator {
         else { return }
         // A silence has nothing to place, so it is settled and logged against the field it read.
         guard update.silence == nil else { return settle(update, in: snapshot, since: started) }
+        // A kept answer is ready as the turn's own read is taken, and its alternatives were already sought when it was written.
+        guard !reused else { return draw(update, in: snapshot) }
         await drawFresh(update, for: snapshot, turn: number)
         // With the one line on screen, the others are fetched behind it, so Down has a list and the person never waited for it.
         guard completions.count == 1, let leader = completions.first, turns.isCurrent(number) else { return }
@@ -616,7 +626,7 @@ final class SuggestionCoordinator {
             guard turns.isCurrent(number), !others.isEmpty,
                 let expanded = session.expandGenerated(others, for: query)
             else { return }
-            modelPass.remember([leader] + others, for: query)
+            modelPass.remember([leader] + others, for: query, at: place)
             return await drawFresh(expanded, for: snapshot, turn: number)
         }
         // Quiet never shows the list, so no model pass is spent building one.
@@ -644,7 +654,7 @@ final class SuggestionCoordinator {
         guard turns.isCurrent(number), !standing.isEmpty,
             let expanded = session.expandGenerated(standing, for: query)
         else { return }
-        modelPass.remember([leader] + standing, for: query)
+        modelPass.remember([leader] + standing, for: query, at: place)
         Self.log.debug(
             "\(SuggestionLog.alternatives(typed: query.typed, got: others.count, elapsedMilliseconds: self.since(started)), privacy: .public)"
         )
