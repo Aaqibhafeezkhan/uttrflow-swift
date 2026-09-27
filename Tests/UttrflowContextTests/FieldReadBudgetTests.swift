@@ -32,10 +32,18 @@ struct FieldReadBudgetTests {
 
 @Suite("Fields left alone after a slow read")
 struct SlowFieldsTests {
-    @Test("A field that ran over rests for the first rest, and only that field")
+    @Test("A field's first run over is forgiven, since the first read of a process is a cold start")
+    func firstRunOverIsForgiven() {
+        let slow = SlowFields()
+        slow.ranOver(field, at: second)
+        #expect(!slow.isResting(field, at: second))
+    }
+
+    @Test("A field that ran over twice rests for the first rest, and only that field")
     func restsAfterRunningOver() {
         let slow = SlowFields()
         #expect(!slow.isResting(field, at: second))
+        slow.ranOver(field, at: second)
         slow.ranOver(field, at: second)
         #expect(slow.isResting(field, at: second + SlowFields.firstRestInNanoseconds - 1))
         #expect(!slow.isResting(field, at: second + SlowFields.firstRestInNanoseconds))
@@ -46,6 +54,7 @@ struct SlowFieldsTests {
     func doublesUpToTheLongest() {
         let slow = SlowFields()
         var now = second
+        slow.ranOver(field, at: now)
         slow.ranOver(field, at: now)
         now += SlowFields.firstRestInNanoseconds
         slow.ranOver(field, at: now)
@@ -60,7 +69,10 @@ struct SlowFieldsTests {
     func aFastReadEndsTheRest() {
         let slow = SlowFields()
         slow.ranOver(field, at: second)
+        slow.ranOver(field, at: second)
         slow.answered(field)
+        #expect(!slow.isResting(field, at: second))
+        slow.ranOver(field, at: second)
         #expect(!slow.isResting(field, at: second))
         slow.ranOver(field, at: second)
         #expect(slow.isResting(field, at: second + SlowFields.firstRestInNanoseconds - 1))
@@ -70,6 +82,7 @@ struct SlowFieldsTests {
     func forgetsTheOldestPastCapacity() {
         let slow = SlowFields()
         for element in 0...UInt(SlowFields.capacity) {
+            slow.ranOver(SlowFields.Key(process: 1, element: element), at: second + UInt64(element))
             slow.ranOver(SlowFields.Key(process: 1, element: element), at: second + UInt64(element))
         }
         #expect(!slow.isResting(SlowFields.Key(process: 1, element: 0), at: second + 100))
