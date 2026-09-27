@@ -473,14 +473,15 @@ struct RetentionTests {
         #expect(try await store.candidates(for: terminal, matching: "kept").count == 1)
     }
 
-    @Test("A superseded entry goes before any live one, however much it once had behind it.")
-    func evictsSupersededFirst() async throws {
+    @Test(
+        "A fragment a longer line grew out of goes before any live one, however much it once had behind it.")
+    func evictsFragmentsFirst() async throws {
         let corpus = Corpus()
         let store = try store(corpus)
-        for _ in 0..<50 { try await store.record("git comit", in: terminal, at: moment) }
-        try await store.supersede("git comit", with: "git commit", in: terminal)
+        for _ in 0..<50 { try await store.record("git comm", in: terminal, at: moment) }
+        try await store.record("git commit --amend", in: terminal, at: moment)
         // Each filler ends in a word so none is a fragment of another, which would supersede it too.
-        for index in 0..<(PredictStore.entriesPerSurface + 1) {
+        for index in 0..<(PredictStore.entriesPerSurface) {
             try await store.record("filler \(index) end", in: terminal, at: moment)
         }
         let superseded = try Database(path: corpus.path).rows(
@@ -488,6 +489,26 @@ struct RetentionTests {
         ) { $0.integer(0) }
         #expect(superseded == [0])
         #expect(try await store.entryCount() == PredictStore.entriesPerSurface)
+    }
+
+    @Test("A correction or a refusal outlasts every live entry, so a full field never brings the line back.")
+    func retirementsOutlastLiveEntries() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record("deploy prod", in: folderTwo, at: moment)
+        for index in 0..<(PredictStore.entriesPerSurface - 1) {
+            try await store.record("filler \(index) end", in: folderOne, at: moment)
+        }
+        try await store.record("git comit", in: folderOne, at: moment + 10)
+        try await store.supersede("deploy prod", with: "deploy staging", in: folderOne)
+        await store.recordRejection(of: "git comit", in: folderOne)
+        #expect(try await store.candidates(for: folderOne, matching: "dep").isEmpty)
+        for index in 0..<5 {
+            try await store.record("another \(index) end", in: folderOne, at: moment + 20)
+        }
+        #expect(try await store.candidates(for: folderOne, matching: "dep").isEmpty)
+        #expect(try await store.candidates(for: folderOne, matching: "git c").isEmpty)
+        #expect(try await store.candidates(for: folderTwo, matching: "dep").count == 1)
     }
 
     @Test("What follows what stops growing at the same cap, and keeps the pairs followed most.")
