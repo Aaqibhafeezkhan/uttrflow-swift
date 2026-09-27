@@ -18,7 +18,7 @@ public enum RemoteSession {
     }
 
     /// The title's words, keeping what a path is made of together, so a directory called `~/.ssh` is not the program `ssh`.
-    private static func words(of title: String) -> [String] {
+    static func words(of title: String) -> [String] {
         title.split { !($0.isLetter || $0.isNumber || "-_./~@+".contains($0)) }.map(String.init)
     }
 }

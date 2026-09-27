@@ -19,6 +19,7 @@ public enum Quieting {
         if !context.canDraw { return .nowhereToDraw }
         if context.hasSelection { return .textSelected }
         if !context.caretAtLineEnd { return .caretInsideText }
+        if !context.isCommandLine, AppPicker.isOpen(after: context.typed) { return .applicationPicker }
         if context.rejectionsThisSession >= rejectionsBeforeSilence { return .rejectedTooOften }
         if context.isProse, context.millisecondsSinceKeystroke < proseHesitationInMilliseconds {
             return .writingFluently
@@ -40,6 +41,8 @@ public enum Quieting {
         case textSelected
         /// The caret is not at the end of its line.
         case caretInsideText
+        /// The word being typed opens the application's own mention, emoji or command picker, which owns Tab and Escape.
+        case applicationPicker
         /// Enough suggestions were typed past in this field to silence it.
         case rejectedTooOften
         /// A prose writer is still in flow and has not paused.
@@ -48,6 +51,8 @@ public enum Quieting {
         case nothingFocused
         /// An empty line is not a prefix of anything.
         case emptyLine
+        /// A list line holding only its marker, so nothing of the item has been typed yet.
+        case listMarkerOnly
         /// A line past `SuggestionSession.maximumTypedLength` is a document, not a prefix.
         case lineTooLong
         /// The line holds another script, where nothing Uttrflow may write belongs. See `Docs/predict.md`.

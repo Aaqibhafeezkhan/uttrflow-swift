@@ -74,9 +74,12 @@ struct ArmedKeysTests {
         #expect(ArmedKeys.slot(of: KeyStroke(.tab, modifiers: .shift)).isEmpty)
     }
 
-    @Test("Option only claims the two strokes that use it.")
-    func optionClaimsTwoStrokes() {
-        #expect(ArmedKeys.slot(of: KeyStroke(.downArrow, modifiers: .option)).isEmpty)
+    @Test("Option only claims the strokes that use it, and a bare arrow claims no slot at all.")
+    func optionClaimsItsStrokes() {
+        #expect(ArmedKeys.slot(of: KeyStroke(.downArrow, modifiers: .option)) == .optionDownArrow)
+        #expect(ArmedKeys.slot(of: KeyStroke(.upArrow, modifiers: .option)) == .optionUpArrow)
+        #expect(ArmedKeys.slot(of: KeyStroke(.downArrow)).isEmpty)
+        #expect(ArmedKeys.slot(of: KeyStroke(.upArrow)).isEmpty)
         #expect(ArmedKeys.slot(of: KeyStroke(.return, modifiers: .option)).isEmpty)
         #expect(ArmedKeys.slot(of: KeyStroke(.rightArrow, modifiers: .option)).isEmpty)
     }

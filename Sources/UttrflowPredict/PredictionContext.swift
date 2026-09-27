@@ -24,6 +24,8 @@ public struct PredictionContext: Sendable, Equatable {
     public let rejectionsThisSession: Int
     /// Whether the field gives a place to draw at all, which a field that reports no caret does not.
     public let canDraw: Bool
+    /// Whether the field is a terminal's command line, where `@`, `:` and `/` open no picker.
+    public let isCommandLine: Bool
 
     /// One moment in one field, everything but the line defaulted to the ordinary case.
     public init(
@@ -31,7 +33,7 @@ public struct PredictionContext: Sendable, Equatable {
         isComposing: Bool = false, isSecure: Bool = false, isProse: Bool = false,
         millisecondsSinceKeystroke: Int = 1_000, isEnabledHere: Bool = true,
         isMinimised: Bool = false, rejectionsThisSession: Int = 0, canDraw: Bool = true,
-        markedText: MarkedText = .unanswered
+        markedText: MarkedText = .unanswered, isCommandLine: Bool = false
     ) {
         self.typed = typed
         self.caretAtLineEnd = caretAtLineEnd
@@ -45,5 +47,6 @@ public struct PredictionContext: Sendable, Equatable {
         self.isMinimised = isMinimised
         self.rejectionsThisSession = rejectionsThisSession
         self.canDraw = canDraw
+        self.isCommandLine = isCommandLine
     }
 }

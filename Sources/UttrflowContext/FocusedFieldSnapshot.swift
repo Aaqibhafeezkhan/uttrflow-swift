@@ -98,7 +98,8 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
         self.readMicroseconds = readMicroseconds
         self.windowTitle = windowTitle
         let prose = role == Self.proseRole && !TerminalApplications.contains(bundleIdentifier)
-        let line = Self.caretLine(of: value, at: selection, in: bundleIdentifier, prose: prose)
+        let line = Self.caretLine(
+            of: value, at: selection, in: bundleIdentifier, prose: prose, windowTitle: windowTitle)
         self.currentLine = line.text
         self.isLineCut = line.isCut
     }
@@ -122,10 +123,19 @@ extension FocusedFieldSnapshot {
     var hasTypeStyle: Bool { pointSize != nil || fontFamily != nil || textColor != nil }
 
     /// Where a suggestion may be drawn for this field, or nothing where none may be.
-    public var placement: SuggestionPlacement? { capability.placement }
+    public var placement: SuggestionPlacement? { isHeldByFullScreenProgram ? nil : capability.placement }
 
-    /// The line capture may learn, which is nothing when the line was too long to read whole.
-    public var learnableLine: String { isLineCut ? "" : currentLine }
+    /// Whether a terminal's screen belongs to a full-screen program, whose lines are a buffer or a query and not a command.
+    public var isHeldByFullScreenProgram: Bool {
+        TerminalApplications.contains(bundleIdentifier)
+            && FullScreenProgram.isNamed(inWindowTitle: windowTitle)
+    }
+
+    /// The line capture may learn, which is nothing when the line was too long to read whole or text follows the caret on it.
+    public var learnableLine: String { isLineCut || hasTextAfterCaret ? "" : currentLine }
+
+    /// Whether the field shows text after the caret on its line, so the line up to the caret is a cut, not a finished value.
+    public var hasTextAfterCaret: Bool { rowAhead != nil && !caretAtLineEnd }
 
     /// How many characters back from the caret its line is read; a prompt and a line to complete both fit well inside it.
     public static let lineReadLimit = ShellPrompt.searchLimit + SuggestionSession.maximumTypedLength + 1
@@ -135,15 +145,19 @@ extension FocusedFieldSnapshot {
 
     /// The caret's line as `currentLine` holds it, and whether the read limit cut it.
     private static func caretLine(
-        of value: String?, at selection: NSRange?, in bundleIdentifier: String, prose: Bool
+        of value: String?, at selection: NSRange?, in bundleIdentifier: String, prose: Bool,
+        windowTitle: String?
     ) -> (text: String, isCut: Bool) {
         guard let value else { return ("", false) }
+        let isTerminal = TerminalApplications.contains(bundleIdentifier)
+        // A full-screen program's line is not typed at the shell, so nothing of it is completed or learned.
+        if isTerminal, FullScreenProgram.isNamed(inWindowTitle: windowTitle) { return ("", false) }
         let caret = index(in: value, atUTF16Offset: selection?.location ?? value.utf16.count)
         let start = lineStart(in: value, before: caret, prose: prose)
         let line = String(value[start.index..<caret])
         // A cut line is kept whole, so its length alone refuses it.
         guard !start.isCut else { return (line, true) }
-        let input = TerminalApplications.contains(bundleIdentifier) ? ShellPrompt.input(in: line) : line
+        let input = isTerminal ? ShellPrompt.input(in: line) : line
         // Leading indentation is dropped so an indented line matches what capture stored, which is trimmed.
         return (droppingLeadingWhitespace(input), false)
     }

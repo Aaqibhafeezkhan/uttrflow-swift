@@ -127,7 +127,7 @@ enum CompletionText {
         return abbreviations.contains(word)
     }
 
-    /// The lines a pass keeps once each is unsigned, ended at its first sentence where it is prose, and held to the register's length; prose that copies the screen is dropped.
+    /// The lines a pass keeps once each is unsigned, ended at its first sentence where it is prose, grounded in its specifics and held to the register's length; prose that copies the screen is dropped.
     static func finished(_ lines: [String], typed: String, in situation: GenerationSituation) -> [String] {
         let register = Register.infer(from: situation, typed: typed)
         let context = contextNeverCopied(in: situation)
@@ -142,6 +142,8 @@ enum CompletionText {
                 guard !copiesContext(kept, typed: typed, context: context, ownLines: situation.recentLines)
                 else { return nil }
             }
+            // A number, an amount or an address the model added is kept only where someone already wrote it.
+            guard Specifics.areGrounded(kept, typed: typed, in: situation) else { return nil }
             guard kept.count - typed.count <= register.longestContinuation, seen.insert(kept).inserted
             else { return nil }
             return kept

@@ -83,25 +83,45 @@ struct AccountBanner: View {
     }
 }
 
-/// The banner's ground: the brand aurora, blurred, over a dark that stays dark in the light appearance.
+/// The banner's ground: the brand aurora, blurred once into a picture, over a dark that stays dark in the light appearance.
 struct AccountAurora: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 ProfilePalette.bannerGround
-                AngularGradient(
-                    colors: IslandPalette.aurora + IslandPalette.aurora.prefix(1),
-                    center: UnitPoint(x: 0.4, y: 0.6), startAngle: .degrees(120),
-                    endAngle: .degrees(480)
-                )
-                .frame(width: geometry.size.width * 1.8, height: geometry.size.height * 1.8)
-                .blur(radius: 50)
-                .opacity(0.75)
+                if let picture = Self.picture(for: geometry.size) {
+                    Image(nsImage: picture)
+                        .resizable()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .opacity(0.75)
+                }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// The last picture blurred and the banner size it was blurred for.
+    @MainActor private static var blurred: (size: CGSize, image: NSImage)?
+
+    /// The aurora for a banner of `size`, blurred the first time that size is asked for, so redraws never re-blur it.
+    @MainActor static func picture(for size: CGSize) -> NSImage? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        if let known = blurred, known.size == size { return known.image }
+        let renderer = ImageRenderer(
+            content: AngularGradient(
+                colors: IslandPalette.aurora + IslandPalette.aurora.prefix(1),
+                center: UnitPoint(x: 0.4, y: 0.6), startAngle: .degrees(120), endAngle: .degrees(480)
+            )
+            .frame(width: size.width * 1.8, height: size.height * 1.8)
+            .blur(radius: 50)
+            .frame(width: size.width, height: size.height))
+        // A blur has no edges for a Retina pixel to sharpen.
+        renderer.scale = 1
+        guard let image = renderer.nsImage else { return nil }
+        blurred = (size, image)
+        return image
     }
 }
 

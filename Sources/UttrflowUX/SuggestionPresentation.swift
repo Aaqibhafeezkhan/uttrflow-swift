@@ -155,7 +155,7 @@ public struct SuggestionPresentation: Sendable, Equatable {
     public var acceptGlyph: String { acceptKey.glyph }
 
     /// The keys that work the open list, drawn under it in the dimmed style.
-    public var footer: String { "\(acceptKey.glyph) take   ↓ next   ⎋ dismiss" }
+    public var footer: String { "\(acceptKey.glyph) take   ⌥↓ next   ⎋ dismiss" }
 
     /// What VoiceOver is told the surface is offering, and what taking it costs.
     public var accessibilityLabel: String {

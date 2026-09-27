@@ -315,3 +315,46 @@ struct FocusedFieldSnapshotTests {
         #expect(!FocusedFieldSnapshot.isTextEntry(nil))
     }
 }
+
+/// A terminal reading of one line with the caret at its end, under a window title.
+private func terminalLine(_ line: String, title: String) -> FocusedFieldSnapshot {
+    FocusedFieldSnapshot(
+        bundleIdentifier: "com.apple.Terminal", applicationName: "Terminal", role: "AXTextArea", value: line,
+        selection: NSRange(location: line.utf16.count, length: 0),
+        caret: CGRect(x: 10, y: 20, width: 1, height: 16),
+        pointSize: 13, readMicroseconds: 400, windowTitle: title)
+}
+
+@Suite("A terminal whose screen a full-screen program holds")
+struct FullScreenProgramTests {
+    @Test(
+        "An fzf query or an editor's buffer line gets no ghost and is never read as a command.",
+        arguments: [
+            ("> git st", "tools — fzf — 80×24"), ("git sta", "tools — vim deploy.sh — 80×24"),
+            ("make te", "tools — nvim — 120×40"), ("> git st", "fzf"), ("git sta", "tools — less — 80×24"),
+        ])
+    func programLinesAreLeftAlone(_ line: String, _ title: String) {
+        let reading = terminalLine(line, title: title)
+        #expect(reading.placement == nil, "\(title)")
+        #expect(reading.currentLine.isEmpty, "\(title)")
+        #expect(reading.learnableLine.isEmpty, "\(title)")
+    }
+
+    @Test("The same lines at the shell are read and may take the ghost.")
+    func shellLinesStillWork() {
+        let reading = terminalLine("user@host tools % git st", title: "tools — -zsh — 80×24")
+        #expect(reading.placement == .inlineGhost)
+        #expect(reading.currentLine == "git st")
+        #expect(terminalLine("➜  vimrc git sta", title: "vimrc — -zsh — 80×24").currentLine == "git sta")
+    }
+
+    @Test("Outside a terminal a window title naming an editor changes nothing.")
+    func otherApplicationsAreUnaffected() {
+        let reading = FocusedFieldSnapshot(
+            bundleIdentifier: "com.example.notes", applicationName: "Notes", role: "AXTextArea",
+            value: "git sta",
+            selection: NSRange(location: 7, length: 0), caret: CGRect(x: 10, y: 20, width: 1, height: 16),
+            pointSize: 13, readMicroseconds: 400, windowTitle: "vim tips")
+        #expect(reading.currentLine == "git sta")
+    }
+}

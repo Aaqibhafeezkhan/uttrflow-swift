@@ -350,7 +350,7 @@ struct SuggestionRejectionTests {
         _ = session.expandGenerated(["git checkout main"], for: asked)
         let again = try draw(&session, typing: "git c")
         #expect(again?.suggestion == .choice(leader: "git commit -m", others: ["git checkout main"]))
-        #expect(again?.armed.contains(.downArrow) == true)
+        #expect(again?.armed.contains(.optionDownArrow) == true)
         // A different line is a different answer, and takes the list with it.
         let other = try draw(&session, typing: "git c", candidates: lone("git clone"))
         #expect(other?.suggestion == .certain("git clone"))
@@ -376,8 +376,8 @@ struct SuggestionRejectionTests {
             [remembered("git commit", count: 5)], for: request, now: moment, elapsedMilliseconds: 0)
 
         #expect(second?.suggestion == .certain("git commit"))
-        #expect(second?.armed.contains(.downArrow) == false)
-        _ = session.route(KeyStroke(.downArrow))
+        #expect(second?.armed.contains(.optionDownArrow) == false)
+        _ = session.route(KeyStroke(.downArrow, modifiers: .option))
         #expect(session.route(KeyStroke(.tab)) != .accept("git checkout"))
     }
 
@@ -389,8 +389,8 @@ struct SuggestionRejectionTests {
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
         _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
         _ = session.expandGenerated(["git commit --amend", "git checkout main"], for: asked)
-        _ = session.route(KeyStroke(.downArrow))
-        _ = session.route(KeyStroke(.downArrow))
+        _ = session.route(KeyStroke(.downArrow, modifiers: .option))
+        _ = session.route(KeyStroke(.downArrow, modifiers: .option))
         #expect(session.selection == SuggestionSelection(index: 2, hasMoved: true))
 
         let again = try draw(&session, typing: "git com")
@@ -410,7 +410,7 @@ struct SuggestionRejectionTests {
         let again = try draw(&session, typing: "git c", isQuiet: true)
 
         #expect(again?.suggestion == .certain("git commit -m"))
-        #expect(again?.armed.contains(.downArrow) == false)
+        #expect(again?.armed.contains(.optionDownArrow) == false)
     }
 
     @Test("Alternatives that add nothing, or arrive after the user has typed on, change nothing.")
@@ -669,7 +669,7 @@ struct SuggestionRoutingTests {
         var session = SuggestionSession()
         let close = [remembered("git commit", count: 20), remembered("git checkout", count: 19)]
         _ = try draw(&session, typing: "git c", candidates: close)
-        guard case .redraw(let moved) = session.route(KeyStroke(.downArrow)) else {
+        guard case .redraw(let moved) = session.route(KeyStroke(.downArrow, modifiers: .option)) else {
             Issue.record("Down should have moved the highlight")
             return
         }
@@ -927,7 +927,7 @@ struct SuggestionTypeThroughTests {
         var moved = SuggestionSession()
         let again = try query(moved.turn(in: field, at: PredictionContext(typed: "git c")))
         _ = moved.resolveGenerated(["git commit -m", "git checkout"], for: again, elapsedMilliseconds: 0)
-        _ = moved.route(KeyStroke(.downArrow))
+        _ = moved.route(KeyStroke(.downArrow, modifiers: .option))
         #expect(moved.typedThrough("o") == nil)
     }
 }

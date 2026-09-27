@@ -65,6 +65,8 @@ final class SuggestionPanelController {
     /// Reads an announcement aloud to VoiceOver; a test swaps it to hear what would be said.
     var announce: @MainActor (String) -> Void = SuggestionPanelController.post
     private var isActuallyShowing = false
+    /// Called when the panel takes a drawn ghost off screen without being asked, so its keys are let go.
+    var onWithdrawnUnasked: (@MainActor () -> Void)?
 
     init() {
         hostingView = NSHostingView(rootView: SuggestionView(presentation: .init(.silent)))
@@ -269,7 +271,11 @@ final class SuggestionPanelController {
             isActuallyShowing = false
             return
         }
-        guard reposition() else { return withdraw() }
+        guard reposition() else {
+            withdraw()
+            onWithdrawnUnasked?()
+            return
+        }
         if !isActuallyShowing || !panel.isVisible { panel.orderFrontRegardless() }
         isActuallyShowing = true
     }
