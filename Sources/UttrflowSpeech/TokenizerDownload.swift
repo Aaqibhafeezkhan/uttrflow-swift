@@ -5,7 +5,7 @@ private import CryptoKit
 
 // The one file in UttrflowSpeech allowed to open a connection; Scripts/offline_audit.sh names it.
 
-/// Fetches a model's CoreML weights at install time, pinned to a commit and checked file by file.
+/// Fetches every file in a model's folder at install time, pinned to a commit and checked file by file.
 func downloadWeights(
     for model: SpeechModel, into destination: URL,
     onProgress: @escaping @Sendable (Double) -> Void
@@ -14,11 +14,10 @@ func downloadWeights(
     var completed = try completedPinnedWeightBytes(for: model, in: destination)
     onProgress(Double(completed) / Double(total))
 
-    for name in WeightsAssets.fileNames {
-        guard let expected = model.weightFiles[name] else {
-            throw SpeechModelFetchFailure(reason: "\(model.variant) has no recorded weights for \(name)")
-        }
-
+    guard !model.weightFiles.isEmpty else {
+        throw SpeechModelFetchFailure(reason: "\(model.variant) has no recorded files")
+    }
+    for (name, expected) in model.weightFiles.sorted(by: { $0.key < $1.key }) {
         let file = destination.appending(path: name)
         if try verified(file: file, expected: expected) {
             continue
@@ -76,8 +75,7 @@ func downloadTokenizer(for model: SpeechModel, into destination: URL) async thro
 
 private func completedPinnedWeightBytes(for model: SpeechModel, in destination: URL) throws -> Int64 {
     var completed: Int64 = 0
-    for name in WeightsAssets.fileNames {
-        guard let expected = model.weightFiles[name] else { continue }
+    for (name, expected) in model.weightFiles {
         if try verified(file: destination.appending(path: name), expected: expected) {
             completed += expected.bytes
         }

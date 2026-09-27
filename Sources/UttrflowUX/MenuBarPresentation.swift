@@ -19,8 +19,12 @@ public enum SpeechModelReadiness: Sendable, Equatable {
     case downloading(fractionCompleted: Double?)
     /// On disk, but not yet loaded into memory, which is cold-start slow.
     case loading
-    /// On disk, but the load ended without a model that can transcribe.
+    /// On disk, but the load ended without a model that can transcribe; one reload is offered.
     case loadFailed
+    /// On disk, but the reload failed as well, so only a fresh download repairs it.
+    case loadFailedAgain
+    /// Its folder is on disk but lacks a file it needs, so it must be downloaded again.
+    case incomplete
     case notInstalled
 
     /// What to tell a person about the load, timed from `start`; `nil` when there is no load to speak of.
@@ -30,8 +34,27 @@ public enum SpeechModelReadiness: Sendable, Equatable {
         switch self {
         case .loading: .loading(elapsed: start.map { $0.duration(to: now) } ?? .zero)
         case .loadFailed: .failed
+        case .loadFailedAgain, .incomplete: .broken
         case .notInstalled: .missing
         case .ready, .downloading: nil
+        }
+    }
+
+    /// Where a load that has ended leaves the model: ready, short of files, or failed once or twice.
+    public static func settled(
+        isReady: Bool, isInstalled: Bool, isIncomplete: Bool, failedBefore: Bool
+    ) -> SpeechModelReadiness {
+        if isReady { return .ready }
+        guard isInstalled else { return isIncomplete ? .incomplete : .notInstalled }
+        return failedBefore ? .loadFailedAgain : .loadFailed
+    }
+
+    /// What fixes a model that cannot dictate: one reload after a first failure, a download otherwise.
+    public var recovery: RecoveryAction? {
+        switch self {
+        case .loadFailed: .retry
+        case .loadFailedAgain, .incomplete, .notInstalled: .downloadSpeechModel
+        case .ready, .downloading, .loading: nil
         }
     }
 }
@@ -433,6 +456,8 @@ public enum MenuBarPresenter {
             return loadEstimate(for: state)?.heading ?? "Getting ready…"
         case .loadFailed:
             return "Speech model didn't load"
+        case .loadFailedAgain, .incomplete:
+            return SpeechModelLoad.broken.status
         case .notInstalled:
             return SpeechModelLoad.missing.status
         case .ready:
@@ -558,15 +583,10 @@ public enum MenuBarPresenter {
         }
     }
 
-    /// The download a missing or broken speech model needs, offered wherever no failure brings its own fix.
+    /// The reload or download a speech model that cannot dictate needs, offered wherever no failure brings its own fix.
     static func setupAction(for speechModel: SpeechModelReadiness) -> FailureAction? {
-        switch speechModel {
-        case .notInstalled, .loadFailed:
-            FailureAction(
-                title: FailurePresenter.title(for: .downloadSpeechModel), recovery: .downloadSpeechModel)
-        case .downloading, .loading, .ready:
-            nil
-        }
+        guard let recovery = speechModel.recovery else { return nil }
+        return FailureAction(title: FailurePresenter.title(for: recovery), recovery: recovery)
     }
 
     static func isBusy(_ activity: DictationActivity) -> Bool {

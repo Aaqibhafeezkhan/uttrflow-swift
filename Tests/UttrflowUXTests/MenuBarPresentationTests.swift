@@ -388,7 +388,23 @@ struct MenuBarHeaderTests {
                 == .status(
                     MenuBarStatus(
                         title: "Model didn’t load", detail: "Nothing was lost", emphasis: .attention,
-                        action: MenuBarCommand(title: "Try again", intent: .recover(.downloadSpeechModel)),
+                        action: MenuBarCommand(title: "Try again", intent: .recover(.retry)),
+                        actionEmphasis: .attention)))
+    }
+
+    @Test(
+        "offers Download again, not another reload, once the model is incomplete or failed twice",
+        arguments: [SpeechModelReadiness.loadFailedAgain, .incomplete])
+    func damaged(readiness: SpeechModelReadiness) {
+        let shown = MenuBarPresenter.present(MenuBarState(speechModel: readiness))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Model is damaged", detail: "Download it again to repair it",
+                        emphasis: .attention,
+                        action: MenuBarCommand(
+                            title: "Download again", intent: .recover(.downloadSpeechModel)),
                         actionEmphasis: .attention)))
     }
 

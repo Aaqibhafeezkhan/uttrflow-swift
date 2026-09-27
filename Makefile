@@ -225,6 +225,7 @@ uitest: ## Drive dist/Uttrflow.app through the UI suite. Needs a windowing sessi
 
 .PHONY: app
 app: ## Build and sign Uttrflow.app into dist/ for this Mac.
+	./Scripts/fetch-provider-marks.sh || echo "Continuing without the Google mark; the sign-in button shows its wording alone."
 	./Scripts/bundle.sh
 
 # Its own identifier, so it runs beside the installed app and keeps its own settings,
@@ -241,6 +242,7 @@ app-hardened: ## Same, but under the hardened runtime. Rehearses a shippable bui
 # UTTRFLOW_SIGNING_IDENTITY; bundle.sh says how to find it if neither is set.
 .PHONY: app-dist
 app-dist: ## Build a notarisable Uttrflow.app. Needs a Developer ID certificate.
+	./Scripts/fetch-provider-marks.sh
 	./Scripts/bundle.sh distribution $(if $(IDENTITY),"$(IDENTITY)")
 
 .PHONY: notarise-check

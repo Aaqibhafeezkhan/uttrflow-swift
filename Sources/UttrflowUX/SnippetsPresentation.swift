@@ -142,8 +142,6 @@ public struct SnippetsPresentation: Sendable, Equatable {
     public let editor: SnippetEditor?
     /// Set when there is nothing to list and nothing being written.
     public let emptyState: MainEmptyState?
-    /// The worked example on the empty page: a trigger and what it types.
-    public let example: SnippetExample?
     /// The line under the rows, absent when there are none.
     public let footnote: String?
 
@@ -153,32 +151,13 @@ public struct SnippetsPresentation: Sendable, Equatable {
         rows: [SnippetRow],
         editor: SnippetEditor?,
         emptyState: MainEmptyState?,
-        example: SnippetExample?,
         footnote: String?
     ) {
         self.chrome = chrome
         self.rows = rows
         self.editor = editor
         self.emptyState = emptyState
-        self.example = example
         self.footnote = footnote
-    }
-}
-
-/// The one snippet shown to somebody who has none, so the idea lands before the form does.
-public struct SnippetExample: Sendable, Equatable {
-    /// "For example".
-    public let heading: String
-    /// The trigger, as a pill.
-    public let trigger: MainPill
-    /// What it types.
-    public let text: String
-
-    /// Builds the example.
-    public init(heading: String, trigger: MainPill, text: String) {
-        self.heading = heading
-        self.trigger = trigger
-        self.text = text
     }
 }
 
@@ -215,7 +194,6 @@ public enum SnippetsPresenter {
             rows: rows,
             editor: editor,
             emptyState: rows.isEmpty && editor == nil ? emptyState(for: snapshot) : nil,
-            example: rows.isEmpty && editor == nil && snapshot.snippets.isEmpty ? example : nil,
             footnote: rows.isEmpty
                 ? nil
                 : """
@@ -233,12 +211,6 @@ public enum SnippetsPresenter {
         let lede = "Say a short phrase; Uttrflow types the whole thing."
         return count == 0 ? lede : "\(lede) · \(MainFormatting.count(count, "snippet", "snippets"))"
     }
-
-    /// The address snippet shown to somebody with none.
-    static let example = SnippetExample(
-        heading: "For example",
-        trigger: MainPill(text: "my address", tone: .accent),
-        text: "Flat 402, Example Residences, Bengaluru")
 
     // MARK: - Searching
 
@@ -318,10 +290,7 @@ public enum SnippetsPresenter {
         return MainEmptyState(
             symbolName: "doc.on.doc",
             title: "No snippets yet",
-            message: """
-                A snippet turns something you say into a block of text you would rather not say \
-                out loud every time — an address, a standup format, a sign-off.
-                """,
+            message: "Say a short phrase, and Uttrflow types the whole thing.",
             action: MainAction(title: "New Snippet", symbolName: "plus", intent: .addSnippet))
     }
 }

@@ -271,6 +271,49 @@ struct DiagnosticsEngineTests {
         #expect(system.engines.first?.detail == "Built-in speech recognition")
     }
 
+    /// The shared readiness decides the words, so Diagnostics never says "In use" while Home says it failed.
+    @Test(
+        "the speech model card and row say the model's real state",
+        arguments: [
+            (SpeechModelReadiness.notInstalled, "Not downloaded", "Not downloaded"),
+            (.incomplete, "Incomplete", "Incomplete, download it again"),
+            (.downloading(fractionCompleted: 0.4), "Downloading", "Downloading"),
+            (.loading, "Loading", "on this Mac, every language, loading"),
+            (.loadFailed, "Failed to load", "On this Mac, but it failed to load"),
+            (.loadFailedAgain, "Failed to load", "On this Mac, but it failed to load"),
+            (.ready, "In use", "on this Mac, every language"),
+        ])
+    func speechModelSaysItsRealState(
+        readiness: SpeechModelReadiness, status: String, detail: String
+    ) throws {
+        let onDisk = readiness != .notInstalled && readiness != .incomplete
+        let page = DiagnosticsPresenter.page(
+            for: DiagnosticsSnapshot(
+                speechModel: DiagnosticsModelPresence(
+                    isInstalled: onDisk, bytesOnDisk: nil, isMultilingual: true),
+                speechReadiness: readiness),
+            locale: DiagnosticsFixture.locale)
+        let card = try #require(page.models.first { $0.title == "Speech" })
+
+        #expect(card.status == status)
+        #expect(page.storage.first?.detail == detail)
+        let broken = [SpeechModelReadiness.notInstalled, .incomplete, .loadFailed, .loadFailedAgain]
+        #expect((card.state == .attention) == broken.contains(readiness))
+    }
+
+    @Test("a failed load of the recogniser not in use leaves the downloaded model's card alone")
+    func failedLoadOfTheOtherRecogniser() throws {
+        let page = DiagnosticsPresenter.page(
+            for: DiagnosticsSnapshot(
+                engines: EngineConfiguration(speech: .appleSpeech, transformerPreference: [.rules]),
+                speechModel: DiagnosticsModelPresence(
+                    isInstalled: true, bytesOnDisk: nil, isMultilingual: true),
+                speechReadiness: .loadFailed),
+            locale: DiagnosticsFixture.locale)
+
+        #expect(try #require(page.models.first { $0.title == "Speech" }).status == "Ready")
+    }
+
     /// The first one that can run is the one that runs; the rest are standing by.
     @Test("only the first available clean-up engine is in use")
     func firstAvailableIsInUse() {

@@ -280,7 +280,7 @@ public struct HomeSnapshot: Sendable, Equatable {
 
     /// What the hero says about the speech model, the download first; `nil` once it can transcribe.
     var modelStatus: HomeModelStatus? {
-        if let speechDownload { return .downloading(speechDownload) }
+        if let speechDownload { return .downloading(speechDownload, bytes: speechModelBytes) }
         if speechModel == .missing { return .missing(bytes: speechModelBytes) }
         return speechModel.map(HomeModelStatus.load)
     }

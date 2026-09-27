@@ -79,7 +79,7 @@ struct SpeechModelTests {
     @Test("every model records size and digest for every weight file it fetches")
     func everyWeightFileHasSizeAndDigest() {
         for model in SpeechModel.catalogue {
-            for name in WeightsAssets.fileNames {
+            for name in WeightsAssets.fileNames(of: model) {
                 let file = model.weightFiles[name]
                 #expect(file != nil, "\(model.variant) records no metadata for \(name)")
                 #expect((file?.bytes ?? 0) > 0, "\(model.variant)'s \(name) size is not recorded")
@@ -91,17 +91,31 @@ struct SpeechModelTests {
         }
     }
 
-    /// The file metadata is the part the downloader can verify before a model reaches the install folder.
-    @Test("recorded download sizes include the pinned weight bytes")
-    func downloadSizesCoverPinnedWeights() {
+    /// A manifest that forgets a file installs a folder that cannot load, so it must add up to the whole download.
+    @Test("every model's pinned files add up to its whole download")
+    func pinnedFilesAreTheWholeDownload() {
         for model in SpeechModel.catalogue {
-            let weightBytes = model.weightFiles.values.reduce(Int64(0)) { $0 + $1.bytes }
+            let pinned = model.weightFiles.values.reduce(Int64(0)) { $0 + $1.bytes }
             #expect(
-                weightBytes < model.downloadBytes,
-                "\(model.variant)'s total download is smaller than its pinned weights")
-            #expect(
-                model.downloadBytes - weightBytes < 50_000_000,
-                "\(model.variant)'s total download leaves too much unexplained")
+                pinned == model.downloadBytes,
+                "\(model.variant) pins \(pinned) of \(model.downloadBytes) bytes")
+        }
+    }
+
+    /// Each compiled bundle is a program plus its weights; without `model.mil` CoreML cannot parse it.
+    @Test("every model pins each bundle's program beside its weights")
+    func everyBundlePinsItsProgram() {
+        for model in SpeechModel.catalogue {
+            let bundles = Set(
+                model.weightFiles.keys.compactMap { $0.split(separator: "/").first }
+                    .filter { $0.hasSuffix(".mlmodelc") })
+            #expect(bundles.count >= 3, "\(model.variant) pins \(bundles.count) bundles")
+            for bundle in bundles {
+                #expect(
+                    model.weightFiles["\(bundle)/model.mil"] != nil,
+                    "\(model.variant) lacks \(bundle)/model.mil")
+                #expect(model.weightFiles["\(bundle)/weights/weight.bin"] != nil)
+            }
         }
     }
 

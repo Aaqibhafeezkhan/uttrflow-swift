@@ -128,6 +128,82 @@ struct SpeechModelLoadingSurfacesTests {
         #expect(page.status.text == "Speech model didn’t load")
     }
 
+    @Test("a damaged model offers an amber Download again, not another reload")
+    func homeShowsTheDamage() throws {
+        let page = home(.broken)
+        let status = try #require(page.hero.modelStatus)
+
+        #expect(status.title == "Speech model is damaged")
+        #expect(status.subtitle == "Download it again to repair it.")
+        #expect(status.tone == .warning)
+        #expect(
+            status.action == MainAction(title: "Download again", intent: .recover(.downloadSpeechModel)))
+        #expect(page.status.text == "Speech model is damaged")
+    }
+
+    /// A failed load reloads once; a second failure or missing files turn every surface to a download.
+    @Test(
+        "Home, the menu bar and Diagnostics offer the same fix for the model's state",
+        arguments: [
+            (SpeechModelReadiness.loadFailed, RecoveryAction.retry),
+            (.loadFailedAgain, .downloadSpeechModel),
+            (.incomplete, .downloadSpeechModel),
+            (.notInstalled, .downloadSpeechModel),
+        ])
+    func everySurfaceAgrees(readiness: SpeechModelReadiness, fix: RecoveryAction) throws {
+        let load = try #require(readiness.load(since: nil as ContinuousClock.Instant?, now: .now))
+        #expect(readiness.recovery == fix)
+        #expect(load.recovery == fix)
+
+        #expect(try #require(home(load).hero.modelStatus).action?.intent == .recover(fix))
+
+        guard case .status(let menu) = MenuBarPresenter.present(MenuBarState(speechModel: readiness)).header
+        else {
+            Issue.record("the menu bar shows no status for \(readiness)")
+            return
+        }
+        #expect(menu.action?.intent == .recover(fix))
+
+        let presence = DiagnosticsModelPresence(
+            isInstalled: readiness == .loadFailed || readiness == .loadFailedAgain, bytesOnDisk: nil,
+            isMultilingual: true)
+        let diagnostics = DiagnosticsPresenter.page(
+            for: DiagnosticsSnapshot(speechModel: presence, speechReadiness: readiness))
+        #expect(diagnostics.storage.first?.action?.intent == .recover(fix))
+        #expect(diagnostics.summary.action?.intent == .recover(fix))
+    }
+
+    @Test("a first failed load offers a reload; a failed reload offers a download instead")
+    func secondFailureOffersADownload() {
+        let first = SpeechModelReadiness.settled(
+            isReady: false, isInstalled: true, isIncomplete: false, failedBefore: false)
+        let second = SpeechModelReadiness.settled(
+            isReady: false, isInstalled: true, isIncomplete: false, failedBefore: true)
+
+        #expect(first == .loadFailed)
+        #expect(first.recovery == .retry)
+        #expect(second == .loadFailedAgain)
+        #expect(second.recovery == .downloadSpeechModel)
+    }
+
+    @Test("an incomplete folder counts as not installed, and says it needs downloading again")
+    func incompleteFolderIsNotInstalled() {
+        let settled = SpeechModelReadiness.settled(
+            isReady: false, isInstalled: false, isIncomplete: true, failedBefore: false)
+
+        #expect(settled == .incomplete)
+        #expect(settled.recovery == .downloadSpeechModel)
+        #expect(settled.load(since: nil as ContinuousClock.Instant?, now: .now) == .broken)
+        #expect(
+            SpeechModelReadiness.settled(
+                isReady: false, isInstalled: false, isIncomplete: false, failedBefore: true)
+                == .notInstalled)
+        #expect(
+            SpeechModelReadiness.settled(
+                isReady: true, isInstalled: true, isIncomplete: false, failedBefore: true)
+                == .ready)
+    }
+
     @Test("a missing permission keeps its card and still leaves the model's state in the hero")
     func permissionAndLoadBothShow() throws {
         let page = HomePresenter.page(
@@ -198,6 +274,13 @@ struct SpeechModelLoadingSurfacesTests {
         #expect(!page.hero.canStart)
         #expect(page.status == HomeStatus(text: "Setting up… 42%", isReady: false))
         #expect(page.subtitle == "Uttrflow cannot listen yet.")
+    }
+
+    @Test("a download with a known size says how much has arrived")
+    func downloadCountsTheBytes() {
+        let status = HomeModelStatus.downloading(0.42, bytes: 1_400_000_000)
+        #expect(status.subtitle == "Downloading the speech model · 588 MB of 1.4 GB")
+        #expect(HomeModelStatus.downloading(1.4, bytes: 1_000_000).subtitle.hasSuffix("1 MB of 1 MB"))
     }
 
     @Test("a download's bar never runs past either end")

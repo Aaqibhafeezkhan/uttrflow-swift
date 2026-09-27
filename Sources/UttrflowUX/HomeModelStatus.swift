@@ -47,16 +47,21 @@ public struct HomeModelStatus: Sendable, Equatable {
     /// The line under a long load's estimate, since only the first load after a restart is slow.
     static let afterRestart = "Only after a restart. Everything else already works."
 
-    /// The download under way, at a share from 0 to 1.
-    public static func downloading(_ fraction: Double) -> HomeModelStatus {
+    /// The download under way, at a share from 0 to 1, with the bytes so far when the total is known.
+    public static func downloading(_ fraction: Double, bytes: Int64? = nil) -> HomeModelStatus {
         let percent = MenuBarPresenter.percentage(of: fraction)
+        let received = bytes.map { total in
+            let arrived = Int64(Double(total) * min(max(fraction, 0), 1))
+            return "\(MenuBarPresenter.size(of: arrived)) of \(MenuBarPresenter.size(of: total))"
+        }
         return HomeModelStatus(
-            title: "Setting up… \(percent)%", subtitle: "Downloading the speech model",
+            title: "Setting up… \(percent)%",
+            subtitle: ["Downloading the speech model", received].compactMap(\.self).joined(separator: " · "),
             tone: .dictation, progress: .fraction(min(max(fraction, 0), 1)), action: nil,
             accessibilityLabel: "Setting up. Downloading the speech model, \(percent) percent.")
     }
 
-    /// The model on disk and loading, or failed to load, or not on disk at all.
+    /// The model on disk and loading, failed to load, damaged, or not on disk at all.
     public static func load(_ load: SpeechModelLoad) -> HomeModelStatus {
         switch load {
         case .loading:
@@ -75,6 +80,12 @@ public struct HomeModelStatus: Sendable, Equatable {
                 tone: .warning, progress: nil,
                 action: MainAction(title: "Try again", intent: .recover(.retry)), actionTone: .warning,
                 accessibilityLabel: "\(load.status). Nothing was lost. Try loading it again.")
+        case .broken:
+            let repair = "Download it again to repair it."
+            return HomeModelStatus(
+                title: load.status, subtitle: repair, tone: .warning, progress: nil,
+                action: MainAction(title: "Download again", intent: .recover(.downloadSpeechModel)),
+                actionTone: .warning, accessibilityLabel: "\(load.status). \(repair)")
         case .missing:
             return missing(bytes: nil)
         }
