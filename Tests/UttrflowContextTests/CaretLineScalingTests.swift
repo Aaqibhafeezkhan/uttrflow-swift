@@ -48,6 +48,28 @@ struct CaretLineScalingTests {
         #expect(update == .quiet(because: .lineTooLong))
     }
 
+    @Test("A line with text after the caret is never learned, however long the pause or wherever focus goes.")
+    func aLineEditedInsideIsNotLearned() {
+        let paragraph = "We moved the quarterly review to the last week of the month."
+        let caret = (paragraph as NSString).range(of: "la").location + 2
+        let inside = FocusedFieldSnapshot(
+            bundleIdentifier: "com.example.editor", applicationName: "Editor", role: "AXTextArea",
+            value: paragraph + "\nNext line", selection: NSRange(location: caret, length: 0))
+        #expect(inside.currentLine == "We moved the quarterly review to the la")
+        #expect(inside.hasTextAfterCaret)
+        #expect(inside.learnableLine.isEmpty)
+        let atEnd = FocusedFieldSnapshot(
+            bundleIdentifier: "com.example.editor", applicationName: "Editor", role: "AXTextArea",
+            value: paragraph + "  \nNext line", selection: NSRange(location: paragraph.utf16.count, length: 0)
+        )
+        #expect(!atEnd.hasTextAfterCaret)
+        #expect(atEnd.learnableLine == paragraph)
+        let unknown = FocusedFieldSnapshot(
+            bundleIdentifier: "com.example.editor", applicationName: "Editor", role: "AXTextArea",
+            value: paragraph, selection: nil)
+        #expect(unknown.learnableLine == paragraph)
+    }
+
     @Test("A long document of short lines reads only the caret's own line.")
     func shortLinesCostTheirLength() {
         let value = String(repeating: "earlier text\n", count: 50_000) + "git c"

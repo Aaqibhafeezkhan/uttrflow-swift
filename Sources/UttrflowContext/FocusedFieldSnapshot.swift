@@ -124,8 +124,11 @@ extension FocusedFieldSnapshot {
     /// Where a suggestion may be drawn for this field, or nothing where none may be.
     public var placement: SuggestionPlacement? { capability.placement }
 
-    /// The line capture may learn, which is nothing when the line was too long to read whole.
-    public var learnableLine: String { isLineCut ? "" : currentLine }
+    /// The line capture may learn, which is nothing when the line was too long to read whole or text follows the caret on it.
+    public var learnableLine: String { isLineCut || hasTextAfterCaret ? "" : currentLine }
+
+    /// Whether the field shows text after the caret on its line, so the line up to the caret is a cut, not a finished value.
+    public var hasTextAfterCaret: Bool { rowAhead != nil && !caretAtLineEnd }
 
     /// How many characters back from the caret its line is read; a prompt and a line to complete both fit well inside it.
     public static let lineReadLimit = ShellPrompt.searchLimit + SuggestionSession.maximumTypedLength + 1
