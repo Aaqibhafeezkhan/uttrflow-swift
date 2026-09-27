@@ -58,7 +58,8 @@ struct LineShapeTests {
     @Test("A branch a git verb creates is a new name, never an existing branch; where it starts from is one.")
     func gitNewBranchNamesAreFree() {
         for line in [
-            "git checkout -b feat", "git checkout -B feat", "git checkout --orphan feat", "git switch -c feat",
+            "git checkout -b feat", "git checkout -B feat", "git checkout --orphan feat",
+            "git switch -c feat",
             "git switch -C feat", "git switch --create feat", "git worktree add -b feat", "git branch feat",
             "git branch -m old feat", "git branch --list fe",
         ] {

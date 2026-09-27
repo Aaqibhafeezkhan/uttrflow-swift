@@ -57,7 +57,8 @@ struct ShellWordsTests {
         #expect(words("ls a2>err") == [["ls", "a2"]])
     }
 
-    @Test("`>&` before a file sends both outputs there and empties it, and before a descriptor duplicates it.")
+    @Test(
+        "`>&` before a file sends both outputs there and empties it, and before a descriptor duplicates it.")
     func ampersandRedirection() throws {
         for line in ["make >& build.log", "make >&build.log"] {
             let command = try #require(ShellWords.commands(in: line, home: "/h"))
@@ -69,7 +70,9 @@ struct ShellWordsTests {
             #expect(command.allSatisfy { $0.overwrites.isEmpty }, "\(line)")
             #expect(command[0].words.map(\.text).allSatisfy { !$0.hasPrefix("&") && $0 != "2" }, "\(line)")
         }
-        #expect(try #require(ShellWords.commands(in: "make >&2x", home: "/h"))[0].overwrites.map(\.text) == ["2x"])
+        #expect(
+            try #require(ShellWords.commands(in: "make >&2x", home: "/h"))[0].overwrites.map(\.text) == ["2x"]
+        )
     }
 
     @Test(
