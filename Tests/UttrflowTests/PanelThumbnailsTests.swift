@@ -2,6 +2,7 @@
 
 import AppKit
 import ImageIO
+import Synchronization
 import Testing
 import UttrflowClipboard
 
@@ -142,32 +143,41 @@ struct PanelThumbnailsTests {
         #expect(Set(counter.files) == [file, other])
     }
 
+    /// A decode held on its thread until the test lets it go, and whether it has ended.
+    private final class DecodeHold: Sendable {
+        private let released = DispatchSemaphore(value: 0)
+        private let state = Mutex((calls: 0, ended: false))
+        var calls: Int { state.withLock { $0.calls } }
+        var hasEnded: Bool { state.withLock { $0.ended } }
+        func release() { released.signal() }
+        /// Blocks until released, or for a minute so a caller that waits on it fails rather than hangs.
+        func hold() {
+            state.withLock { $0.calls += 1 }
+            _ = released.wait(timeout: .now() + .seconds(60))
+            state.withLock { $0.ended = true }
+        }
+    }
+
     /// The cache miss returns nil immediately and the source load runs on a background queue, so the row draws the placeholder while the decode happens.
     @Test("miss does not block the caller while the source decodes")
     func missDoesNotBlockTheCaller() async {
-        final class DecodingCounter: @unchecked Sendable {
-            var calls = 0
-        }
-        let decoded = DecodingCounter()
+        let decoding = DecodeHold()
         let image = NSImage(size: NSSize(width: 4, height: 4))
-        let source = PanelThumbnailSource { file, _ in
-            decoded.calls += 1
-            // Long enough that a synchronous call would obviously block the caller.
-            Thread.sleep(forTimeInterval: 0.1)
+        let source = PanelThumbnailSource { _, _ in
+            decoding.hold()
             return image
         }
         let thumbnails = PanelThumbnails(source: source, budget: 1)
 
-        let started = Date()
         let result = thumbnails.thumbnail(for: file)
-        let elapsed = Date().timeIntervalSince(started)
+        let decodeStillHeld = !decoding.hasEnded
+        decoding.release()
 
-        // The miss returns right away; the source cost 100ms but the call did not.
         #expect(result == nil, "miss returns nil, the row draws the placeholder")
-        #expect(elapsed < 0.01, "the call must not have waited for the decode: took \(elapsed)s")
+        #expect(decodeStillHeld, "the call must return while the decode is still held")
 
         await thumbnails.waitForIdle(file: file)
-        #expect(decoded.calls == 1, "the source ran exactly once, off the caller's thread")
+        #expect(decoding.calls == 1, "the source ran exactly once, off the caller's thread")
         #expect(thumbnails.thumbnail(for: file) != nil)
     }
 
