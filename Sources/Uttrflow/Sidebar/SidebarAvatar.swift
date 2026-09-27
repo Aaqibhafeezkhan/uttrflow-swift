@@ -17,7 +17,7 @@ struct SidebarAvatar: View {
         self.initials = initials
         self.picture = picture
         self.size = size
-        _image = State(initialValue: picture.flatMap(AccountPictures.cached(for:)))
+        _image = State(initialValue: picture.flatMap { AccountPictures.cached(for: $0) })
     }
 
     var body: some View {
@@ -51,26 +51,32 @@ struct SidebarAvatar: View {
     }
 }
 
-/// The account picture at avatar size, decoded once per set of bytes and never on the main thread.
+/// The account picture at each drawn size, decoded once per set of bytes and never on the main thread.
 @MainActor
 enum AccountPictures {
-    /// The largest the avatar is drawn, in pixels on a Retina screen.
+    /// The largest the sidebar avatar is drawn, in pixels on a Retina screen.
     static let pixels = 96
-    private static var last: (data: Data, image: CGImage)?
+    /// The last picture decoded at each longest side, in pixels.
+    private static var decoded: [Int: (data: Data, image: CGImage)] = [:]
 
-    /// The decoded picture for these bytes, if it is the one already decoded.
-    static func cached(for data: Data) -> CGImage? {
-        last.flatMap { $0.data == data ? $0.image : nil }
+    /// The decoded picture for these bytes at `longestSide` pixels, if it is the one already decoded.
+    static func cached(for data: Data, longestSide: Int = pixels) -> CGImage? {
+        decoded[longestSide].flatMap { $0.data == data ? $0.image : nil }
     }
 
-    /// The decoded picture for these bytes, decoding them away from the main thread when they are new.
-    static func image(for data: Data) async -> CGImage? {
-        if let image = cached(for: data) { return image }
-        let limit = pixels
+    /// Any size already decoded for these bytes, the largest first, to draw while the right size decodes.
+    static func anyCached(for data: Data) -> CGImage? {
+        decoded.sorted { $0.key > $1.key }.lazy.compactMap { $0.value.data == data ? $0.value.image : nil }
+            .first
+    }
+
+    /// The decoded picture for these bytes at `longestSide` pixels, decoding them away from the main thread when they are new.
+    static func image(for data: Data, longestSide: Int = pixels) async -> CGImage? {
+        if let image = cached(for: data, longestSide: longestSide) { return image }
         let image = await Task.detached(priority: .userInitiated) {
-            PictureDecoder.thumbnail(of: data, longestSide: limit)
+            PictureDecoder.thumbnail(of: data, longestSide: longestSide)
         }.value
-        if let image { last = (data, image) }
+        if let image { decoded[longestSide] = (data, image) }
         return image
     }
 }
