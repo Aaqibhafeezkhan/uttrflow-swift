@@ -239,7 +239,9 @@ struct DictionaryEmptyTests {
         let page = HistoryFixture.dictionary()
         #expect(page.emptyState?.title == "No words of your own yet")
         #expect(page.emptyState?.action?.intent == .addWord)
-        #expect(page.emptyState?.footnote?.contains("Nothing is pre-loaded") == true)
+        #expect(page.emptyState?.action?.title == "Add Word")
+        #expect(page.emptyState?.message == "Add names and terms Uttrflow would otherwise get wrong.")
+        #expect(page.emptyState?.footnote == nil)
         #expect(page.footnote == nil)
     }
 
