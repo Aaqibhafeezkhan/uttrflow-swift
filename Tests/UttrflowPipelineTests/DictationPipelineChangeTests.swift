@@ -316,6 +316,45 @@ struct DictationPipelineSnippetTests {
         #expect(await pipeline.outcome?.changes.snippets.map(\.snippetID) == [snippet])
     }
 
+    /// A line break is Return in a single-line field, so it would submit the words half-written.
+    @Test("A multi-line expansion goes into a single-line field on one line")
+    func flattensAnExpansionForOneLine() async {
+        let inserter = FakeInserter()
+        let pipeline = makePipeline(
+            inserter: inserter, snippets: signingExpander(),
+            context: FakeContextEngine(
+                context: .fixture(
+                    applicationName: "Numbers", bundleIdentifier: "com.apple.iWork.Numbers",
+                    documentName: "Budget")))
+
+        await dictate(with: pipeline)
+
+        #expect(inserter.received == ["send Regards, Asha"])
+        #expect(inserter.received.allSatisfy { !$0.contains(where: \.isNewline) })
+        #expect(await pipeline.outcome?.changes.snippets.map(\.expansion) == ["Regards, Asha"])
+    }
+
+    @Test("A multi-line expansion keeps its line breaks where the field takes them")
+    func keepsAnExpansionsLinesWhereTheyFit() async {
+        let inserter = FakeInserter()
+        let pipeline = makePipeline(inserter: inserter, snippets: signingExpander())
+
+        await dictate(with: pipeline)
+
+        #expect(inserter.received == ["send Regards,\n  Asha"])
+    }
+
+    /// An expander that signs off over two lines, the second indented.
+    private func signingExpander() -> FakeExpander {
+        FakeExpander(answering: { _ in
+            ExpandedTranscript(
+                text: "send Regards,\n  Asha",
+                snippets: [
+                    SnippetUse(snippetID: snippet, matched: "my signature", expansion: "Regards,\n  Asha")
+                ])
+        })
+    }
+
     /// §19 again, and the same rule the tidier is held to.
     @Test("A snippet store that refuses costs the expansion and not the words")
     func aRefusedStoreCostsNothing() async {

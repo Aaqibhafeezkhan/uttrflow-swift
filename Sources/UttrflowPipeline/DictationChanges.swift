@@ -211,6 +211,28 @@ public struct ExpandedTranscript: Sendable, Equatable {
 
     /// A transcript nothing was done to.
     public static func unchanged(_ text: String) -> Self { Self(text: text) }
+
+    /// The same transcript with every line break a space, as a single-line field wants, firings included.
+    public var onOneLine: Self {
+        Self(
+            text: Self.joiningLines(text),
+            snippets: snippets.map {
+                SnippetUse(
+                    snippetID: $0.snippetID, matched: $0.matched,
+                    expansion: Self.joiningLines($0.expansion))
+            })
+    }
+
+    /// The lines of `text` joined by one space, each trimmed, a blank line dropped.
+    static func joiningLines(_ text: String) -> String {
+        guard text.contains(where: \.isNewline) else { return text }
+        return text.split(whereSeparator: \.isNewline)
+            .map { line in
+                String(line.drop(while: \.isWhitespace).reversed().drop(while: \.isWhitespace).reversed())
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
 }
 
 /// The dictionary corrections and snippet firings shown, offered for undo, and learnt from together.

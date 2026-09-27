@@ -189,6 +189,18 @@ struct AppliedChangesTests {
         #expect(ExpandedTranscript.unchanged("as said").snippets.isEmpty)
         #expect(ExpandedTranscript.unchanged("as said").text == "as said")
     }
+
+    @Test(
+        "Joining lines leaves one space per break and drops a blank line",
+        arguments: [
+            ("Regards,\nAsha", "Regards, Asha"),
+            ("Dear team,\n\n  thanks\r\nAsha", "Dear team, thanks Asha"),
+            ("one\tline  as is", "one\tline  as is"),
+        ]
+    )
+    func joinsLines(text: String, expected: String) {
+        #expect(ExpandedTranscript.joiningLines(text) == expected)
+    }
 }
 
 @Suite("What the recogniser is willing to score")
