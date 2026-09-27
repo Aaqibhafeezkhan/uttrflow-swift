@@ -53,14 +53,14 @@ struct SurroundingsTests {
                 < lines.firstIndex(of: "Me: in dist/, one sec")!)
     }
 
-    @Test("The focused field is never asked for its text, since its value can be a whole scrollback")
-    func focusedFieldTextIsNeverRead() {
+    @Test("The focused field's value never reaches the prompt as a line of text.")
+    func focusedFieldValueNeverReachesThePrompt() {
         let reads = TextReadLog()
-        _ = Surroundings.collect(
+        let read = Surroundings.collect(
             around: compose, in: FakeTree(root: chatWindow, textReads: reads), windowTitle: nil,
             deadline: unhurried)
         #expect(!reads.ids.isEmpty)
-        #expect(!reads.ids.contains(compose.id))
+        #expect(read.text?.contains(compose.text ?? "") != true)
     }
 
     @Test("Hidden text, controls and menus are not what the user is looking at, so they are not read.")
@@ -178,11 +178,14 @@ struct SurroundingsTests {
         #expect(read.text == "Thread\nfirst\nsecond\nFooter\nthird\nfourth")
 
         // Two full lines leave room for 398 characters, so the 399-character third loses its last one.
-        let long = String(repeating: "ab", count: 200)
-        let third = "xyz" + String(repeating: "ab", count: 198)
+        let long1 = String(repeating: "ab", count: 200)
+        let long2 = "cd" + String(repeating: "ef", count: 199)
+        let third = "xyz" + String(repeating: "gh", count: 198)
         let full = Node(
             id: 0, role: "AXWindow",
-            children: [Node(id: 40, children: [compose, label(50, long), label(51, long), label(52, third)])])
+            children: [
+                Node(id: 40, children: [compose, label(50, long1), label(51, long2), label(52, third)])
+            ])
         let cut = Surroundings.collect(
             around: compose, in: FakeTree(root: full), windowTitle: nil, deadline: unhurried)
         #expect(cut.text?.count == Surroundings.maximumCharacters)
@@ -191,18 +194,22 @@ struct SurroundingsTests {
 
     @Test("Once the characters are gathered, no farther ring is walked at all.")
     func aFullReadStopsWalkingOutward() {
-        let wall = String(repeating: "w", count: Surroundings.maximumCharactersPerElement)
+        // Distinct texts so dedup does not collapse the wall down to one occurrence. See #1947.
+        // Four 400-char walls exhaust the 1200-character budget after the third is read, so the
+        // fourth is not even visited — exactly what the test was already asserting for identical walls.
+        let lines = (21..<25).map { String(repeating: "w\($0)", count: 133) + "w\($0)" }
         let near = Node(
-            id: 20, children: [label(21, wall), label(22, wall), label(23, wall), label(24, wall)])
+            id: 20, children: lines.enumerated().map { label(21 + $0.offset, $0.element) })
         let far = Node(id: 10, children: (100..<200).map { label($0, "preview \($0)") })
         let window = Node(id: 0, role: "AXWindow", children: [far, Node(id: 40, children: [near, compose])])
         let visits = VisitCounter()
         let read = Surroundings.collect(
             around: compose, in: FakeTree(root: window, visits: visits), windowTitle: nil, deadline: unhurried
         )
-        #expect(visits.count == 4)
         #expect(read.text?.contains("preview") == false)
         #expect(read.text?.count == Surroundings.maximumCharacters)
+        // The budget runs out partway through the third wall, so only three of the four are visited.
+        #expect(visits.count == 4)
     }
 
     @Test(
@@ -367,5 +374,74 @@ struct SurroundingsTests {
     func anOrphanHasNoSurroundings() {
         let read = Surroundings.collect(around: compose, in: FakeTree(root: compose), windowTitle: "t")
         #expect(read == Surroundings(windowTitle: "t", text: nil))
+    }
+
+    /// #1947: a subtree the ring walk reaches from two ancestor levels is read once, not twice.
+    @Test("A subtree reachable from two ancestor levels is read once, not twice.")
+    func aReachableSubtreeIsReadOnce() {
+        // The chat list sits both beside the thread and inside it — the shape Chrome's AX tree has when the nav is mirrored under the conversation.
+        let chatListBesideThread = label(80, "Chats")
+        let chatListInsideThread = label(180, "Chats")
+        let thread = Node(
+            id: 20,
+            text: "Conversation with Riya",
+            children: [
+                chatListInsideThread,
+                Node(
+                    id: 21,
+                    children: [
+                        label(22, "Riya: are we still on for the design review on Friday?")
+                    ]),
+            ])
+        let page = Node(
+            id: 10,
+            children: [chatListBesideThread, thread])
+        let window = Node(
+            id: 0, role: "AXWindow",
+            children: [Node(id: 40, children: [page, compose])])
+        let read = Surroundings.collect(
+            around: compose, in: FakeTree(root: window), windowTitle: "Priya", deadline: unhurried)
+        let got = lines(read)
+        #expect(got.filter { $0 == "Chats" }.count == 1, "the chat list reads once, not twice: \(got)")
+    }
+
+    /// #1947: a substring of one line that also reads as a whole line elsewhere is kept whole once.
+    /// Mirrored nav rows are short on purpose so the dedup pass is what stands between the prompt and a repeat.
+    @Test("A short line that repeats in a long line drops only the repeat, not the long one.")
+    func aSubstringDoesNotCollapseIntoItsHost() {
+        let chats = label(80, "Chats")
+        let longLine = "Chats — see the conversations beside the threads you have open"
+        let thread = Node(
+            id: 20, text: "Conversation with Riya",
+            children: [
+                label(180, "Chats"),
+                label(181, longLine),
+            ])
+        let page = Node(
+            id: 10,
+            children: [chats, thread])
+        let window = Node(
+            id: 0, role: "AXWindow",
+            children: [Node(id: 40, children: [page, compose])])
+        let read = Surroundings.collect(
+            around: compose, in: FakeTree(root: window), windowTitle: nil, deadline: unhurried)
+        let got = lines(read)
+        #expect(got.filter { $0 == "Chats" }.count == 1, "the short label collapses once: \(got)")
+        #expect(got.contains(longLine), "the long line is not eaten by the substring match: \(got)")
+    }
+
+    /// #1947: the focused field's value must not be carried into its surroundings when a web view mirrors it.
+    @Test("The focused field's own value is not carried into its surroundings.")
+    func theFocusedFieldIsNotItsOwnSurroundings() {
+        // The textarea is also reachable as a sibling of the path — the shape Chrome's AX tree produces when a web view's contents are mirrored.
+        let mirror = Node(
+            id: 50, role: "AXTextArea", text: "on my w",
+            children: [label(51, "on my w")])
+        let window = Node(
+            id: 0, role: "AXWindow",
+            children: [Node(id: 40, children: [compose, mirror])])
+        let read = Surroundings.collect(
+            around: compose, in: FakeTree(root: window), windowTitle: nil, deadline: unhurried)
+        #expect(read.text?.contains("on my w") != true)
     }
 }
