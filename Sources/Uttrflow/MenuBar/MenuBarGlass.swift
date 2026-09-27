@@ -39,6 +39,12 @@ extension View {
             .compositingGroup()
             .shadow(color: MenuBarColour.shadow, radius: 20, y: 12)
     }
+
+    /// The ring round a popover control the keyboard is on.
+    func menuBarFocusRing(_ shape: some InsettableShape, isShown: Bool) -> some View {
+        overlay(
+            shape.strokeBorder(MenuBarColour.dictation, lineWidth: 2).padding(-3).opacity(isShown ? 1 : 0))
+    }
 }
 
 // MARK: - Colours

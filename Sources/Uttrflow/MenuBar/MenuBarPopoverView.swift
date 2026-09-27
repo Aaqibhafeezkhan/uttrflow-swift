@@ -9,6 +9,12 @@ struct MenuBarPopoverView: View {
     let presentation: MenuBarPresentation
     /// Carries a chosen command back to the controller.
     let onCommand: (MenuBarIntent) -> Void
+    /// The control that has the keyboard, by its place in ``MenuBarKeyboard``.
+    @FocusState private var focus: Int?
+    /// Whether a key has moved the focus, which is when its ring is drawn.
+    @State private var usesKeyboard = false
+    /// Whether the panel has the keyboard; losing it hides the ring until a key is pressed again.
+    @Environment(\.controlActiveState) private var activeState
 
     /// The popover's width, from the design.
     static let width: CGFloat = 290
@@ -16,22 +22,32 @@ struct MenuBarPopoverView: View {
     static let shadowMargin: CGFloat = 28
 
     var body: some View {
+        let keyboard = MenuBarKeyboard(presentation)
         VStack(alignment: .leading, spacing: 0) {
-            MenuBarHeaderView(header: presentation.header, onCommand: onCommand)
-            buttonRow.padding(.top, 14)
+            MenuBarHeaderView(
+                header: presentation.header, onCommand: onCommand, focus: $focus, showsFocus: usesKeyboard)
+            buttonRow(keyboard).padding(.top, 14)
             if let last = presentation.lastDictation {
                 MenuBarRule()
                 MenuBarSectionLabel(text: "LAST DICTATION")
-                MenuBarRowView(row: last, onCommand: onCommand)
+                MenuBarRowView(row: last, onCommand: onCommand, isFocused: shows(keyboard.lastDictationPlace))
+                    .menuBarKey($focus, keyboard.lastDictationPlace)
             }
             if !presentation.clips.isEmpty {
                 MenuBarRule()
                 MenuBarSectionLabel(text: "CLIPBOARD")
-                ForEach(Array(presentation.clips.enumerated()), id: \.offset) { _, row in
-                    MenuBarRowView(row: row, onCommand: onCommand)
+                ForEach(Array(presentation.clips.enumerated()), id: \.offset) { index, row in
+                    MenuBarRowView(
+                        row: row, onCommand: onCommand, isFocused: shows(keyboard.clipsStart + index)
+                    )
+                    .menuBarKey($focus, keyboard.clipsStart + index)
                 }
             }
         }
+        .onMoveCommand { move($0, in: keyboard) }
+        .onKeyPress(keys: [.return, .space]) { _ in press(in: keyboard) }
+        .onKeyPress(.tab) { reveal() }
+        .onChange(of: activeState) { _, state in if state != .key { usesKeyboard = false } }
         .padding(14)
         .frame(width: Self.width, alignment: .leading)
         .background(alignment: .top) { MenuBarAurora() }
@@ -40,13 +56,45 @@ struct MenuBarPopoverView: View {
         .padding(Self.shadowMargin)
     }
 
-    private var buttonRow: some View {
+    private func buttonRow(_ keyboard: MenuBarKeyboard) -> some View {
         HStack(spacing: 8) {
-            ForEach(Array(presentation.buttons.enumerated()), id: \.offset) { _, button in
-                MenuBarRoundButton(button: button, onCommand: onCommand)
-                    .frame(maxWidth: .infinity)
+            ForEach(Array(presentation.buttons.enumerated()), id: \.offset) { index, button in
+                MenuBarRoundButton(
+                    button: button, onCommand: onCommand, isFocused: shows(keyboard.buttonsStart + index)
+                )
+                .menuBarKey($focus, keyboard.buttonsStart + index)
+                .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    private func shows(_ place: Int) -> Bool { usesKeyboard && focus == place }
+
+    /// Shows where the focus is on the first key, and moves it from then on.
+    private func move(_ direction: MoveCommandDirection, in keyboard: MenuBarKeyboard) {
+        if reveal() == .handled { return }
+        focus = keyboard.place(after: focus, forward: direction == .down || direction == .right)
+    }
+
+    /// Draws the ring round the control that already has the focus, the first time a key asks for it.
+    private func reveal() -> KeyPress.Result {
+        guard !usesKeyboard else { return .ignored }
+        usesKeyboard = true
+        return focus == nil ? .ignored : .handled
+    }
+
+    /// Runs the focused control, as a click would.
+    private func press(in keyboard: MenuBarKeyboard) -> KeyPress.Result {
+        guard usesKeyboard, let command = keyboard.command(at: focus) else { return .ignored }
+        onCommand(command.intent)
+        return .handled
+    }
+}
+
+extension View {
+    /// Joins the popover's keyboard order at `place`, drawing its own ring instead of the system's.
+    fileprivate func menuBarKey(_ focus: FocusState<Int?>.Binding, _ place: Int) -> some View {
+        focusable().focusEffectDisabled().focused(focus, equals: place)
     }
 }
 
@@ -56,6 +104,8 @@ struct MenuBarPopoverView: View {
 private struct MenuBarHeaderView: View {
     let header: MenuBarHeader
     let onCommand: (MenuBarIntent) -> Void
+    let focus: FocusState<Int?>.Binding
+    let showsFocus: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -67,7 +117,11 @@ private struct MenuBarHeaderView: View {
             case .status(let status):
                 MenuBarStatusView(status: status)
                 if let action = status.action {
-                    MenuBarPill(command: action, emphasis: status.actionEmphasis, onCommand: onCommand)
+                    MenuBarPill(
+                        command: action, emphasis: status.actionEmphasis, onCommand: onCommand,
+                        isFocused: showsFocus && focus.wrappedValue == 0
+                    )
+                    .menuBarKey(focus, 0)
                 }
             }
         }
@@ -180,6 +234,7 @@ private struct MenuBarPill: View {
     let command: MenuBarCommand
     let emphasis: MenuBarEmphasis
     let onCommand: (MenuBarIntent) -> Void
+    let isFocused: Bool
 
     var body: some View {
         Button {
@@ -193,6 +248,7 @@ private struct MenuBarPill: View {
                 .padding(.horizontal, 11)
                 .padding(.vertical, 5)
                 .background(MenuBarColour.dot(emphasis), in: Capsule())
+                .menuBarFocusRing(Capsule(), isShown: isFocused)
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -206,6 +262,7 @@ private struct MenuBarPill: View {
 private struct MenuBarRoundButton: View {
     let button: MenuBarButton
     let onCommand: (MenuBarIntent) -> Void
+    let isFocused: Bool
 
     var body: some View {
         Button {
@@ -222,6 +279,7 @@ private struct MenuBarRoundButton: View {
                             .foregroundStyle(button.isPrimary ? MenuBarColour.fillInk : MenuBarColour.text)
                     )
                     .opacity(button.command.isEnabled ? 1 : 0.35)
+                    .menuBarFocusRing(Circle(), isShown: isFocused)
                 Text(button.command.title)
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(MenuBarColour.buttonLabel)
@@ -268,6 +326,7 @@ private struct MenuBarSectionLabel: View {
 private struct MenuBarRowView: View {
     let row: MenuBarRow
     let onCommand: (MenuBarIntent) -> Void
+    let isFocused: Bool
     @State private var isHovered = false
 
     var body: some View {
@@ -292,6 +351,7 @@ private struct MenuBarRowView: View {
                 isHovered && row.insert.isEnabled ? MenuBarColour.hover : .clear,
                 in: RoundedRectangle(cornerRadius: 8)
             )
+            .menuBarFocusRing(RoundedRectangle(cornerRadius: 8), isShown: isFocused)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
