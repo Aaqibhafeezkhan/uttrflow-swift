@@ -154,7 +154,8 @@ private struct Script {
             rejectionsThisSession: session.rejectionsHere)
         if let refused = Quieting.reason(known) { return refused }
         if minimised { return .minimised }
-        return context.typed.isEmpty ? .emptyLine : .lineTooLong
+        if context.typed.isEmpty { return .emptyLine }
+        return ListMarker.isAlone(context.typed) ? .listMarkerOnly : .lineTooLong
     }
 
     /// The store answers, the gates judge what is drawable, and the session draws what they left.

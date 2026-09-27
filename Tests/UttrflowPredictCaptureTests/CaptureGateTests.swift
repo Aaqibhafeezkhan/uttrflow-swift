@@ -92,6 +92,19 @@ struct CaptureGateTests {
         #expect(CaptureGate.refusal(toRecord: "y", from: field(), given: allowed) == .tooShort)
     }
 
+    @Test(
+        "A list line holding only its marker is refused as too short.",
+        arguments: ["- ", "* ", "1. ", "12)", "- [ ] ", "[x]", "• "])
+    func markerAloneIsRefused(line: String) {
+        #expect(CaptureGate.refusal(toRecord: line, from: field(), given: allowed) == .tooShort)
+    }
+
+    @Test("A list item with its text after the marker is learned.")
+    func markedItemPasses() {
+        #expect(CaptureGate.refusal(toRecord: "- Buy milk", from: field(), given: allowed) == nil)
+        #expect(CaptureGate.refusal(toRecord: "1. Buy milk", from: field(), given: allowed) == nil)
+    }
+
     @Test("Short all-digit values in non-terminal fields are refused as form secrets.")
     func shortNumericWebValuesAreRefused() {
         let browser = FieldReading(bundleIdentifier: "com.example.browser", role: "AXTextField")

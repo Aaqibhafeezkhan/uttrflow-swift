@@ -212,6 +212,9 @@ public struct SuggestionSession: Sendable, Equatable {
             return settled(.minimised, because: .minimised, rejected: rejected)
         }
         guard !context.typed.isEmpty else { return settled(because: .emptyLine, rejected: rejected) }
+        guard !ListMarker.isAlone(context.typed) else {
+            return settled(because: .listMarkerOnly, rejected: rejected)
+        }
         guard context.typed.count <= Self.maximumTypedLength else {
             return settled(because: .lineTooLong, rejected: rejected)
         }

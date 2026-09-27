@@ -48,6 +48,8 @@ public enum Quieting {
         case nothingFocused
         /// An empty line is not a prefix of anything.
         case emptyLine
+        /// A list line holding only its marker, so nothing of the item has been typed yet.
+        case listMarkerOnly
         /// A line past `SuggestionSession.maximumTypedLength` is a document, not a prefix.
         case lineTooLong
         /// The line holds another script, where nothing Uttrflow may write belongs. See `Docs/predict.md`.
