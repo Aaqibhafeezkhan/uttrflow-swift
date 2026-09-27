@@ -248,6 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         settings = settingsStore.load()
         // Reconciled at launch too: the login item can be removed without telling the app.
         applyAppearance()
+        _ = BrandFont.isAvailable
         applyLaunchAtLogin()
         startTelemetry()
         crashReports.follow(isEnabled: settings.sendsCrashReports)
