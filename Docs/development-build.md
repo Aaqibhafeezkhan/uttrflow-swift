@@ -43,6 +43,18 @@ compiled-in release key; with the URL gone, it always falls back to
 `InMemoryAuthenticationService`, so the development build never opens a real account
 session against the production service.
 
+**So its sign-in is a stand-in, and the page says so.** The sign-in page reads
+"Development build: signs in as a stand-in, no browser" under the providers. Pressing one
+opens no browser and signs in at once as `Development User`. The stand-in is signed with a
+key made fresh for each process, so it does not survive a relaunch: every launch of a
+development build opens on sign-in again, and one press gets past it.
+
+**To test real sign-in, build the release app with `make app`.** It talks to
+`https://api.uttrflow.com`, opens Google in the default browser, and keeps the session in
+the Keychain across relaunches. It shares its identifier with the installed app, so quit
+that first. `log stream --predicate 'subsystem == "com.uttrflow.Uttrflow" AND category ==
+"account"'` shows each step, as the table in `Docs/logging.md` lists.
+
 ## What it costs
 
 **macOS treats it as a new app, so Accessibility and Microphone have to be granted to it

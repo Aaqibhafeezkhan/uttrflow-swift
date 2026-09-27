@@ -21,10 +21,15 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
 3. A connection string with a password: `scheme://user:pass@host`, or `scheme://:pass@host` with
    no user, the password-only form some caches use. The colon in the userinfo is what keeps
    `https://example.com:8443/path` and `https://token@github.com/repo` out.
-4. Vendor prefixes with a minimum length each (OpenAI, Anthropic, Stripe, GitHub, GitLab,
+4. A URL that works for whoever holds it: a Slack, Discord or Teams incoming webhook, or a
+   URL whose query or fragment carries `sig`, `signature`, `X-Amz-Signature`,
+   `X-Goog-Signature`, `access_token`, `id_token`, `refresh_token` or `token` with a value of
+   at least eight characters, which is what a signed (SAS, pre-signed) URL or a magic link is.
+   `?token=` with nothing, or with a short placeholder, stays a link.
+5. Vendor prefixes with a minimum length each (OpenAI, Anthropic, Stripe, GitHub, GitLab,
    Slack, AWS, Google, npm, DigitalOcean, Shopify, SendGrid), so prose about `sk-` keys is not
    itself one.
-5. A named secret per line (`API_KEY=…`, `password: …`, `client_secret = …`) whose value is
+6. A named secret per line (`API_KEY=…`, `password: …`, `passphrase: …`, `client_secret = …`) whose value is
    quoted, or has a digit, or is at least 12 characters, so `var password: String` does not
    count. The name may carry a prefix: a keyword starts at a word boundary, after `_`, or at a
    lowercase-to-uppercase step, so `DB_PASSWORD`, `GITHUB_TOKEN`, `STRIPE_API_KEY` and
@@ -32,19 +37,24 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
    still needs a word boundary, so `passwordless`, `tokenizer` and `token_count` are not names.
    The cost, paid knowingly: `max_tokens: 4096` is masked, because a digit under a name that
    ends in a keyword is exactly what a short password or PIN looks like.
+   The value ends its line, or is followed by a `#` or `//` comment (after a space, for an
+   unquoted value, since `#` can stand inside one). A quoted value may also be followed by `}`,
+   `]`, or `, name:`, so a one-line JSON or JavaScript object (`{"apiKey":"…"}`,
+   `{ apiKey: "…", region: "us" }`) counts; `"token: " + t` does not, because what follows the
+   quote is more of an expression.
    A long bare value that only points at a secret is not one: an identifier path or an
    empty call (`request.token`, `process.env.API_KEY;`, `getpass.getpass()`), made of letters,
    `_` and `$` with no digit and no part of 32 or more hex letters, is code that loads a
    credential rather than the credential. A quoted value or one with a digit still counts,
    and so does a single long bare word, which is what a letters-only password looks like.
-6. A payment card number (below).
-7. The statistical rule below.
+7. A payment card number (below).
+8. The statistical rule below.
 
 ## What the named-secret rule leaves alone
 
 A credential inside a one-line command is not a named secret: `curl -u user:pass https://…`,
 `mysql -u root -ppass` and `PGPASSWORD=pass psql -h …`. The rule needs the value to end its
-line, which is what keeps prose such as `password: now is the time` out, and in a command the
+line or run into a comment, which is what keeps prose such as `password: now is the time` out, and in a command the
 value is followed by more of the command. `-u user:pass` has the same shape as `user:group` and
 `host:port`, `-p` is a port, a path or a profile flag in most other tools, and `PGPASSWORD`
 fuses the keyword into one uppercase word with no boundary before it. Catching any of these
@@ -168,8 +178,8 @@ clip each pattern is handed. `PatternWindows.swift` holds the pieces.
   on the 128 characters from there. Its longest shortest match is 47 characters, so a window
   decides every prefix more than 48 characters before its end, and those are not read again.
   SendGrid's first segment has no longest length, so its window runs to the end of the token.
-- **The card-number pattern on runs.** It runs only over runs of digits, spaces and hyphens that
-  hold at least thirteen digits, the fewest any grouping has, cut at character boundaries so a
+- **The card-number pattern on runs.** It runs only over runs of digits (ASCII or fullwidth),
+  spaces of any horizontal kind, hyphens and full stops that hold at least thirteen digits, the fewest any grouping has, cut at character boundaries so a
   digit carrying a combining mark stays a non-digit.
 - **ASCII clips byte for byte.** The statistical rule and the shell-command rule read an ASCII
   clip's bytes as its characters, which they are.
@@ -217,7 +227,11 @@ like one.
 ## Card numbers
 
 `CardNumberShape` accepts 13 to 19 digits, written unbroken or in the groups cards are printed
-in (4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4, 4-3-3-3) with one separator, space or dash, used throughout. The
+in (4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4, 4-3-3-3) with one separator, a space, dash or full stop,
+used throughout. Checkout pages, statements and some password managers group with a no-break,
+thin or other Unicode space, and some input methods type fullwidth digits, so the number is read
+in its printed form first: fullwidth digits as ASCII and every horizontal space as U+0020. A line
+break is not a separator, so a column of four-digit numbers stays text. The
 digits must then carry a prefix some network issues under at that length (Visa, Mastercard,
 American Express, Diners Club, JCB, Discover, UnionPay, RuPay, Mir, Maestro) and pass the Luhn
 check.

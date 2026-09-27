@@ -254,6 +254,9 @@ final class FakeAuthenticationService: AuthenticationService, @unchecked Sendabl
 
     /// Nothing to forget.
     func signOut() async {}
+
+    /// A stand-in exactly when its challenges say so, as the development service is.
+    var signsInAsStandIn: Bool { method == .standIn }
 }
 
 /// A URL without a force unwrap, which this package forbids.

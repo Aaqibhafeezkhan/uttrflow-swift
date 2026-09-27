@@ -312,6 +312,16 @@ struct HistoryEmptyTests {
         #expect(expired.emptyState?.message.contains("7 days") == true)
     }
 
+    @Test("before the history is read, the page claims nothing about it")
+    func beforeTheFirstReading() {
+        let page = HistoryPresenter.page(
+            for: HistorySnapshot(entries: [], now: HistoryFixture.now, hasReadHistory: false))
+        #expect(page.isReading)
+        #expect(page.emptyState == nil)
+        #expect(page.days.isEmpty && page.tiles.isEmpty && !page.showsSearch)
+        #expect(!HistoryFixture.page(entries: []).isReading)
+    }
+
     @Test("an empty page still has no false day sections")
     func noPhantomSections() {
         #expect(HistoryFixture.page(entries: []).days.isEmpty)
@@ -354,5 +364,31 @@ struct HistoryApplicationTests {
     func withoutAName() {
         #expect(HistoryPresenter.application(for: HistoryFixture.entry(application: nil)) == nil)
         #expect(HistoryPresenter.application(for: HistoryFixture.entry(application: " ")) == nil)
+    }
+}
+
+@Suite("Counting a dictation's words")
+struct HistoryWordCountTests {
+    @Test("counts the same runs a whitespace split does, across every kind of space")
+    func matchesSplit() {
+        let texts = [
+            "", " ", "one", " one  two ", "one\r\ntwo", "tab\tand\u{00A0}nbsp", "ideographic\u{3000}space",
+            "e\u{0301}clair and café", "emoji 👩‍👩‍👧 family", "line\u{2028}separator", "trailing\n",
+        ]
+        for text in texts {
+            #expect(
+                MainFormatting.words(in: text) == text.split(whereSeparator: \.isWhitespace).count, "\(text)")
+        }
+    }
+
+    @Test("a day's summary and each row's length agree on the words")
+    func summaryAgreesWithRows() {
+        let entries = [
+            HistoryFixture.entry("one two three", minutesAgo: 1),
+            HistoryFixture.entry("four  five", minutesAgo: 2),
+        ]
+        let day = HistoryFixture.page(entries: entries).days.first
+        #expect(day?.summary == "2 dictations · 5 words")
+        #expect(day?.rows.map(\.length) == ["3 words", "2 words"])
     }
 }

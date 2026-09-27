@@ -84,6 +84,7 @@ public enum SettingsEditor {
         }
         switch field {
         case .dictationEnabled: settings.dictationEnabled = isOn
+        case .handsFreeEnabled: settings.handsFreeEnabled = isOn
         case .clipboardEnabled: settings.clipboardEnabled = isOn
         case .showsFloatingButton: settings.showsFloatingButton = isOn
         case .shrinksToGripWhenIdle: settings.shrinksToGripWhenIdle = isOn
@@ -114,8 +115,8 @@ public enum SettingsEditor {
         in settings: Settings
     ) -> String? {
         switch field {
-        case .dictationEnabled, .clipboardEnabled, .showsFloatingButton, .minimisesWhileDictating,
-            .sharesUsageStatistics:
+        case .dictationEnabled, .handsFreeEnabled, .clipboardEnabled, .showsFloatingButton,
+            .minimisesWhileDictating, .sharesUsageStatistics:
             nil
         case .shrinksToGripWhenIdle:
             settings.showsFloatingButton

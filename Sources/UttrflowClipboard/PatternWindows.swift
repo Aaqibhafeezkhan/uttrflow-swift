@@ -175,33 +175,53 @@ enum VendorKeyWindows {
     }
 }
 
-/// Runs the card-number pattern only over runs of digits, spaces and hyphens long enough to hold a card.
+/// Runs the card-number pattern only over runs of digits, spaces, hyphens and full stops long enough to hold a card.
 enum CardNumberRuns {
     /// The fewest digits any of the pattern's groupings holds.
     static let fewestDigits = 13
 
-    /// The character ranges of each run of digits, spaces and hyphens holding at least thirteen digits.
+    /// The character ranges of each run of digits and separators holding at least thirteen digits.
     static func candidates(in text: String, tally: ScanTally?) -> [Range<String.Index>] {
         ClipBytes.read(text) { clip, bytes in
             var found: [Range<String.Index>] = []
             var runStart = 0
             var digits = 0
-            for offset in 0...bytes.count {
-                let byte = offset < bytes.count ? bytes[offset] : 0
-                switch byte {
-                case UInt8(ascii: "0")...UInt8(ascii: "9"): digits += 1
-                case UInt8(ascii: " "), UInt8(ascii: "-"): break
-                default:
-                    if digits >= fewestDigits {
-                        let range = clip.character(atOrBefore: runStart)..<clip.boundary(atOrAfter: offset)
-                        tally?.record(clip.text.distance(from: range.lowerBound, to: range.upperBound))
-                        found.append(range)
-                    }
-                    runStart = offset + 1
-                    digits = 0
+            var offset = 0
+            while offset <= bytes.count {
+                if offset < bytes.count, let (width, isDigit) = runCharacter(bytes, at: offset) {
+                    if isDigit { digits += 1 }
+                    offset += width
+                    continue
                 }
+                if digits >= fewestDigits {
+                    let range = clip.character(atOrBefore: runStart)..<clip.boundary(atOrAfter: offset)
+                    tally?.record(clip.text.distance(from: range.lowerBound, to: range.upperBound))
+                    found.append(range)
+                }
+                runStart = offset + 1
+                digits = 0
+                offset += 1
             }
             return found
+        }
+    }
+
+    /// The width in bytes of the digit or separator scalar starting at `offset`, and whether it is a digit.
+    private static func runCharacter(
+        _ bytes: UnsafeBufferPointer<UInt8>, at offset: Int
+    ) -> (width: Int, isDigit: Bool)? {
+        let lead = bytes[offset]
+        switch lead {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): return (1, true)
+        case UInt8(ascii: " "), UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "\t"): return (1, false)
+        case 0xC2...0xEF:
+            let width = lead < 0xE0 ? 2 : 3
+            guard offset + width <= bytes.count else { return nil }
+            var value = UInt32(lead & (width == 2 ? 0x1F : 0x0F))
+            for index in 1..<width { value = value << 6 | UInt32(bytes[offset + index] & 0x3F) }
+            if CardNumberShape.fullwidthDigits.contains(value) { return (width, true) }
+            return CardNumberShape.otherSpaces.contains(value) ? (width, false) : nil
+        default: return nil
         }
     }
 }

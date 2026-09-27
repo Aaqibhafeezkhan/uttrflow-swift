@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import OSLog
 import UttrflowContext
+import UttrflowCore
 import UttrflowInput
 import UttrflowPredict
 import UttrflowPredictCapture
@@ -78,14 +79,12 @@ final class SuggestionCoordinator {
     /// The Space and sleep observers, each of which leaves a ghost with no field under it.
     private var spaceObservers: [any NSObjectProtocol] = []
     private var ticker: Timer?
-    /// Whether the pause clock should be running, which it is only shortly after activity or while something is drawn.
+    /// Whether the pause clock should be running, which it is only for a short window after activity.
     private var ticking = SuggestionTicking()
     private var swallowed: Task<Void, Never>?
     private var lastReading: FieldReading?
     /// The line capture was last handed as a keystroke, and the field it was in, so a Return can catch up what it displaced.
     private var handed: (line: String, reading: FieldReading)?
-    /// The last field read, so the highlight can move without reading anything again.
-    private var lastSnapshot: FocusedFieldSnapshot?
     /// The line the accept key takes as last armed by a draw, so a later answer never inherits that claim.
     private var armedOffer: String?
     private var lastKeystroke = Date.distantPast
@@ -228,7 +227,8 @@ final class SuggestionCoordinator {
             if pastes { MainActor.assumeIsolated { self?.insertionPending = true } }
             // A key this app inserted must not wake another turn, or the feature types on its own.
             if let cgEvent = event.cgEvent, SyntheticEvent.isOurs(cgEvent) { return }
-            MainActor.assumeIsolated { self?.keyPressed(Key(keyCode: event.keyCode)) }
+            let text = Self.typedText(characters: event.characters, modifiers: event.modifierFlags)
+            MainActor.assumeIsolated { self?.keyPressed(Key(keyCode: event.keyCode), typing: text) }
         }
         if let keys { monitors.append(keys) }
         // A click moves the caret or the focus without a key, so it wakes a turn the way a pause does.
@@ -313,9 +313,9 @@ final class SuggestionCoordinator {
         ticker = timer
     }
 
-    /// Wakes a turn while the clock is wanted, and stops it once nothing is happening and nothing is drawn.
+    /// Wakes a turn while the clock is wanted, and stops it once nothing has happened for its window.
     private func tick() {
-        guard ticking.tick(at: Date(), isShowing: panel.isShowing) else {
+        guard ticking.tick(at: Date()) else {
             ticker?.invalidate()
             ticker = nil
             return
@@ -323,15 +323,41 @@ final class SuggestionCoordinator {
         wake(.tick)
     }
 
+    /// The text a key puts on the line, or nothing for a shortcut, an arrow or any other key that types no text.
+    nonisolated static func typedText(characters: String?, modifiers: NSEvent.ModifierFlags) -> String? {
+        guard let characters, !characters.isEmpty,
+            modifiers.intersection([.command, .control, .option, .function]).isEmpty,
+            characters.unicodeScalars.allSatisfy({
+                !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value)
+            })
+        else { return nil }
+        return characters
+    }
+
     /// One key pressed in another application, which is the only thing that moves the caret for us.
-    private func keyPressed(_ key: Key) {
+    private func keyPressed(_ key: Key, typing text: String? = nil) {
         noteActivity()
         lastKeystroke = Date()
+        if let text, typedThrough(text) { return }
         // Counted in the session, so a Tab pressed before the next read cannot take an offer for the old line.
         session.keystrokeArrived()
         // The line just changed, so the ghost at the old caret, a pass about the old prefix and a booked wake are all stale.
         withdraw()
         wake(key == .return ? .returnPressed : .keystroke)
+    }
+
+    /// Keeps the ghost up when the key typed its next letters, answering false for any other key, which withdraws it.
+    private func typedThrough(_ text: String) -> Bool {
+        guard panel.isShowing, !isInserting, let update = session.typedThrough(text) else { return false }
+        // Whatever was being worked out was for the shorter line, and the turn woken below reads the new one.
+        generating?.cancel()
+        pendingWake?.cancel()
+        running?.cancel()
+        interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
+        guard panel.advance(to: session.typed, showing: update.suggestion) else { return false }
+        wake(.keystroke)
+        return true
     }
 
     /// Another application came to the front, so whatever was being worked out for the last field is stale now.
@@ -444,7 +470,6 @@ final class SuggestionCoordinator {
         }
         guard turns.isCurrent(number) else { return }
         lastReading = reading
-        lastSnapshot = snapshot
 
         let turn = session.turn(
             in: reading.surface, at: context(of: snapshot, at: started),
@@ -482,7 +507,7 @@ final class SuggestionCoordinator {
             switch options {
             case .none:
                 Self.log.debug("\(SuggestionLog.optionsNone(typed: query.typed), privacy: .public)")
-                modelPass.rememberEmpty(query)
+                modelPass.rememberEmpty(query, at: SuggestionMoment.place(of: snapshot))
                 guard
                     let quiet = session.resolveGenerated(
                         [], for: query, elapsedMilliseconds: since(started), whenEmpty: .notOnThisMachine)
@@ -547,7 +572,6 @@ final class SuggestionCoordinator {
                 sameReading: reading(of: fresh) == reading(of: snapshot),
                 sameLine: fresh.currentLine == snapshot.currentLine)
         else { return }
-        lastSnapshot = fresh
         draw(update, in: fresh)
     }
 
@@ -564,9 +588,17 @@ final class SuggestionCoordinator {
         let completions: [String]
         // Whether the model wrote lines and the machine denied every one, which is a silence with its own name.
         var invented = false
-        switch modelPass.plan(for: query) {
+        var reused = false
+        let place = SuggestionMoment.place(of: snapshot)
+        // A deletion, another line or changed text before it leaves the last answer describing a line that is gone.
+        modelPass.follow(query, at: place)
+        switch modelPass.plan(for: query, at: place) {
         case .reuse(let kept):
-            completions = kept
+            // A kept line meets the machine again, since what it names may have changed since it was written.
+            entering(.attest, turn: number)
+            completions = await attested(kept, for: query)
+            guard turns.isCurrent(number) else { return }
+            reused = true
         case .skip:
             return
         case .ask:
@@ -591,7 +623,7 @@ final class SuggestionCoordinator {
             switch answer {
             case .failure(let error):
                 // A failed pass is remembered like an empty one, so a tick never re-runs the failure, but it is never logged as one.
-                modelPass.rememberEmpty(query)
+                modelPass.rememberEmpty(query, at: place)
                 Self.log.error(
                     "\(SuggestionLog.generateFailed(typed: query.typed, error: error), privacy: .public)")
                 return
@@ -600,7 +632,7 @@ final class SuggestionCoordinator {
                 let standing = await attested(lines, for: query)
                 guard turns.isCurrent(number) else { return }
                 invented = !lines.isEmpty && standing.isEmpty
-                modelPass.remember(standing, for: query)
+                modelPass.remember(standing, for: query, at: place)
                 completions = standing
             }
         }
@@ -614,6 +646,8 @@ final class SuggestionCoordinator {
         else { return }
         // A silence has nothing to place, so it is settled and logged against the field it read.
         guard update.silence == nil else { return settle(update, in: snapshot, since: started) }
+        // A kept answer is ready as the turn's own read is taken, and its alternatives were already sought when it was written.
+        guard !reused else { return draw(update, in: snapshot) }
         await drawFresh(update, for: snapshot, turn: number)
         // With the one line on screen, the others are fetched behind it, so Down has a list and the person never waited for it.
         guard completions.count == 1, let leader = completions.first, turns.isCurrent(number) else { return }
@@ -627,7 +661,7 @@ final class SuggestionCoordinator {
             guard turns.isCurrent(number), !others.isEmpty,
                 let expanded = session.expandGenerated(others, for: query)
             else { return }
-            modelPass.remember([leader] + others, for: query)
+            modelPass.remember([leader] + others, for: query, at: place)
             return await drawFresh(expanded, for: snapshot, turn: number)
         }
         // Quiet never shows the list, so no model pass is spent building one.
@@ -655,7 +689,7 @@ final class SuggestionCoordinator {
         guard turns.isCurrent(number), !standing.isEmpty,
             let expanded = session.expandGenerated(standing, for: query)
         else { return }
-        modelPass.remember([leader] + standing, for: query)
+        modelPass.remember([leader] + standing, for: query, at: place)
         Self.log.debug(
             "\(SuggestionLog.alternatives(typed: query.typed, got: others.count, elapsedMilliseconds: self.since(started)), privacy: .public)"
         )
@@ -789,7 +823,6 @@ final class SuggestionCoordinator {
         armedOffer = update.suggestion.accepting
         panel.hide()
         lastReading = nil
-        lastSnapshot = nil
     }
 
     /// Arms the tap first and draws second, so no key is claimed that nothing is offering.
@@ -809,13 +842,35 @@ final class SuggestionCoordinator {
             panel.hide()
             return
         }
-        panel.show(
+        let shown = panel.show(
             update.suggestion, typed: session.typed, placement: .inlineGhost, caret: caret,
             window: snapshot.window, field: snapshot.ghostField, fieldPointSize: snapshot.pointSize,
             selection: session.selection,
             acceptKey: preferences.acceptKeys.key(forBundleIdentifier: snapshot.bundleIdentifier),
             fontFamily: snapshot.fontFamily, textColor: snapshot.textColor)
+        // An offer the panel could not show whole claims no key, so Tab never inserts what was not drawn.
+        guard shown else {
+            interceptor.arm([])
+            armedOffer = nil
+            return
+        }
         watchScrolls()
+    }
+
+    /// Draws what a move or a dismissal left where the ghost already stands, since no field was read for it and typing may have moved it.
+    private func redraw(_ update: SuggestionUpdate) {
+        guard !isStopped, session.isCurrent else {
+            interceptor.arm([])
+            panel.hide()
+            return
+        }
+        interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
+        guard panel.redraw(update.suggestion, typed: session.typed, selection: session.selection) else {
+            interceptor.arm([])
+            armedOffer = nil
+            return
+        }
     }
 
     // MARK: Accepting
@@ -850,13 +905,15 @@ final class SuggestionCoordinator {
                 generating?.cancel()
                 // Held across the insert so the keys it posts are ignored on both the tap and the monitor.
                 isInserting = true
-                await take(text, after: typed, in: reading)
+                let taken = await take(text, after: typed, in: reading)
                 isInserting = false
+                // A field that is no longer the drawn line gets its key back, so Tab still does what Tab does there.
+                if !taken { KeyStrokeReturn.post(stroke) }
                 noteActivity()
                 // The field is re-read a moment later, since an application applies the insertion after the keys land.
                 wake(.tick, afterMilliseconds: 80)
             case .redraw(let update):
-                draw(update, in: lastSnapshot)
+                redraw(update)
             case .giveBack(let refused):
                 KeyStrokeReturn.post(refused)
             }
@@ -897,26 +954,36 @@ final class SuggestionCoordinator {
         }
     }
 
-    /// Puts the tail into the field and hands the taken line to capture, which weighs it and refuses what it must.
-    private func take(_ text: String, after typed: String, in reading: FieldReading?) async {
-        do {
-            // What the gates left is a whole line, so taking it may replace characters as well as add.
-            let method = try await acceptor.accept(.certain(text), after: typed)
-            Self.log.debug(
-                "\(SuggestionLog.accept(text: text, typed: typed, via: method?.rawValue ?? "nothing"), privacy: .public)"
-            )
-        } catch {
-            // The case names which route refused and why; the user-facing message belongs to dictation, whose route has a clipboard.
-            Self.log.error("\(SuggestionLog.landedNowhere(error, typed: typed), privacy: .public)")
-            return
+    /// Puts the tail into the field and hands the taken line to capture, answering false when the field refused it unwritten.
+    private func take(_ text: String, after typed: String, in reading: FieldReading?) async -> Bool {
+        // What the gates left is a whole line, so taking it may replace characters as well as add.
+        var via = "nothing"
+        switch await acceptor.aim(.certain(text), after: typed) {
+        case .refused(let reason):
+            Self.log.error("\(SuggestionLog.refusedUnwritten(reason, typed: typed), privacy: .public)")
+            return false
+        case .nothing:
+            break
+        case .write(let edit):
+            do throws(TextInsertionError) {
+                via = try await acceptor.write(edit)?.rawValue ?? via
+            } catch {
+                // The case names which route refused and why; the user-facing message belongs to dictation, whose route has a clipboard.
+                Self.log.error("\(SuggestionLog.landedNowhere(error, typed: typed), privacy: .public)")
+                return true
+            }
         }
-        guard let reading else { return }
+        Self.log.debug(
+            "\(SuggestionLog.accept(text: text, typed: typed, via: via), privacy: .public)"
+        )
+        guard let reading else { return true }
         do {
             _ = try await capture.accepted(text, in: reading, at: Date())
         } catch {
             // The session holds the acceptance and retries it before the next event.
             Self.log.error("An accepted suggestion's corpus write failed and is held for a retry")
         }
+        return true
     }
 
     // MARK: Consent

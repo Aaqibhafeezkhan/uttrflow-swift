@@ -14,16 +14,17 @@ struct SecretShapesOracleTests {
         "eyJhbGciOiJIUzI1NiJ9", "://", "http", "https://", "postgres", ":", "/", "@", "=", ";", ",",
         "\"", "'", " ", "\t", "\n", "\r\n", "\r", "\u{2028}", "\u{85}", "\u{A0}", "\u{0B}", ".", "-",
         "_", "+", "()", "request.token", "password", "PASSWORD", "Password", "pwd", "passwd",
-        "token", "tokens", "api_key",
+        "token", "tokens", "passphrase", "PASSPHRASES", "api_key",
         "API-KEY", "apikey", "api_keys", "secret", "Secrets", "credential", "credentials",
         "private_key", "access-key", "secret_key", "SECRET-KEYS", "auth_token", "client_secret",
         "clientsecret", "\u{212A}",
         "api_\u{212A}ey", "\u{301}", "é", "e\u{301}", "\"\u{301}", "'\u{301}", ";\u{301}", "\u{37E}",
-        "x", "a", "Z", "J", "y", "e", "0", "1", "9", "٣", "½", "4111", "1111 ", "abc123", "hunter2",
+        "x", "a", "Z", "J", "y", "e", "0", "1", "9", "٣", "½", "4111", "1111 ", "1111\u{A0}", "\u{2009}",
+        "\u{FF14}\u{FF11}", "\u{3000}", "abc123", "hunter2",
         "Qv7RkT2mXeL9pAz4", "\u{0}", "\u{FEFF}", "😀", "🇺🇸", "\u{200D}", "'s", "x.", "rgb(", "(", ")",
         "func ", "import ", "//", "select ", "  ", "#", "?", "{", "}", "return", "if(",
         "AAAAAAAAAAAAAAAAAAAAAAAA", "user", "pass", ":x@", "a1", "-----BEGIN", "\\", "$", "*", "-- ",
-        "# ", "* ", "/*", "from ", "else", "oklab(", "OKLCH(", "o\u{212A}lab(", "Https://",
+        "# ", "* ", "/*", "[", "]", ", k: ", "from ", "else", "oklab(", "OKLCH(", "o\u{212A}lab(", "Https://",
         "DB_", "db", "Pass", "PASS", "_pass", "Token", "SMTP_", "max_", "_count", "less", "izer",
     ]
 
@@ -41,7 +42,9 @@ struct SecretShapesOracleTests {
         "var password: String", "pwd=\"\"", "token='a\nb'", "x.password=abc123",
         "\"privateKey\": \"MIIE\",", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "Qv7RkT2mXeL9pAz4NbHc8FwJdY3gS6uH", "4111 1111 1111 1111",
-        "4111111111111111", "5555-5555-5555-4444", "378282246310005", "6011 1111 1111 1117",
+        "4111111111111111", "5555-5555-5555-4444", "4111.1111.1111.1111",
+        "4111\u{A0}1111\u{A0}1111\u{A0}1111",
+        "\u{FF14}\u{FF11}\u{FF11}\u{FF11}1111\u{2009}1111 1111", "378282246310005", "6011 1111 1111 1117",
         "3530 1113 3330 0000", "4222 222 222 222", "4111 1111 1111 1112", "https://example.com/a b",
         "http://x", "rgb(1, 2, 3)", "hsla( 0 )", "oklch()", "color(display-p3 1 0 0)",
         "func greet() {}", "  // note", "\n\n  select * from t", "if (x) return", "import Foundation",
@@ -241,12 +244,16 @@ enum BacktrackingPatterns {
         #/
         (?i)
         (?: \b | _ | (?-i:[a-z])(?=(?-i:[A-Z])) )
-        (?: api[_\-]?keys? | secret[_\-]?keys? | secrets? | tokens? | passwords? | passwd | pwd | pass
-            | credentials? | private[_\-]?key | access[_\-]?key | auth[_\-]?token
+        (?: api[_\-]?keys? | secret[_\-]?keys? | secrets? | tokens? | passwords? | passphrases? | passwd | pwd
+            | pass | credentials? | private[_\-]?key | access[_\-]?key | auth[_\-]?token
             | client[_\-]?secret )
         \b["']? \s* [:=] \s*
-        (?<value> "(?:[^"\\\n]|\\.)+" | '(?:[^'\\\n]|\\.)+' | [^\s"'\n]+ )
-        \s*[,;]?\s*$
+        (?:
+            (?<quoted> "(?:[^"\\\n]|\\.)+" | '(?:[^'\\\n]|\\.)+' )
+            \s* (?: [,;]?\s*$ | [,;]?\s*(?:\#|//) | [}\]]
+                | ,\s*["']?(?-i:[A-Za-z_$][A-Za-z0-9_$\-]*)["']?\s*[:=] )
+          | (?<bare> [^\s"'\n]+ ) (?: \s*[,;]?\s*$ | \s+[,;]?\s*(?:\#|//) )
+        )
         /#
         .anchorsMatchLineEndings()
 
@@ -286,7 +293,7 @@ enum BacktrackingPatterns {
 
     static func hasNamedSecret(_ text: String) -> Bool {
         text.matches(of: namedSecret).contains { match in
-            let raw = String(match.value)
+            let raw = String(match.quoted ?? match.bare ?? "")
             let isQuoted = raw.count >= 2 && (raw.hasPrefix("\"") || raw.hasPrefix("'"))
             let value = isQuoted ? String(raw.dropFirst().dropLast()) : raw
             let hasDigit = value.contains { $0.isASCII && $0.isNumber }
@@ -317,9 +324,10 @@ enum BacktrackingPatterns {
         }
     }
 
-    /// `CardNumberShape.matches` as it read before the runs: the pattern over the whole clip.
-    static func hasCardNumber(_ text: String) -> Bool {
-        text.matches(of: CardNumberShape.candidate).contains { match in
+    /// `CardNumberShape.matches` as it read before the runs: the pattern over the whole clip, in its printed form.
+    static func hasCardNumber(_ original: String) -> Bool {
+        let text = CardNumberShape.printedForm(of: original[...]) ?? original
+        return text.matches(of: CardNumberShape.candidate).contains { match in
             CardNumberShape.standsAlone(match.range, in: text)
                 && CardNumberShape.isCardNumber(match.output.0.filter(\.isNumber))
         }
@@ -328,6 +336,7 @@ enum BacktrackingPatterns {
     /// `SecretShapes.matches` as it read before the readers, with the unchanged rules borrowed from it.
     static func matches(_ text: String) -> Bool {
         text.contains("-----BEGIN") || hasJSONWebToken(text) || hasCredentialledURL(text)
+            || SecretShapes.hasBearerURL(text)
             || text.firstMatch(of: SecretShapes.vendorKey) != nil || hasNamedSecret(text)
             || hasCardNumber(text)
             || SecretShapes.hasHighEntropyToken(text)

@@ -101,6 +101,10 @@ available** — F7 trades the confirmation dialog away *for* that undo, so an un
 told about turns the trade into a loss: the clip is gone with neither a question beforehand
 nor a way back.
 
+The panel window takes ⌘Z ahead of Edit › Undo, which would otherwise swallow it, in this
+order: while the offer shows, ⌘Z restores the clip; otherwise, if the search field has
+typing to take back, ⌘Z undoes that typing; otherwise it goes to the panel. ⇧⌘Z stays Redo.
+
 While a sheet is up, `esc` backs out of it and Return commits it. Saying so is the
 difference between one press of esc and two by reflex, the second of which loses the list.
 
