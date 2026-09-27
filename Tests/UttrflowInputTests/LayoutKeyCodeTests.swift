@@ -4,7 +4,8 @@ private import Carbon
 
 @testable import UttrflowInput
 
-/// Finds a key code from real layout tables; serialized because concurrent `TISCreateInputSourceList` calls crash HIToolbox.
+/// Finds a key code from real layout tables; on the main actor because `TISCreateInputSourceList` aborts off it.
+@MainActor
 @Suite("Finding the key that types a character under a layout", .serialized)
 struct LayoutKeyCodeTests {
     /// `v`, the character every case below looks up.
