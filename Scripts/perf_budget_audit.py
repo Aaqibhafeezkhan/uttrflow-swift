@@ -451,15 +451,35 @@ def check_priority(tree, findings, report):
 
 GATES = ("MotionBudget", "WindowAttention")
 
+# Panels that never become key, so WindowAttention never lets them move; each has its own reason it is not hidden while it runs.
+WINDOW_EXEMPT = {
+    "Sources/Uttrflow/Dock/": "the dock is a floating panel above every window, ordered out when it has nothing to show",
+    "Sources/Uttrflow/MenuBar/": "the popover's controller hosts new content only while the panel is on screen",
+}
+
 
 def gate_names(text):
     """The names in a file bound from the motion budget or window attention, which count as a gate where used."""
     names = set()
     for match in re.finditer(r"\b(?:let|var)\s+(\w+)\s*=\s*[^\n]*\b(?:MotionBudget\w*|WindowAttention\w*)", text):
         names.add(match.group(1))
-    for match in re.finditer(r"\.onWindowAttentionChange\s*\{\s*(\w+)\s*=", text):
+    return names | attention_names(text)
+
+
+def attention_names(text):
+    """The names in a file bound from window attention, which say whether anybody can see the view."""
+    names = set()
+    for match in re.finditer(r"\b(?:let|var)\s+(\w+)\s*=\s*[^\n]*\bWindowAttention\w*", text):
+        names.add(match.group(1))
+    for match in re.finditer(r"\.onWindowAttentionChange\s*(?:\([^)]*\))?\s*\{\s*(\w+)\s*=", text):
         names.add(match.group(1))
     return names
+
+
+def mentions_attention(fragment, names):
+    if "WindowAttention" in fragment:
+        return True
+    return any(re.search(r"(?<![\w.])" + re.escape(name) + r"\b", fragment) for name in names)
 
 
 def mentions_gate(fragment, names):
@@ -472,6 +492,8 @@ def check_motion(tree, findings, report):
     counted = 0
     for path, text in tree.files.items():
         names = gate_names(text)
+        watched = attention_names(text)
+        exempt = any(path.startswith(prefix) for prefix in WINDOW_EXEMPT)
         for match in re.finditer(r"\bTimelineView\s*\(", text):
             counted += 1
             opening = match.end() - 1
@@ -481,6 +503,8 @@ def check_motion(tree, findings, report):
                 findings.fail("motion", path, line, "a TimelineView whose schedule reads neither MotionBudget nor WindowAttention", (path, "motion", "TimelineView"))
             elif re.search(r"\b(?:paused|isStill)\s*:\s*(?:true|false)\b", fragment):
                 findings.fail("motion", path, line, "a TimelineView paused by a literal rather than by its gate", (path, "motion", "TimelineView"))
+            elif not exempt and not mentions_attention(fragment, watched):
+                findings.fail("motion", path, line, "a TimelineView that never reads WindowAttention, so it runs in a hidden window", (path, "motion", "TimelineView"))
             else:
                 report.append(f"  ✓ {path}:{line} TimelineView gated")
         repeating = re.compile(
@@ -493,7 +517,9 @@ def check_motion(tree, findings, report):
             line = line_of(text, match.start())
             lines = text.split("\n")
             window = "\n".join(lines[max(0, line - 4) : line + 3])
-            if mentions_gate(window, names):
+            if mentions_gate(window, names) and not exempt and not mentions_attention(window, watched):
+                findings.fail("motion", path, line, f"`{match.group(0).strip()}` repeats without a WindowAttention gate nearby, so it runs in a hidden window", (path, "motion", match.group(0).strip()))
+            elif mentions_gate(window, names):
                 report.append(f"  ✓ {path}:{line} repeating animation gated")
             else:
                 findings.fail("motion", path, line, f"`{match.group(0).strip()}` repeats without a MotionBudget or WindowAttention gate nearby", (path, "motion", match.group(0).strip()))
@@ -749,6 +775,10 @@ INJECTIONS = (
     (
         "Sources/Uttrflow/Dock/DockView.swift",
         "paused: !motion.workingBarsMove", "paused: false", "motion",
+    ),
+    (
+        "Sources/Uttrflow/Main/HomeHeroView.swift",
+        "paused: !attended || !motion.workingBarsMove", "paused: !motion.workingBarsMove", "motion",
     ),
     (
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",
