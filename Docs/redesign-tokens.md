@@ -29,6 +29,17 @@ translucent card film, hairline, sidebar island and secondary text of the dark a
 | `dockShadow` | black at 50% | `#101316` at 22% |
 | `dockMeter` | `#FFFFFF` | `#128077` |
 | `avatarInk` | `#08131A` | same |
+| `avatarLilac` | `#C49BF5` | `#7A4FC4` |
+| `avatarTeal` | `#29C0B4` | `#128077` |
+| `avatarRing` | white at 8% | `#101316` at 7.2% |
+| `bannerGround` | `#10101A` | same (the banner stays dark) |
+| `bannerSoft` | white at 75% | `#101316` at 67.5% |
+| `glassFill` | white at 5% | same (all but invisible on the page) |
+| `glassEdge` | white at 9% | same |
+| `glassRule` | white at 7% | `#101316` at 6.3% |
+| `signOutInk` | `#FF8A8C` | `#B0161A` |
+| `signOutWash` | `#FF6B6E` at 12% | same |
+| `signOutEdge` | `#FF6B6E` at 30% | same |
 | `heroGround` | `#0E111A` | `#FFFFFF` |
 | `waveformInk` | white at 88% | `#101316` at 79% |
 | `controlFill` | white at 6% | `#101316` at 4% |
