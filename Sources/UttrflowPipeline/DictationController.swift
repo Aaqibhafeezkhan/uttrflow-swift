@@ -27,6 +27,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
     private var limitGeneration = 0
 
     private var activation: HotkeyActivation
+    /// Whether a double tap of held keys leaves the microphone open; off, a short tap is only a slip.
+    private var handsFreeEnabled: Bool
     private var pressedAt: ClockType.Instant?
     /// When the last slip ended, so the next one can tell whether it is the second of a pair.
     private var lastTapEndedAt: ClockType.Instant?
@@ -48,6 +50,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         case settled(Int)
         /// A new activation mode, answered once adopted.
         case activation(HotkeyActivation, CheckedContinuation<Void, Never>)
+        /// Hands-free switched on or off, answered once adopted.
+        case handsFree(Bool, CheckedContinuation<Void, Never>)
         /// Answered once everything queued ahead of it has been handled.
         case drained(CheckedContinuation<Void, Never>)
         /// The cap started for this generation of dictation has been reached.
@@ -63,6 +67,7 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         monitor: any HotkeyMonitoring,
         cue: any RecordingCueing = SilentCue(),
         activation: HotkeyActivation = .holdToTalk,
+        handsFreeEnabled: Bool = true,
         clock: ClockType,
         limit: DictationLimit = .default,
         onAdvice: @escaping @Sendable (DictationAdvice) -> Void = { _ in },
@@ -72,6 +77,7 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         self.monitor = monitor
         self.cue = cue
         self.activation = activation
+        self.handsFreeEnabled = handsFreeEnabled
         self.clock = clock
         self.limit = limit
         self.onAdvice = onAdvice
@@ -84,7 +90,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
                 guard let self else {
                     // A caller still waiting is answered, so it is not left suspended forever.
                     switch gesture {
-                    case .control(let handled), .drained(let handled), .activation(_, let handled):
+                    case .control(let handled), .drained(let handled), .activation(_, let handled),
+                        .handsFree(_, let handled):
                         handled.resume()
                     case .key, .settled, .limitReached: break
                     }
@@ -100,6 +107,9 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
                     await settle(id)
                 case .activation(let activation, let handled):
                     await adopt(activation)
+                    handled.resume()
+                case .handsFree(let enabled, let handled):
+                    await adoptHandsFree(enabled)
                     handled.resume()
                 case .drained(let handled):
                     handled.resume()
@@ -168,6 +178,30 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
     }
 
     public var currentActivation: HotkeyActivation { activation }
+
+    /// Switches the double tap on or off, queued behind every gesture. See Docs/pipeline-gestures.md.
+    public nonisolated func setHandsFreeEnabled(_ enabled: Bool) async {
+        await withCheckedContinuation { handled in
+            // A controller already gone has no queue, so the change is answered at once.
+            guard case .enqueued = gestureSink.yield(.handsFree(enabled, handled)) else {
+                handled.resume()
+                return
+            }
+        }
+    }
+
+    /// Adopts the switch, closing a microphone a double tap left open once the gesture is off.
+    private func adoptHandsFree(_ enabled: Bool) async {
+        guard enabled != handsFreeEnabled else { return }
+        handsFreeEnabled = enabled
+        lastTapEndedAt = nil
+        guard !enabled else { return }
+        await forgetHandsFreeIfEnded()
+        guard isHandsFree else { return }
+        await stopHandsFree()
+    }
+
+    public var isHandsFreeEnabled: Bool { handsFreeEnabled }
 
     /// What the dock has to say to end a recording that is under way right now.
     public var currentStopGesture: StopGesture {
@@ -405,7 +439,9 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
 
         let now = clock.now
         let wasTap = pressed.map { $0.duration(to: now) < Self.minimumHold } ?? false
-        if wasTap, let last = lastTapEndedAt, last.duration(to: now) < Self.doubleTapWindow {
+        if wasTap, handsFreeEnabled, let last = lastTapEndedAt,
+            last.duration(to: now) < Self.doubleTapWindow
+        {
             // A press that did not open the microphone and was not part of a hands-free toggle cannot change the gesture a click-started dictation is waiting for.
             guard pressOpenedTheMicrophone || isHandsFree else { return }
             lastTapEndedAt = nil
@@ -436,6 +472,7 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
 
     /// A tap too short to settle, counted towards a double tap without opening the microphone for one.
     private func endTapThatNeverOpened() async {
+        guard handsFreeEnabled else { return }
         let now = clock.now
         guard let last = lastTapEndedAt, last.duration(to: now) < Self.doubleTapWindow else {
             lastTapEndedAt = now
