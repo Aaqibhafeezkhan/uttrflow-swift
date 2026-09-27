@@ -204,6 +204,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var clipInserter = TextInsertion.coordinator(
         pasteboard: announcingPasteboard)
 
+    /// The same for a secret clip, whose words reach the clipboard only with the concealed marker.
+    private lazy var secretInserter = TextInsertion.coordinator(
+        pasteboard: ConcealingPasteboard(announcingPasteboard))
+
     /// The panel's state while it is open, held here because a window has no memory.
     private var panel: PanelSnapshot?
     /// Counts Format presses, so only the latest run's result may open its sheet.
@@ -1316,9 +1320,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Closed first: insertion declines outright while Uttrflow is frontmost.
             closeQuickPanel()
             insert(text, used: used)
+        case .closeAndInsertConcealed(let text, let used):
+            closeQuickPanel()
+            insert(text, concealed: true, used: used)
         case .copyAndSay(let text, let notice, let used):
             // Stays open: the panel is the only surface left to say this on.
             putOnClipboard(text, used: used)
+            panel?.notice = notice
+            if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
+            closeAfterReading()
+        case .copyConcealedAndSay(let text, let notice, let used):
+            putOnClipboard(text, concealed: true, used: used)
             panel?.notice = notice
             if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
             closeAfterReading()
@@ -1336,6 +1348,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .closeAndCopy(let text, let richText, let used):
             // Onto the clipboard and no further: the user will paste it somewhere else.
             putOnClipboard(text, richText: richText, used: used)
+            closeQuickPanel()
+        case .closeAndCopyConcealed(let text, let used):
+            putOnClipboard(text, concealed: true, used: used)
             closeQuickPanel()
         case .closeAndCopyImage(let clip):
             closeQuickPanel()
@@ -1581,8 +1596,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Puts text where the caret is, through the coordinator whose last strategy cannot fail.
-    private func insert(_ text: String, richText: String? = nil, used: Clip.ID?) {
+    private func insert(_ text: String, richText: String? = nil, concealed: Bool = false, used: Clip.ID?) {
         markUsed(used)
+        let clipInserter = concealed ? secretInserter : clipInserter
         Task { [weak self, clipInserter] in
             do {
                 let attempt = try await clipInserter.insert(text, richText: richText)
@@ -1638,8 +1654,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Through the one pasteboard, so the write is announced and stays on this Mac. See `Docs/insertion.md`.
-    private func putOnClipboard(_ text: String, richText: String? = nil, used: Clip.ID?) {
+    private func putOnClipboard(
+        _ text: String, richText: String? = nil, concealed: Bool = false, used: Clip.ID?
+    ) {
         markUsed(used)
+        // A secret goes up marked, so no other clipboard history records it in plain text.
+        guard !concealed else { return announcingPasteboard.setConcealedText(text) }
         // E2, E3 — both flavours, so the receiving application takes the one it understands.
         announcingPasteboard.setText(text, richText: richText)
     }
@@ -1879,13 +1899,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             putOnClipboard(recent.text, used: nil)
         case .insertClip(let index):
             guard let clip = menuClips[safe: index] else { return }
-            if clip.image != nil { insertImage(clip) } else { insert(clip.text, used: clip.id) }
+            if clip.image != nil {
+                insertImage(clip)
+            } else {
+                insert(clip.text, concealed: clip.kind == .secret, used: clip.id)
+            }
         case .copyClip(let index):
             guard let clip = menuClips[safe: index] else { return }
             if clip.image != nil {
                 Task { [weak self] in _ = await self?.putImageOnClipboard(clip) }
             } else {
-                putOnClipboard(clip.text, richText: clip.richText, used: clip.id)
+                putOnClipboard(
+                    clip.text, richText: clip.richText, concealed: clip.kind == .secret, used: clip.id)
             }
         case .open(let destination):
             show(destination)

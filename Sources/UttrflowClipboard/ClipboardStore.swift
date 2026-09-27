@@ -15,13 +15,20 @@ private import Synchronization
 /// Counts the files a store writes while this is bound to `ClipboardStore.writes`.
 package final class StoreWriteTally: Sendable {
     private let files = Mutex(0)
+    private let bytes = Mutex<[Data]>([])
 
     package init() {}
 
     /// Answers how many files have been written or removed so far.
     package var count: Int { files.withLock { $0 } }
 
-    func record() { files.withLock { $0 += 1 } }
+    /// Every encoded list written so far, in order; a removal adds nothing here.
+    package var written: [Data] { bytes.withLock { $0 } }
+
+    func record(_ data: Data? = nil) {
+        files.withLock { $0 += 1 }
+        if let data { bytes.withLock { $0.append(data) } }
+    }
 }
 
 /// Everything the user has copied, kept on this Mac between launches. See `Docs/clipboard-store.md`.
@@ -665,7 +672,7 @@ public actor ClipboardStore {
         useFlush = nil
 
         // Every clip reaches its new file before leaving its old one, so a refusing disk never loses one.
-        let bridge = Self.bridging(clips, from: wasSaved, into: nowHistory)
+        let bridge = Self.bridging(persistable, from: wasSaved, into: nowHistory)
         if bridge != wasSaved {
             try persist(bridge, to: savedFile)
             savedOnDisk = bridge
@@ -697,13 +704,15 @@ public actor ClipboardStore {
     private func persist(_ clips: [Clip], to url: URL) throws(ClipboardStoreError) {
         // A file that could be neither read nor moved aside is the user's only copy, so it is not replaced.
         guard !unreplaceable.contains(url) else { throw .couldNotWrite }
-        Self.writes?.record()
         do {
             guard !clips.isEmpty else {
+                Self.writes?.record()
                 try removeFile(url)
                 return
             }
-            try PrivateFile.write(JSONEncoder().encode(clips), to: url)
+            let data = try JSONEncoder().encode(clips)
+            Self.writes?.record(data)
+            try PrivateFile.write(data, to: url)
         } catch {
             throw .couldNotWrite
         }

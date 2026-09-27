@@ -26,16 +26,43 @@ private struct QuietCleaner: TranscriptCleaning {
     }
 }
 
-/// A ``TextInserting`` that records what reached the screen.
+/// A ``TextInserting`` that records what reached the screen, holding every insertion while it is shut.
 private final class QuietInserter: TextInserting, Sendable {
-    private let placed = Mutex<[String]>([])
+    private struct State {
+        var placed: [String] = []
+        var isShut = false
+        var waiting: [CheckedContinuation<Void, Never>] = []
+    }
+
+    private let state = Mutex(State())
 
     func insert(_ text: String) async throws(TextInsertionError) -> InsertionAttempt {
-        placed.withLock { $0.append(text) }
+        await withCheckedContinuation { go in
+            let proceed = state.withLock { state -> Bool in
+                guard state.isShut else { return true }
+                state.waiting.append(go)
+                return false
+            }
+            if proceed { go.resume() }
+        }
+        state.withLock { $0.placed.append(text) }
         return InsertionAttempt(.accessibility)
     }
 
-    var inserted: [String] { placed.withLock { $0 } }
+    /// Holds every insertion from now until ``open()``.
+    func shut() { state.withLock { $0.isShut = true } }
+
+    /// Lets every held and later insertion through.
+    func open() {
+        let waiting = state.withLock { state in
+            state.isShut = false
+            defer { state.waiting = [] }
+            return state.waiting
+        }
+        waiting.forEach { $0.resume() }
+    }
+
+    var inserted: [String] { state.withLock { $0.placed } }
 }
 
 /// A ``VocabularyLearning`` that holds the first dictation's learning until it is let go.
@@ -175,7 +202,7 @@ struct DictationLimitWiringTests {
         }
     }
 
-    /// Leaves a double-tap dictation listening, then lets it run to the cap and waits until the cap has finished it.
+    /// Leaves a double-tap dictation listening, then lets it run to the cap and waits until its words have landed.
     private func runHandsFreeToTheCap(
         _ controller: DictationController<ManualClock>, clock: ManualClock,
         finished: () -> Bool
@@ -184,6 +211,8 @@ struct DictationLimitWiringTests {
         await advance(clock, to: Self.limit.warnAfter)
         await advance(clock, to: Self.limit.stopAfter - Self.limit.warnAfter)
         while !finished() { await Task.yield() }
+        // A press made while the capped dictation is still processing is refused, so the test waits it out.
+        await controller.drained()
     }
 
     /// Whether the cap's finish has run to its end, which it marks by standing the advice down.
@@ -279,7 +308,7 @@ struct DictationLimitWiringTests {
         #expect(inserter.inserted == ["a long dictation", "a long dictation"])
     }
 
-    @Test("a cap reached just as its dictation was stopped neither ends nor disarms the next one")
+    @Test("a cap reached as its dictation was stopped ends nothing, and the next keeps its own")
     func staleCapLeavesTheNextDictationAlone() async throws {
         let clock = ManualClock()
         let inserter = QuietInserter()
@@ -291,15 +320,20 @@ struct DictationLimitWiringTests {
         await controller.drained()
         await clock.waitUntilSomethingIsWaiting()
 
-        // Stop, start again, and reach the first dictation's cap, all before the queue has handled any of it.
+        // Stop, press again while the words are held, and reach the first dictation's cap, all before the queue has handled any of it.
+        inserter.shut()
         controller.submit(.pressed)
         controller.submit(.pressed)
         clock.advance(by: limit.stopAfter)
-        await controller.drained()
+        await controller.caughtUp()
         for _ in 0..<1_000 { await Task.yield() }
+        await controller.caughtUp()
+        inserter.open()
         await controller.drained()
-
         #expect(inserter.inserted == ["a long dictation"])
+
+        controller.submit(.pressed)
+        await controller.caughtUp()
         await advance(clock, to: limit.stopAfter)
         try await eventually { inserter.inserted.count == 2 }
         #expect(inserter.inserted == ["a long dictation", "a long dictation"])

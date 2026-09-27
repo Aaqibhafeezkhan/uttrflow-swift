@@ -23,6 +23,18 @@ public enum SecureField {
         return declared || (value().map(looksMasked) ?? false)
     }
 
+    /// The field's value, never fetched from a field declared secure and dropped when it reads back as mask characters alone.
+    public static func readableValue(
+        role: String?, subrole: String?, identifier: String?, placeholder: String?,
+        description: String?, value: () -> String?
+    ) -> String? {
+        let declared = isDeclaredSecure(
+            role: role, subrole: subrole, identifier: identifier, placeholder: placeholder,
+            description: description)
+        guard !declared, let read = value(), !looksMasked(read) else { return nil }
+        return read
+    }
+
     /// Whether a name betrays a field whose value must never be learned, as web fields do.
     static func namesASecret(_ text: String) -> Bool {
         let lower = text.lowercased()
