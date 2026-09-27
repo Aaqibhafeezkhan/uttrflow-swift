@@ -162,6 +162,30 @@ enum BrandPalette {
         static let dockMeter = BrandTone(dark: textStrong.dark, light: dictationAccent.light)
         /// The initials on the avatar's lilac-to-teal disc.
         static let avatarInk: UInt32 = 0x08_131A
+        /// The avatar disc's lilac end on a page, deepened in the light.
+        static let avatarLilac = BrandTone(dark: Purple.light, light: suggestionAccent.light)
+        /// The avatar disc's teal end on a page, deepened in the light.
+        static let avatarTeal = BrandTone(dark: Teal.primary, light: Teal.deep)
+        /// The faint ring round a large avatar.
+        static let avatarRing = BrandLayer(tone: textStrong, darkOpacity: 0.08, lightOpacity: 0.072)
+        /// The profile banner's ground under its aurora, dark in both appearances.
+        static let bannerGround = BrandTone(0x10_101A)
+        /// The address under the name on the profile banner.
+        static let bannerSoft = BrandLayer(tone: textStrong, darkOpacity: 0.75, lightOpacity: 0.675)
+        /// A glass panel's white film, which all but vanishes on the light page.
+        static let glassFill = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.05, lightOpacity: 0.05)
+        /// The white hairline round a glass panel, which all but vanishes on the light page.
+        static let glassEdge = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.09, lightOpacity: 0.09)
+        /// The rule between the rows of a glass panel.
+        static let glassRule = BrandLayer(tone: textStrong, darkOpacity: 0.07, lightOpacity: 0.063)
+        /// Sign out's words and glyph.
+        static let signOutInk = BrandTone(dark: 0xFF_8A8C, light: Semantic.criticalInk.light)
+        /// Sign out's red wash.
+        static let signOutWash = BrandLayer(
+            tone: BrandTone(Semantic.criticalInk.dark), darkOpacity: 0.12, lightOpacity: 0.12)
+        /// Sign out's red edge.
+        static let signOutEdge = BrandLayer(
+            tone: BrandTone(Semantic.criticalInk.dark), darkOpacity: 0.3, lightOpacity: 0.3)
         /// The home hero card's ground, under its two aurora glows.
         static let heroGround = BrandTone(dark: 0x0E_111A, light: 0xFF_FFFF)
         /// The hero's mono waveform: white in the dark, ink in the light.

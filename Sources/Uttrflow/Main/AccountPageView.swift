@@ -1,9 +1,11 @@
-// The Account page: identity card and detail rows.
+// The Account page: an aurora banner with the person, the facts about them, and one button.
 
+import UttrflowAccount
 import UttrflowUX
+import AppKit
 import SwiftUI
 
-/// Who is signed in, and what that does and does not mean.
+/// Who is signed in, the four facts the app knows about them, and the way out or in.
 struct AccountPageView: View {
     let presentation: AccountPagePresentation
     var onIntent: (MainIntent) -> Void
@@ -14,108 +16,255 @@ struct AccountPageView: View {
                 MainEmptyStateView(state: empty, onIntent: onIntent)
                 MainCalloutView(callout: presentation.callout)
             }
+            .padding(.horizontal, 34)
+            .padding(.top, 44)
+            .padding(.bottom, 28)
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 18) {
                     if let identity = presentation.identity {
-                        AccountIdentityCard(identity: identity)
+                        AccountBanner(identity: identity)
+                    }
+                    if !presentation.facts.isEmpty {
+                        AccountFactList(
+                            facts: presentation.facts, providerID: presentation.identity?.providerID)
                     }
                     if let notice = presentation.notice {
                         MainCalloutView(callout: notice)
                     }
-                    details
-                    MainCalloutView(callout: presentation.callout)
-                    if let footnote = presentation.footnote {
-                        MainFootnote(text: footnote)
+                    if let action = presentation.action {
+                        AccountActionButton(
+                            action: action, help: presentation.actionHelp, onIntent: onIntent)
                     }
                 }
+                .padding(.horizontal, 34)
+                .padding(.top, 44)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
-    }
-
-    private var details: some View {
-        VStack(spacing: 0) {
-            MainDividedRows(rows: presentation.details) {
-                AccountDetailRow(detail: $0, onIntent: onIntent)
-            }
-        }
-        .cardSurface()
     }
 }
 
-/// The name, the address and the provider.
-struct AccountIdentityCard: View {
+/// The wide aurora banner with the picture or initials, the name and the address.
+struct AccountBanner: View {
     let identity: AccountIdentity
 
+    /// The banner's fixed height.
+    static let height: CGFloat = 180
+
     var body: some View {
-        MainCard(padding: 15) {
-            HStack(spacing: 13) {
-                AvatarView(identity: identity, size: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(identity.name)
-                        .font(.system(size: MainMetrics.titleSize, weight: .semibold))
-                    if let email = identity.emailAddress {
-                        Text(email)
-                            .font(.system(size: MainMetrics.calloutSize))
-                            .foregroundStyle(.secondary)
-                    }
+        HStack(alignment: .bottom, spacing: 18) {
+            AvatarView(identity: identity, size: 84, ring: 4)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(identity.name)
+                    .font(BrandFont.display(size: 30, weight: .semibold))
+                    .tracking(-0.9)
+                    .foregroundStyle(PagePalette.text)
+                    .accessibilityAddTraits(.isHeader)
+                if let email = identity.emailAddress {
+                    Text(email)
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(ProfilePalette.bannerSoft)
                 }
-                Spacer(minLength: 8)
-                HStack(spacing: 6) {
-                    Image(systemName: symbolName)
-                        .font(.system(size: 12))
-                    Text(identity.provider)
-                        .font(.system(size: MainMetrics.calloutSize))
-                }
-                .padding(.horizontal, 9)
-                .frame(height: 22)
-                .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: 6))
             }
+            .lineLimit(1)
+            .truncationMode(.middle)
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 22)
+        .frame(maxWidth: .infinity, alignment: .bottomLeading)
+        .frame(height: Self.height, alignment: .bottomLeading)
+        .background { AccountAurora() }
+        .clipShape(.rect(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .combine)
     }
+}
 
-    /// A system symbol rather than a provider's mark, whose drawing rules an approximation would break.
-    private var symbolName: String {
-        switch identity.providerID {
-        case .google: "globe"
-        case .gitHub: "chevron.left.forwardslash.chevron.right"
-        case .apple: "apple.logo"
-        // Nobody signed this person in; the Mac is the only thing there is to draw.
-        case nil: "laptopcomputer"
+/// The banner's ground: the brand aurora, blurred, over a dark that stays dark in the light appearance.
+struct AccountAurora: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                ProfilePalette.bannerGround
+                AngularGradient(
+                    colors: IslandPalette.aurora + IslandPalette.aurora.prefix(1),
+                    center: UnitPoint(x: 0.4, y: 0.6), startAngle: .degrees(120),
+                    endAngle: .degrees(480)
+                )
+                .frame(width: geometry.size.width * 1.8, height: geometry.size.height * 1.8)
+                .blur(radius: 50)
+                .opacity(0.75)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The facts in one glass panel, a hairline between each.
+struct AccountFactList: View {
+    let facts: [AccountFact]
+    /// Who signed this person in, which picks the sign-in row's glyph.
+    let providerID: SignInProvider?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(facts.enumerated()), id: \.element.id) { index, fact in
+                AccountFactRow(fact: fact, providerID: providerID)
+                    .overlay(alignment: .top) {
+                        if index > 0 {
+                            Rectangle()
+                                .fill(ProfilePalette.glassRule)
+                                .frame(height: 1)
+                                .accessibilityHidden(true)
+                        }
+                    }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 6)
+        .background(ProfilePalette.glassFill, in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(ProfilePalette.glassEdge, lineWidth: 1)
         }
     }
 }
 
-/// One line of the account card.
-struct AccountDetailRow: View {
-    let detail: AccountDetail
-    var onIntent: (MainIntent) -> Void
+/// One fact: its glyph, its label and its value.
+struct AccountFactRow: View {
+    let fact: AccountFact
+    let providerID: SignInProvider?
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(detail.label)
-                    .font(.system(size: MainMetrics.bodySize))
-                if let explanation = detail.explanation {
-                    Text(explanation)
-                        .font(.system(size: MainMetrics.subheadSize))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer(minLength: 8)
-            if let value = detail.value {
-                Text(value)
-                    .font(.system(size: MainMetrics.calloutSize))
-            }
-            if let action = detail.action {
-                MainActionButton(action: action, onIntent: onIntent)
+        HStack(spacing: 14) {
+            AccountFactGlyph(kind: fact.kind, providerID: providerID)
+                .frame(width: 16, height: 16)
+            Text(fact.label)
+                .font(.system(size: 13))
+                .foregroundStyle(PagePalette.quiet)
+                .frame(width: 140, alignment: .leading)
+            Text(fact.value)
+                .font(.system(size: 13.5))
+                .foregroundStyle(PagePalette.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 13)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A fact's glyph; the sign-in row shows the provider, and Google's mark only when it was fetched.
+struct AccountFactGlyph: View {
+    let kind: AccountFact.Kind
+    let providerID: SignInProvider?
+
+    var body: some View {
+        if kind == .signIn, providerID == .google,
+            let mark = Bundle.module.image(forResource: "GoogleMark")
+        {
+            Image(nsImage: mark)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 14, height: 14)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: symbolName)
+                .font(.system(size: 13))
+                .foregroundStyle(PagePalette.quiet)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// A system symbol per fact; a provider's mark is never redrawn by approximation.
+    var symbolName: String {
+        switch kind {
+        case .email: "envelope"
+        case .since: "calendar"
+        case .thisMac: "display"
+        case .signIn:
+            switch providerID {
+            case .google: "globe"
+            case .gitHub: "chevron.left.forwardslash.chevron.right"
+            case .apple: "apple.logo"
+            // Nobody signed this person in; the Mac is the only thing there is to draw.
+            case nil: "laptopcomputer"
             }
         }
-        .padding(.horizontal, MainMetrics.rowPadding)
-        .padding(.vertical, 9)
-        .frame(minHeight: 36)
-        .accessibilityElement(children: .contain)
     }
+}
+
+/// Sign out in red, or Sign in in teal, at the foot of the page.
+struct AccountActionButton: View {
+    let action: MainAction
+    let help: String?
+    var onIntent: (MainIntent) -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            onIntent(action.intent)
+        } label: {
+            HStack(spacing: 8) {
+                if let symbol = action.symbolName {
+                    Image(systemName: symbol)
+                        .font(.system(size: 13, weight: .medium))
+                }
+                Text(action.title)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(ink)
+            .padding(.horizontal, 16)
+            .frame(height: 38)
+            .background(wash.opacity(isHovered ? 1.5 : 1), in: .rect(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(edge, lineWidth: 1)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(help ?? action.title)
+    }
+
+    private var ink: Color {
+        action.isDestructive ? ProfilePalette.signOutInk : PagePalette.dictation
+    }
+
+    private var wash: Color {
+        action.isDestructive ? ProfilePalette.signOutWash : PagePalette.dictation.opacity(0.12)
+    }
+
+    private var edge: Color {
+        action.isDestructive ? ProfilePalette.signOutEdge : PagePalette.dictation.opacity(0.3)
+    }
+}
+
+/// The Account page's own colours, each following the appearance.
+enum ProfilePalette {
+    private typealias R = BrandPalette.Redesign
+
+    static let avatarInk = Color(rgb: R.avatarInk)
+    /// The avatar disc, lilac at the top to teal at the foot.
+    static let avatarDisc = LinearGradient(
+        colors: [Color(nsColor: .orbit(R.avatarLilac)), Color(nsColor: .orbit(R.avatarTeal))],
+        startPoint: UnitPoint(x: 0.25, y: 0.07), endPoint: UnitPoint(x: 0.75, y: 0.93))
+    static let avatarRing = Color(nsColor: .orbit(R.avatarRing))
+    static let bannerGround = Color(nsColor: .orbit(R.bannerGround))
+    static let bannerSoft = Color(nsColor: .orbit(R.bannerSoft))
+    static let glassFill = Color(nsColor: .orbit(R.glassFill))
+    static let glassEdge = Color(nsColor: .orbit(R.glassEdge))
+    static let glassRule = Color(nsColor: .orbit(R.glassRule))
+    static let signOutInk = Color(nsColor: .orbit(R.signOutInk))
+    static let signOutWash = Color(nsColor: .orbit(R.signOutWash))
+    static let signOutEdge = Color(nsColor: .orbit(R.signOutEdge))
 }

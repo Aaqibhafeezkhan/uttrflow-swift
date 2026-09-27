@@ -20,8 +20,9 @@ would cover two meanings.
 
 **The unsigned half is displayed, never enforced.** `EntitlementGate` — the one place that
 answers "may this person dictate?" — reads `profile.entitlement` and nothing else. The
-Account page shows `entitlement.plan`. Nothing in the app reads `profile.subscription` at
-all.
+Account page shows no plan; from the unsigned half it shows only `profile.account.createdAt`,
+and only when the document names the signed account. Nothing in the app reads
+`profile.subscription` at all.
 
 `Profile.isInternallyConsistent` does **not** enforce this. It checks one thing: that the
 document names the account the entitlement was signed for, which stops somebody pairing

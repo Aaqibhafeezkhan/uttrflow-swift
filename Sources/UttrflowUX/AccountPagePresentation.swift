@@ -1,4 +1,4 @@
-// The Account page: who is signed in, what the plan allows, and the page for working without an account.
+// The Account page: who is signed in, the four facts about them, and the page for working without an account.
 public import Foundation
 public import UttrflowAccount
 
@@ -32,28 +32,31 @@ public struct AccountIdentity: Sendable, Equatable {
     }
 }
 
-/// One line in the account card.
-public struct AccountDetail: Sendable, Equatable, Identifiable {
-    /// The row's heading.
+/// One fact in the list under the banner.
+public struct AccountFact: Sendable, Equatable, Identifiable {
+    /// Which fact this is, which decides its glyph.
+    public enum Kind: Sendable, Equatable, Hashable {
+        case email
+        case signIn
+        case since
+        case thisMac
+    }
+
+    /// Which fact this is.
+    public let kind: Kind
+    /// The row's heading: "Email", "Signed in with".
     public let label: String
-    /// What the row says. Absent on a row whose whole content is its action.
-    public let value: String?
-    /// The sentence under the value.
-    public let explanation: String?
-    /// The button on the row, when it has one.
-    public let action: MainAction?
+    /// What the row says.
+    public let value: String
 
-    /// The label, which is unique within the card.
-    public var id: String { label }
+    /// The kind, which appears once in the list.
+    public var id: Kind { kind }
 
-    /// Builds a row; everything but the label is optional.
-    public init(
-        label: String, value: String? = nil, explanation: String? = nil, action: MainAction? = nil
-    ) {
+    /// Builds a fact.
+    public init(kind: Kind, label: String, value: String) {
+        self.kind = kind
         self.label = label
         self.value = value
-        self.explanation = explanation
-        self.action = action
     }
 }
 
@@ -69,17 +72,23 @@ public struct AccountPageSnapshot: Sendable, Equatable {
     public let access: DictationAccess
     /// The clock the page is drawn against.
     public let now: Date
+    /// When the account was created, from the unsigned profile; `nil` hides the row rather than guessing.
+    public let memberSince: Date?
+    /// What this Mac is called in System Settings; `nil` hides the row.
+    public let macName: String?
 
-    /// Builds a snapshot; the picture and the local account are optional.
+    /// Builds a snapshot; everything after the clock is optional.
     public init(
         entitlement: Entitlement?, access: DictationAccess, now: Date, picture: Data? = nil,
-        local: LocalAccount? = nil
+        local: LocalAccount? = nil, memberSince: Date? = nil, macName: String? = nil
     ) {
         self.entitlement = entitlement
         self.local = local
         self.picture = picture
         self.access = access
         self.now = now
+        self.memberSince = memberSince
+        self.macName = macName
     }
 }
 
@@ -89,42 +98,46 @@ public struct AccountPagePresentation: Sendable, Equatable {
     public let chrome: MainPageChrome
     /// Absent exactly when ``emptyState`` is set.
     public let identity: AccountIdentity?
-    /// The rows of the account card.
-    public let details: [AccountDetail]
+    /// The facts under the banner, in order; a fact nobody knows is left out rather than guessed.
+    public let facts: [AccountFact]
+    /// The one button at the foot: Sign out for a session, Sign in for this Mac.
+    public let action: MainAction?
+    /// What pressing ``action`` does, for its tooltip.
+    public let actionHelp: String?
     /// A quiet note when the subscription could not be re-checked. Never a door.
     public let notice: MainCallout?
-    /// The promise about what stays on this Mac.
+    /// The promise about what stays on this Mac, drawn beside the invitation to sign in.
     public let callout: MainCallout
     /// The invitation to sign in, when nobody has.
     public let emptyState: MainEmptyState?
-    /// The line under the page.
-    public let footnote: String?
 
     /// Builds the page from its parts.
     public init(
         chrome: MainPageChrome,
         identity: AccountIdentity?,
-        details: [AccountDetail],
+        facts: [AccountFact],
+        action: MainAction?,
+        actionHelp: String?,
         notice: MainCallout?,
         callout: MainCallout,
-        emptyState: MainEmptyState?,
-        footnote: String?
+        emptyState: MainEmptyState?
     ) {
         self.chrome = chrome
         self.identity = identity
-        self.details = details
+        self.facts = facts
+        self.action = action
+        self.actionHelp = actionHelp
         self.notice = notice
         self.callout = callout
         self.emptyState = emptyState
-        self.footnote = footnote
     }
 }
 
-/// Turns the session into the page that says what having an account does, and what it does not.
+/// Turns the session into the page that says who is signed in, and nothing it does not know.
 public enum AccountPagePresenter {
     /// The heading, the same over every form of the page.
     static let chrome = MainPageChrome(
-        title: "Account", caption: "Who you are signed in as, and what you are paying for.")
+        title: "Account", caption: "Who you are signed in as, and on which Mac.")
 
     /// The promise in the privacy screen's words; it never says "recordings", since none is kept.
     public static let localDataPromise = """
@@ -133,11 +146,16 @@ public enum AccountPagePresenter {
         exactly where it is. Audio is never one of them: it is discarded as it becomes text.
         """
 
-    /// The network account of a signed-in app: honest about background checks, narrow about dictation.
-    public static let networkUseFootnote = """
-        Sign-in, profile refreshes and update checks may reach the network, and model setup or \
-        repair may download speech assets. Dictation itself runs on this Mac once the model is \
-        installed, so losing Wi-Fi does not stop you from speaking.
+    /// What Sign out does, as its tooltip.
+    public static let signOutHelp = """
+        Uttrflow stops until you sign in again, which needs the network. Your transcripts, \
+        Dictionary, Corrections and Snippets stay on this Mac.
+        """
+
+    /// What Sign in does for somebody on this Mac, as its tooltip.
+    public static let signInHelp = """
+        Needs the network for sign-in. It replaces this Mac account with a real one and leaves \
+        everything on this Mac exactly where it is.
         """
 
     /// Draws the Account page from a snapshot.
@@ -148,12 +166,14 @@ public enum AccountPagePresenter {
         guard let entitlement = snapshot.entitlement else {
             // Somebody who chose this Mac gets a page about that account, not an invitation to another.
             if let local = snapshot.local {
-                return page(for: local, callout: callout, locale: locale)
+                return page(for: local, macName: snapshot.macName, callout: callout, locale: locale)
             }
             return AccountPagePresentation(
                 chrome: chrome,
                 identity: nil,
-                details: [],
+                facts: [],
+                action: nil,
+                actionHelp: nil,
                 notice: nil,
                 callout: callout,
                 emptyState: MainEmptyState(
@@ -163,38 +183,60 @@ public enum AccountPagePresenter {
                         Signing in needs the network, but dictation runs on this Mac once setup is \
                         complete. You can keep speaking when Wi-Fi is gone.
                         """,
-                    action: MainAction(title: "Sign In", intent: .signIn)),
-                footnote: nil)
+                    action: MainAction(title: "Sign In", intent: .signIn)))
         }
 
         return AccountPagePresentation(
             chrome: chrome,
             identity: identity(for: entitlement.account, picture: snapshot.picture),
-            details: details(for: entitlement),
+            facts: facts(for: entitlement.account, snapshot: snapshot, locale: locale),
+            action: MainAction(
+                title: "Sign out", symbolName: "rectangle.portrait.and.arrow.right",
+                intent: .signOut, isDestructive: true),
+            actionHelp: signOutHelp,
             notice: notice(for: snapshot.access),
             callout: callout,
-            emptyState: nil,
-            footnote: networkUseFootnote)
+            emptyState: nil)
+    }
+
+    /// Email, provider, member since and this Mac, each only when it is known.
+    static func facts(
+        for account: Account, snapshot: AccountPageSnapshot, locale: Locale
+    ) -> [AccountFact] {
+        let email = account.emailAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [
+            email.flatMap { $0.isEmpty ? nil : AccountFact(kind: .email, label: "Email", value: $0) },
+            AccountFact(kind: .signIn, label: "Signed in with", value: title(for: account.provider)),
+            snapshot.memberSince.map {
+                AccountFact(kind: .since, label: "Member since", value: since($0, locale: locale))
+            },
+            thisMac(snapshot.macName),
+        ].compactMap(\.self)
+    }
+
+    /// The Mac's own name as a fact, or nothing when it would not say.
+    static func thisMac(_ name: String?) -> AccountFact? {
+        guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty
+        else { return nil }
+        return AccountFact(kind: .thisMac, label: "This Mac", value: name)
     }
 
     // MARK: - Working without an account
 
-    /// The page for somebody using this Mac, drawn as an account rather than a warning, with no plan row.
+    /// The page for somebody using this Mac, drawn as an account rather than a warning, with no plan.
     static func page(
-        for local: LocalAccount, callout: MainCallout, locale: Locale
+        for local: LocalAccount, macName: String?, callout: MainCallout, locale: Locale
     ) -> AccountPagePresentation {
         AccountPagePresentation(
             chrome: chrome,
             identity: identity(for: local),
-            details: details(for: local, locale: locale),
+            facts: facts(for: local, macName: macName, locale: locale),
+            action: MainAction(
+                title: "Sign in", symbolName: "person.crop.circle.badge.plus", intent: .signIn),
+            actionHelp: signInHelp,
             notice: nil,
             callout: callout,
-            emptyState: nil,
-            footnote: """
-                Dictation, the Dictionary, Corrections and Snippets all work exactly like \
-                this. An account adds the two things that need one: carrying your words' \
-                settings to another Mac, and a subscription.
-                """)
+            emptyState: nil)
     }
 
     /// The Mac's owner as the Account page and the window chip both draw them; no name gives "?", not "TM".
@@ -207,33 +249,18 @@ public enum AccountPagePresenter {
             providerID: nil)
     }
 
-    /// What working without an account gets you, and the way out of it.
-    static func details(for local: LocalAccount, locale: Locale) -> [AccountDetail] {
+    /// What working without an account amounts to: no provider, a start date and this Mac.
+    static func facts(for local: LocalAccount, macName: String?, locale: Locale) -> [AccountFact] {
         [
-            AccountDetail(
-                label: "Account",
-                value: "None — this Mac only",
-                explanation: """
-                    Uttrflow is running as \(local.name ?? "the owner of this Mac"), the name \
-                    macOS knows you by. Nothing is sent anywhere and nothing is being counted.
-                    """),
-            AccountDetail(
-                label: "Since",
-                value: since(local.since, locale: locale),
-                explanation: "When you chose to carry on without signing in."),
-            AccountDetail(
-                label: "Sign in",
-                explanation: """
-                    Needs the network for sign-in. It replaces this Mac account with a real one \
-                    and leaves everything on this Mac exactly where it is.
-                    """,
-                action: MainAction(title: "Sign In", intent: .signIn)),
-        ]
+            AccountFact(kind: .signIn, label: "Signed in with", value: "No account — this Mac only"),
+            AccountFact(kind: .since, label: "Using since", value: since(local.since, locale: locale)),
+            thisMac(macName),
+        ].compactMap(\.self)
     }
 
-    /// The day somebody chose this Mac, in their own locale.
+    /// A day in the reader's own locale, as "12 Sep 2026" reads in English.
     static func since(_ moment: Date, locale: Locale) -> String {
-        var format = Date.FormatStyle.dateTime.day().month(.wide).year()
+        var format = Date.FormatStyle.dateTime.day().month(.abbreviated).year()
         format.locale = locale
         return moment.formatted(format)
     }
@@ -270,40 +297,6 @@ public enum AccountPagePresenter {
         case .google: "Google"
         case .gitHub: "GitHub"
         case .apple: "Apple"
-        }
-    }
-
-    // MARK: - What that allows
-
-    /// Plan and sign-out only; "signed in since" waits until something records an issue date.
-    static func details(for entitlement: Entitlement) -> [AccountDetail] {
-        [
-            AccountDetail(
-                label: "Plan",
-                value: title(for: entitlement.plan),
-                explanation: explanation(for: entitlement.plan)),
-            AccountDetail(
-                label: "Sign out",
-                explanation: """
-                    Uttrflow stops until you sign in again. It needs the network for that one step.
-                    """,
-                action: MainAction(title: "Sign Out", intent: .signOut, isDestructive: true)),
-        ]
-    }
-
-    /// The plan's name.
-    public static func title(for plan: Plan) -> String {
-        switch plan {
-        case .free: "Free"
-        case .pro: "Pro"
-        }
-    }
-
-    /// What the plan allows, in a sentence.
-    static func explanation(for plan: Plan) -> String {
-        switch plan {
-        case .free: "Unlimited dictation on this Mac. Nothing to pay, nothing metered."
-        case .pro: "Everything in Free, and the clean-up models that need a subscription."
         }
     }
 

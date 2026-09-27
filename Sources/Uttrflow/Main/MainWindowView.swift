@@ -91,7 +91,7 @@ struct MainWindowView: View {
     }
 
     /// Whether the page draws its own title, and so its own margins.
-    private var drawsOwnHeader: Bool { [.home, .history, .insights].contains(model.page) }
+    private var drawsOwnHeader: Bool { [.home, .history, .insights, .account].contains(model.page) }
 
     /// Whether the page draws the redesign's title bar and margins.
     private var isRedesigned: Bool { [.dictionary, .snippets].contains(model.page) }
