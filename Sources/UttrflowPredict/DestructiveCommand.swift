@@ -33,12 +33,28 @@ public enum DestructiveCommand {
             || flag == "--remove-sent-files"
     }
 
-    /// Words that run the command after them, with the flags of theirs that take a value.
-    private static let wrappers: [String: Set<String>] = [
-        "sudo": ["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"], "doas": ["-u", "-C"],
-        "env": ["-u", "-S", "-P"], "nice": ["-n"], "nohup": [], "time": [], "command": [], "builtin": [],
-        "exec": ["-a"], "noglob": [], "nocorrect": [],
-        "xargs": ["-I", "-J", "-L", "-n", "-P", "-s", "-E", "-R", "-S", "-d"],
+    /// A word that runs the command after it: its flags that take a value, and how many plain words of its own precede the command.
+    private struct Wrapper {
+        let valued: Set<String>
+        var operands = 0
+    }
+
+    /// Words that run the command after them, each read past before the command is judged.
+    private static let wrappers: [String: Wrapper] = [
+        "sudo": Wrapper(valued: ["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"]),
+        "doas": Wrapper(valued: ["-u", "-C"]), "env": Wrapper(valued: ["-u", "-S", "-P"]),
+        "nice": Wrapper(valued: ["-n"]), "nohup": Wrapper(valued: []), "time": Wrapper(valued: []),
+        "command": Wrapper(valued: []), "builtin": Wrapper(valued: []), "exec": Wrapper(valued: ["-a"]),
+        "noglob": Wrapper(valued: []), "nocorrect": Wrapper(valued: []),
+        "xargs": Wrapper(valued: ["-I", "-J", "-L", "-n", "-P", "-s", "-E", "-R", "-S", "-d"]),
+        "timeout": Wrapper(valued: ["-s", "--signal", "-k", "--kill-after"], operands: 1),
+        "gtimeout": Wrapper(valued: ["-s", "--signal", "-k", "--kill-after"], operands: 1),
+        "caffeinate": Wrapper(valued: ["-t", "-w"]), "watch": Wrapper(valued: ["-n", "--interval"]),
+        "ionice": Wrapper(valued: ["-c", "-n", "-p", "-P", "-u"]), "chronic": Wrapper(valued: []),
+        "unbuffer": Wrapper(valued: []), "stdbuf": Wrapper(valued: ["-i", "-o", "-e"]),
+        "taskpolicy": Wrapper(valued: ["-c", "-d", "-g", "-t", "-l"]), "arch": Wrapper(valued: ["-arch"]),
+        "flock": Wrapper(valued: ["-w", "--timeout", "-E", "--conflict-exit-code"], operands: 1),
+        "chroot": Wrapper(valued: ["-u", "-g", "-G"], operands: 1), "pkexec": Wrapper(valued: ["--user"]),
     ]
 
     /// Programs that destroy whatever they are pointed at.
@@ -64,15 +80,16 @@ public enum DestructiveCommand {
                 rest.removeFirst()
                 continue
             }
-            guard let flags = wrappers[name], rest.count > 1 else {
+            guard let wrapper = wrappers[name], rest.count > 1 else {
                 return .named(name, Array(rest.dropFirst().map(\.text)))
             }
             rest.removeFirst()
             while let flag = rest.first, flag.text.count > 1, flag.text.hasPrefix("-") {
                 guard !flag.isUnresolved else { return .unresolved }
                 rest.removeFirst()
-                if flags.contains(flag.text), !rest.isEmpty { rest.removeFirst() }
+                if wrapper.valued.contains(flag.text), !rest.isEmpty { rest.removeFirst() }
             }
+            rest = rest.dropFirst(wrapper.operands)
         }
         return .none
     }

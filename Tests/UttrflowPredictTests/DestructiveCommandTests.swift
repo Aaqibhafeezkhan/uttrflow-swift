@@ -240,4 +240,30 @@ struct DestructiveCommandTests {
     func harmlessRsyncAndRedirectionAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A destroying command behind a wrapper that runs it is recognised, past the wrapper's flags and values.",
+        arguments: [
+            "timeout 60 rm -rf build", "timeout -s KILL 60 rm -rf build", "timeout -k 5 10 rm x",
+            "gtimeout 60 rm -rf build", "caffeinate rm -rf ~/scratch", "caffeinate -i -t 600 rm -rf build",
+            "watch -n1 rm x", "watch -n 5 rm x", "ionice -c 3 rm -rf build", "chronic rm -rf build",
+            "unbuffer rm -rf build", "stdbuf -oL rm -rf build", "stdbuf -o L rm -rf build",
+            "taskpolicy -c background rm -rf build", "arch -x86_64 rm -rf build",
+            "arch -arch arm64 rm -rf build", "flock /tmp/lock rm -rf build", "flock -w 5 /tmp/lock rm x",
+            "chroot /srv/jail rm -rf /data", "pkexec rm -rf /opt/app", "nice timeout 60 rm -rf build",
+        ])
+    func wrappedDestroyers(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A wrapper running an ordinary command is ordinary, its duration or file never read as the command.",
+        arguments: [
+            "timeout 5 ls", "timeout 60 make verify", "caffeinate -d", "caffeinate make build",
+            "watch -n1 git status", "flock /tmp/rm ls", "chroot /srv/rm ls", "stdbuf -oL tail log.txt",
+        ])
+    func wrappedOrdinaryCommands(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
