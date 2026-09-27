@@ -1,34 +1,28 @@
-// What one onboarding page draws: its parts, emphasis, notes, buttons, and what pressing them means.
+// What one onboarding page draws: its mood, its picture, its buttons, and what pressing them means.
 public import UttrflowAccount
 public import UttrflowCore
 
 /// What one onboarding page draws; the view renders this and nothing else.
 public struct OnboardingPage: Sendable, Equatable {
-    /// SF Symbol for the glyph at the top, or `nil` on the page that shows the mark.
-    public let symbolName: String?
-    /// How the glyph is drawn.
-    public let emphasis: OnboardingEmphasis
-    /// The heading.
+    /// The colour of the light behind the card, which says how the page is going.
+    public let mood: OnboardingMood
+    /// What the top of the card shows.
+    public let picture: OnboardingPicture
+    /// The heading: one short sentence.
     public let title: String
-    /// The sentence under it.
-    public let subtitle: String
-    /// The paragraph under the subtitle; absent where the design puts a progress bar there.
-    public let body: String?
-    /// The quieter caveat under the body, if this page has one.
-    public let note: OnboardingNote?
-    /// A sign-in code to show when this Mac cannot be redirected back to; typed, unlike ``keys``.
-    public let code: String?
-    /// Keycaps to draw, for example `["⌥", "Space"]`. Empty on every page but the last.
-    public let keys: [String]
-    /// Download progress from `0` to `1`, or `nil` when nothing is downloading.
-    public let progress: Double?
-    /// The stacked provider buttons; empty on every page but sign-in.
+    /// The round provider buttons; empty on every page but sign-in.
     public let providers: [OnboardingProviderButton]
-    /// In reading order. The prominent one, where there is one, comes last.
+    /// The round buttons, in reading order.
     public let buttons: [OnboardingButton]
-    /// The terms a person is agreeing to, on the page itself; only sign-in has one.
-    public let fineprint: String?
-    /// 1-based position in the row of dots, and how many dots there are.
+    /// The underlined way out under the buttons, where the page has one.
+    public let link: OnboardingLink?
+    /// The quiet line under the buttons.
+    public let hint: String?
+    /// Whether the terms a person agrees to are on the page; only sign-in has them.
+    public let showsTerms: Bool
+    /// The fuller sentence behind the heading, read by VoiceOver and shown on hover.
+    public let explanation: String?
+    /// 1-based position in the row of dots.
     public let position: Int
     /// How many dots there are.
     public let stepCount: Int
@@ -37,98 +31,172 @@ public struct OnboardingPage: Sendable, Equatable {
 }
 
 extension OnboardingPage {
-    /// Whether there is anything on this page the user can press, counting the provider stack.
+    /// Whether there is anything on this page the user can press, counting the providers and the link.
     public var hasSomethingToPress: Bool {
-        buttons.contains(where: \.isEnabled) || providers.contains(where: \.isEnabled)
+        buttons.contains(where: \.isEnabled) || providers.contains(where: \.isEnabled) || link != nil
     }
 }
 
-/// How the glyph at the top of a page is drawn.
-public enum OnboardingEmphasis: Sendable, Equatable {
-    /// The app's own mark on a lilac wash. The first page only.
+/// The light behind the card, one per kind of moment.
+public enum OnboardingMood: Sendable, Equatable, CaseIterable {
+    /// Asking for something, or offering to begin.
     case brand
-    /// A plain slab. What a page that is asking for something wears.
+    /// Something is under way: a download, a dictation.
+    case live
+    /// Waiting on somewhere else: a browser or System Settings.
+    case waiting
+    /// Something is off and the user can put it right.
+    case warning
+    /// Something did not work.
+    case failure
+    /// There is no connection.
+    case offline
+    /// A step is done.
+    case done
+}
+
+/// What the top of the card shows.
+public enum OnboardingPicture: Sendable, Equatable {
+    /// A waveform, with a badge over its middle or none.
+    case waveform(OnboardingWave, badge: OnboardingBadge?)
+    /// A waveform over a text field, showing where dictated words land.
+    case typing(OnboardingWave, field: OnboardingField)
+    /// A ring around how far the speech model's download has come.
+    case download(Double, OnboardingDownload)
+    /// The shortcut's keys over the field the first try fills; held while the user is talking.
+    case keys([String], isHeld: Bool, field: OnboardingField)
+    /// A sign-in code to read off this screen and type into the browser.
+    case code(String)
+}
+
+/// How lively the waveform is.
+public enum OnboardingWave: Sendable, Equatable {
+    /// Moving like speech.
+    case talking
+    /// A slow swell, while something is awaited.
+    case idle
+    /// Flat dots: nothing heard yet.
+    case still
+}
+
+/// The disc over the middle of the waveform.
+public enum OnboardingBadge: Sendable, Equatable {
+    /// The provider's mark inside a turning arc, while the browser has the user.
+    case waitingOn(SignInProvider)
+    /// An SF Symbol on a disc drawn in a tone.
+    case symbol(String, OnboardingBadgeTone)
+}
+
+/// How a badge's disc is drawn.
+public enum OnboardingBadgeTone: Sendable, Equatable {
+    /// A dark disc with a white symbol.
     case neutral
-    /// Something did not work and the page is about that, drawn unlike a page merely asking.
+    /// An amber edge and symbol: something the user can turn on.
     case caution
-    /// Reserved for the pages that say a piece of the setting up is over.
-    case success
+    /// A red disc that shakes once: something failed.
+    case failure
 }
 
-/// A quieter line under the body, saying what the user is trading away or keeping.
-public struct OnboardingNote: Sendable, Equatable {
-    /// How loudly the note is drawn, and whether it sits above what it is about or below it.
-    public enum Tone: Sendable, Equatable {
-        /// Explaining or reassuring. Drawn under the thing it is about.
-        case quiet
-        /// Something is wrong and the page cannot proceed. Drawn above.
-        case warning
-    }
-
-    /// The SF Symbol beside the text.
-    public let symbolName: String
-    /// The sentence.
-    public let text: String
-    /// How loudly, and where.
-    public let tone: Tone
-
-    /// Builds a note; quiet unless said otherwise.
-    init(symbolName: String, text: String, tone: Tone = .quiet) {
-        self.symbolName = symbolName
-        self.text = text
-        self.tone = tone
-    }
+/// The white text field drawn in the card, never one the user types into.
+public enum OnboardingField: Sendable, Equatable {
+    /// Grey text saying what will appear there.
+    case placeholder(String)
+    /// Words being typed in, one character at a time.
+    case typing(String)
+    /// Words already there.
+    case filled(String)
 }
 
-/// One provider's button; carries the provider, since each mark is drawn to its owner's rules.
+/// How the download ring is drawn.
+public enum OnboardingDownload: Sendable, Equatable {
+    /// Filling, with the percentage in the middle.
+    case running
+    /// Stopped where it was, in red.
+    case stopped
+    /// Full, with the mark in the middle.
+    case finished
+}
+
+/// One provider's round button; carries the provider, since each mark is drawn to its owner's rules.
 public struct OnboardingProviderButton: Sendable, Equatable {
     /// Which provider.
     public let provider: SignInProvider
-    /// What the button says, which each provider dictates rather than we choose.
+    /// The provider's name under the button.
+    public let label: String
+    /// What VoiceOver says, which each provider dictates rather than we choose.
     public let title: String
-    /// Offline, the three stay on screen and inert, which says more than an empty panel.
+    /// Whether it can be pressed; a sign-in under way leaves none live.
     public let isEnabled: Bool
 
-    /// Builds the button with the provider's own title.
+    /// Builds the button with the provider's own wording.
     init(provider: SignInProvider, isEnabled: Bool) {
         self.provider = provider
+        self.label = AccountPagePresenter.title(for: provider)
         self.title = provider.buttonTitle
         self.isEnabled = isEnabled
     }
 }
 
-/// One button on a page.
+/// One round button on a page.
 public struct OnboardingButton: Sendable, Equatable {
-    /// The words on the button.
+    /// The word under the button.
     public let title: String
+    /// The SF Symbol inside it.
+    public let symbolName: String
     /// What pressing it means.
     public let intent: OnboardingIntent
-    /// The answer the page is steering towards. At most one per page.
+    /// The answer the page is steering towards, drawn white. At most one per page.
     public let isProminent: Bool
-    /// Drawn but not pressable, so the row of buttons keeps its shape while a download runs.
+    /// Drawn but not pressable, so the row keeps its shape while a download runs.
     public let isEnabled: Bool
+    /// Whether a hand-drawn arrow points at it, for the one press a page cannot do without.
+    public let isPointedAt: Bool
 }
 
 extension OnboardingButton {
     /// The answer the page is steering towards.
-    static func prominent(_ title: String, _ intent: OnboardingIntent) -> OnboardingButton {
-        OnboardingButton(title: title, intent: intent, isProminent: true, isEnabled: true)
+    static func prominent(
+        _ title: String, _ symbolName: String, _ intent: OnboardingIntent
+    ) -> OnboardingButton {
+        OnboardingButton(
+            title: title, symbolName: symbolName, intent: intent, isProminent: true, isEnabled: true,
+            isPointedAt: false)
     }
 
-    /// The quieter answer beside it — usually the one that does without something.
-    static func plain(_ title: String, _ intent: OnboardingIntent) -> OnboardingButton {
-        OnboardingButton(title: title, intent: intent, isProminent: false, isEnabled: true)
+    /// The answer the page steers towards, with an arrow saying this is the one to press.
+    static func pointed(_ title: String, _ symbolName: String, _ intent: OnboardingIntent) -> OnboardingButton
+    {
+        OnboardingButton(
+            title: title, symbolName: symbolName, intent: intent, isProminent: true, isEnabled: true,
+            isPointedAt: true)
+    }
+
+    /// A quieter answer beside it.
+    static func plain(_ title: String, _ symbolName: String, _ intent: OnboardingIntent) -> OnboardingButton {
+        OnboardingButton(
+            title: title, symbolName: symbolName, intent: intent, isProminent: false, isEnabled: true,
+            isPointedAt: false)
     }
 
     /// Somewhere to look while waiting; carries the intent it will have once it comes alive.
-    static func disabled(_ title: String) -> OnboardingButton {
-        OnboardingButton(title: title, intent: .advance, isProminent: true, isEnabled: false)
+    static func disabled(_ title: String, _ symbolName: String) -> OnboardingButton {
+        OnboardingButton(
+            title: title, symbolName: symbolName, intent: .advance, isProminent: true, isEnabled: false,
+            isPointedAt: false)
     }
+}
+
+/// The underlined words under the buttons: a way on that is not the page's answer.
+public struct OnboardingLink: Sendable, Equatable {
+    /// The words.
+    public let title: String
+    /// What pressing them means.
+    public let intent: OnboardingIntent
 }
 
 /// What pressing a button means.
 public enum OnboardingIntent: Sendable, Equatable {
-    /// Leave this page, whether as progress or as doing without; the last page reads the consequence.
+    /// Leave this page; offered only once the page's question is answered.
     case advance
 
     /// Ask macOS for a permission it has not been asked about yet.
@@ -137,16 +205,19 @@ public enum OnboardingIntent: Sendable, Equatable {
     /// One of the recoveries the rest of the app speaks, so onboarding offers the same verbs.
     case recover(RecoveryAction)
 
-    /// Stop the download and go on without the model.
+    /// Stop the download; the page then offers to start it again.
     case cancelInstall
 
     /// Sign in with this provider. The only intent that needs a network.
     case signIn(SignInProvider)
 
+    /// Open the provider's page in the browser again, for a tab the user closed.
+    case reopenBrowser
+
     /// Give up on a sign-in that is somewhere else and go back to the providers.
     case cancelSignIn
 
-    /// Carry on with no account as whoever owns this Mac; records a decision, see ``LocalAccount``.
+    /// Carry on with no account as whoever owns this Mac; no page offers it. See ``LocalAccount``.
     case continueOnThisMac
 
     /// Close onboarding. Only ever offered on the last page.

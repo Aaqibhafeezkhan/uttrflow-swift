@@ -94,6 +94,9 @@ final class GatedInstaller: OnboardingModelInstaller {
     /// Whether the model is on disk.
     var isInstalled: Bool { installed.withLock { $0 } }
 
+    /// Takes the model off disk, the way a user deleting it behind the app's back would.
+    func remove() { installed.withLock { $0 = false } }
+
     /// How many downloads have started, so a retry can be told from a page that merely redrew.
     var startedDownloads: Int { attempts.withLock { $0 } }
 
@@ -354,7 +357,8 @@ final class Harness {
         reachable: Bool = true,
         /// What macOS would call the person at this Mac, fixed so no test depends on who runs it.
         systemName: String? = "Naveen Bhatt",
-        now: Date = Date(timeIntervalSince1970: 1_800_000_000)
+        now: Date = Date(timeIntervalSince1970: 1_800_000_000),
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
     ) {
         self.microphone = FakePermissionGate(
             kind: .microphone, status: microphone, statusAfterRequest: microphoneAfterAsking)
@@ -384,16 +388,11 @@ final class Harness {
             systemName: { systemName },
             openBrowser: browser.open,
             openSystemSettings: panes.open,
-            now: { now }
+            now: { now },
+            pause: pause
         )
         flow.onChange = { [weak self] state in self?.published.append(state) }
         flow.onFinish = { [weak self] readiness in self?.finishedWith = readiness }
-    }
-
-    /// Starts and reads past the welcome page, so moving the pitch again is one edit.
-    func startPastWelcome() async {
-        await flow.start()
-        if flow.state.step == .welcome { await flow.perform(.advance) }
     }
 
     /// Where the flow is.
