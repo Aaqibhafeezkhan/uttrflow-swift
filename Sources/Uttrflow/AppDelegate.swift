@@ -1900,7 +1900,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             history: HistoryPresenter.page(
                 for: HistorySnapshot(
                     entries: entries, query: query(for: .history), settings: settings,
-                    keepsRecordings: true, now: now)),
+                    keepsRecordings: true, recordings: knownRecordings,
+                    retrying: retryingRecording, playing: playback.playing, now: now)),
             dictionary: DictionaryPresenter.page(
                 for: DictionarySnapshot(
                     entries: knownWords, draft: wordDraft, refusal: wordRefusal,
@@ -2000,6 +2001,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var knownRecordings: [KeptRecording] = []
     /// The recording the pipeline is running again, so its row can say so.
     private var retryingRecording: UUID?
+    /// The kept recording History is playing back, one at a time.
+    private lazy var playback: RecordingPlayback = {
+        let playback = RecordingPlayback()
+        playback.onChange = { [weak self] in self?.redrawMainWindow() }
+        return playback
+    }()
 
     /// Clears the "Retrying…" badge of a retry the pipeline refused or abandoned.
     private func dropRetryingBadge(_ id: UUID) {
@@ -2062,6 +2069,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .change(let change): apply(change)
 
         case .retryRecording(let id):
+            if playback.playing == id { playback.stop() }
             retryingRecording = id
             redrawMainWindow()
             Task { [weak self] in
@@ -2069,7 +2077,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 self.dropRetryingBadge(id)
             }
         case .forgetRecording(let id):
+            if playback.playing == id { playback.stop() }
             act { [weak self] in await self?.recordings.discard(id) }
+        case .playRecording(let id):
+            guard playback.playing != id else { return playback.stop() }
+            Task { [weak self] in
+                guard let self, let audio = try? await self.recordings.audio(of: id) else { return }
+                self.playback.play(WAVEncoder.encode(audio), id: id)
+            }
 
         case .forgetDictation(let id):
             if id == lastTranscriptID { forgetLastTranscript() }
@@ -2390,8 +2405,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Delivery was unconfirmed or the clipboard failed; Recent has the saved words.
             menuBar.openMenu()
         case .retryFromRecording:
-            // The audio sits at the top of today's list with its own Retry.
-            show(.main(.dictation))
+            // The audio sits in today's list on History with its own Retry.
+            show(.main(.history))
             Task { await pipeline?.acknowledge() }
         }
     }

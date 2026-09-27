@@ -28,6 +28,8 @@ public enum MainIntent: Sendable, Equatable {
     case retryRecording(UUID)
     /// Delete a kept recording without ever hearing it.
     case forgetRecording(UUID)
+    /// Play a kept recording, or stop it if it is playing.
+    case playRecording(UUID)
 
     /// Put a changed word back to what was heard.
     case undoCorrection(UUID)
