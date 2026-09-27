@@ -112,6 +112,10 @@ disk, so taking the arrival's kind would delete the one clip the store promises 
 and the text was already on disk and shown in the panel under the user's own decision to keep it.
 A clip that is not kept still becomes a secret and leaves the disk.
 
+The rich text comes from the new copy only when the new copy carries some. A plain copy of the
+same text keeps the clip's rich text, because that may be a note the user wrote or promoted in the
+panel, checklist state included, and a plain copy has nothing to replace it with.
+
 ## Rebuilding a clip
 
 `Clip.text` is `let` on purpose — a clip is what was on the clipboard — so editing one builds a

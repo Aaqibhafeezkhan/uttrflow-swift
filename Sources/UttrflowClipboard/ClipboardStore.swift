@@ -460,7 +460,9 @@ public actor ClipboardStore {
             // Copying something again is reaching for it, so the eviction clock moves too.
             lastUsedAt: arrival.copiedAt,
             // Detected from the text recorded now and from this pasteboard, unless the kind stayed the kept clip's.
-            language: classified.language, richText: arrival.richText,
+            language: classified.language,
+            // A plain repeat keeps the clip's rich text, which may be a note the user wrote in the panel.
+            richText: arrival.richText ?? previous.richText,
             // The file already on disk, not the one just written; the arrival's would strand it.
             image: previous.image ?? arrival.image,
             // Everything the user decided stays with the clip they decided it about.

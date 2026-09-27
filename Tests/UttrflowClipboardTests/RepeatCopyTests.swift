@@ -37,4 +37,33 @@ struct RepeatCopyTests {
         #expect(clips.map(\.kind) == [.secret])
         #expect(await ClipboardStore(file: file.url).clips(keeping: week()).isEmpty)
     }
+
+    @Test("a note copied again as plain text keeps the note and its checklist (#2079)")
+    func noteSurvivesPlainRepeat() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let first = copy("shopping")
+        try await store.record(first, keeping: week())
+        let note = "<ul><li data-checked=\"true\">milk</li><li>bread</li></ul>"
+        try await store.setRichText(note, of: first.id, keeping: week())
+
+        let clips = try await store.record(copy("shopping", at: 60), keeping: week())
+        #expect(clips.map(\.richText) == [note])
+        #expect(await ClipboardStore(file: file.url).clips(keeping: week()).map(\.richText) == [note])
+    }
+
+    @Test("a repeat that carries rich text of its own replaces the old")
+    func richRepeatReplaces() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let first = copy("shopping")
+        try await store.record(first, keeping: week())
+        try await store.setRichText("<p>old</p>", of: first.id, keeping: week())
+
+        let arrival = Clip(
+            text: "shopping", kind: .text, copiedAt: noon.addingTimeInterval(60), source: "Notes",
+            richText: "<p><b>shopping</b></p>")
+        let clips = try await store.record(arrival, keeping: week())
+        #expect(clips.map(\.richText) == ["<p><b>shopping</b></p>"])
+    }
 }
