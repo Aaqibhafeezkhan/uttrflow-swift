@@ -10,8 +10,9 @@ sat at the top of a window four times the height of the screen with everything b
 The pages already scroll.
 
 Default size is 1180 × 780 (900 × 620 is cramped once the rail carries four figures); minimum
-760 × 500. The sidebar is a dark island floated 10 points off the window's edges: 76 points as
-an icon rail (a 44pt target with room either side) and 232 with its names showing (six rows of
+760 × 500. The sidebar is a dark island floated 10 points off the window's edges: 88 points as
+an icon rail (a 44pt target with room either side, wide enough that the zoom button, whose right
+edge sits at 79 points, stays inside the island) and 232 with its names showing (six rows of
 14-point text, the "Your words" heading and the account card), and the figures rail is 186. The two rails once shared a width, and at 76 points "Words per minute"
 wrapped one word to a line and "2.7K" truncated to "2....".
 
