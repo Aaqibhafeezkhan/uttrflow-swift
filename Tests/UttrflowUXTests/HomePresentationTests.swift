@@ -513,7 +513,7 @@ struct HomeMissingModelSizeTests {
     @Test("the not-installed line says how big the download is when the size is known")
     func namesTheSize() {
         let known = status(bytes: 646_000_000)
-        #expect(known?.subtitle == "Dictation needs it · 646 MB · works offline after")
+        #expect(known?.subtitle == "Dictation needs it · 646 MB, works offline after")
         #expect(known?.accessibilityLabel.contains("646 MB") == true)
     }
 
