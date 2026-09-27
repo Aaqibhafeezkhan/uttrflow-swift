@@ -1,4 +1,4 @@
-// Tests that the account picture is decoded once per drawn size and kept for those bytes.
+// Tests that the account picture is decoded once per drawn size and the banner's aurora is blurred once per size.
 
 import AppKit
 import Testing
@@ -6,7 +6,7 @@ import Testing
 @testable import Uttrflow
 
 @MainActor
-@Suite("Account pictures")
+@Suite("Account pictures and the banner aurora")
 struct AccountPictureTests {
     /// A square PNG `side` pixels wide, filled with one colour.
     private static func png(side: Int, grey: CGFloat) throws -> Data {
@@ -40,5 +40,16 @@ struct AccountPictureTests {
         #expect(AccountPictures.anyCached(for: bytes) === small)
         let large = try #require(await AccountPictures.image(for: bytes, longestSide: 180))
         #expect(AccountPictures.anyCached(for: bytes) === large)
+    }
+
+    @Test("the banner's aurora is blurred once per size and handed back after that")
+    func auroraIsBlurredOncePerSize() throws {
+        let size = CGSize(width: 640, height: AccountBanner.height)
+        let picture = try #require(AccountAurora.picture(for: size))
+        #expect(picture.size == size)
+        #expect(AccountAurora.picture(for: size) === picture)
+        let wider = try #require(AccountAurora.picture(for: CGSize(width: 700, height: AccountBanner.height)))
+        #expect(wider !== picture)
+        #expect(AccountAurora.picture(for: .zero) == nil)
     }
 }
