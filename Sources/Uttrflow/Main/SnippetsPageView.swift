@@ -173,7 +173,7 @@ struct SnippetEditorView: View {
                     .scrollContentBackground(.hidden)
                     .scrollIndicators(.never)
                     .lineSpacing(3)
-                    .frame(minHeight: 44)
+                    .frame(minHeight: 44, maxHeight: 180)
                     .padding(.horizontal, -5)
             }
             PageEditorFooter(
