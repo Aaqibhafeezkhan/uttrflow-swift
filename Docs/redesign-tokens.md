@@ -35,6 +35,9 @@ translucent card film, hairline, sidebar island and secondary text of the dark a
 | `controlEdge` | white at 14% | `#101316` at 14% |
 | `ringTrack` | white at 10% | `#101316` at 10% |
 | `cardEdge` | white at 8% | none |
+| `neutralAccent` | `#A7ACB8` | `#5E6470` |
+| `badgeInk` | `#AFF3EC` | `#0E645D` |
+| `fieldWell` | black at 25% | `#101316` at 4.5% |
 
 Text tones clear 4.5:1 on the page and on a card; accents clear 3:1 there, the bar for marks.
 The floating button's ink clears 4.5:1 on its glass and the meter 3:1, measured over the

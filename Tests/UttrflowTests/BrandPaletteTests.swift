@@ -256,6 +256,23 @@ struct RedesignTokenTests {
         #expect(relativeLuminance(Self.panelGlass.light) > 0.8)
     }
 
+    @Test("the neutral chip ink clears the 3:1 a mark needs on the page and a card")
+    func neutralAccentClearsMarks() {
+        for (surface, ground) in Self.grounds {
+            #expect(contrastRatio(R.neutralAccent.dark, ground.dark) >= 3, "dark \(surface)")
+            #expect(contrastRatio(R.neutralAccent.light, ground.light) >= 3, "light \(surface)")
+        }
+    }
+
+    @Test("the badge ink clears 4.5:1 on its own teal wash, in both appearances")
+    func badgeInkClearsAA() {
+        let wash = Self.composite(
+            BrandLayer(tone: R.dictationAccent, darkOpacity: 0.16, lightOpacity: 0.16),
+            over: Self.composite(R.cardFill, over: R.windowGround))
+        #expect(contrastRatio(R.badgeInk.dark, wash.dark) >= 4.5)
+        #expect(contrastRatio(R.badgeInk.light, wash.light) >= 4.5)
+    }
+
     @Test("the sidebar island stays dark in the light appearance")
     func islandStaysDark() {
         #expect(relativeLuminance(R.sidebarIsland.tone.light) < 0.02)
