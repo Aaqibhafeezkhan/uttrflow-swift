@@ -50,13 +50,6 @@ struct TextToneContrastTests {
         ("rail", BrandPalette.Surface.rail),
     ]
 
-    /// The quick panel is drawn dark whatever the desktop is, so its labels are the dark ramp.
-    static let panelSurfaces: [UInt32] = [
-        BrandPalette.Surface.ground.dark,
-        BrandPalette.Surface.card.dark,
-        BrandPalette.Surface.raised,
-    ]
-
     @Test("every text tone clears 4.5:1 on every surface, in both appearances")
     func tonesClearAA() {
         for (tone, colour) in Self.tones {
@@ -80,14 +73,6 @@ struct TextToneContrastTests {
         #expect(dark == dark.sorted(by: >))
         #expect(light == light.sorted(by: <))
         #expect(relativeLuminance(BrandPalette.Text.ghost) < dark.last ?? 0)
-    }
-
-    @Test("the ghost glyph clears the 3:1 a mark needs, on every surface the panel draws it on")
-    func ghostClearsNonText() {
-        for ground in Self.panelSurfaces {
-            let measured = contrastRatio(BrandPalette.Text.ghost, ground)
-            #expect(measured >= 3, "ghost on \(String(ground, radix: 16)) is \(measured)")
-        }
     }
 }
 
@@ -214,6 +199,61 @@ struct RedesignTokenTests {
     func avatarInkClearsAA() {
         #expect(contrastRatio(R.avatarInk, BrandPalette.Purple.light) >= 4.5)
         #expect(contrastRatio(R.avatarInk, BrandPalette.Teal.primary) >= 4.5)
+    }
+
+    /// The clipboard panel's glass over a dark desktop and a light one, as the floating button's is measured.
+    static let panelGlass = composite(R.Panel.glass, over: BrandTone(dark: 0x26_2626, light: 0xEE_EEEE))
+
+    /// Every ground the panel sets words on: the glass, the search field's film and a popover.
+    static let panelGrounds: [(String, BrandTone)] = [
+        ("glass", panelGlass),
+        ("film", composite(R.Panel.film, over: panelGlass)),
+        ("popover", composite(R.Panel.popover, over: panelGlass)),
+    ]
+
+    @Test("the panel's text tones clear 4.5:1 on its glass, its film and a popover, in both appearances")
+    func panelTextClearsAA() {
+        for (name, text) in [("label", R.Panel.label), ("soft", R.Panel.soft), ("dim", R.Panel.dim)] {
+            for (surface, ground) in Self.panelGrounds {
+                let dark = contrastRatio(text.dark, ground.dark)
+                let light = contrastRatio(text.light, ground.light)
+                #expect(dark >= 4.5, "\(name) on dark \(surface) is \(dark)")
+                #expect(light >= 4.5, "\(name) on light \(surface) is \(light)")
+            }
+        }
+    }
+
+    @Test("the panel's glyph floor and its inks clear the 3:1 a mark needs on its glass")
+    func panelMarksClearNonText() {
+        let marks = [
+            R.Panel.ghost, R.Panel.accentInk, R.Panel.accent, R.Panel.key, R.Panel.destructive,
+            R.infoAccent, R.suggestionAccent,
+        ]
+        for mark in marks {
+            #expect(contrastRatio(mark.dark, Self.panelGlass.dark) >= 3)
+            #expect(contrastRatio(mark.light, Self.panelGlass.light) >= 3)
+        }
+    }
+
+    @Test("the panel's accent reads as text on its glass, where the empty list offers it as a button")
+    func panelAccentInkClearsAA() {
+        #expect(contrastRatio(R.Panel.accentInk.dark, Self.panelGlass.dark) >= 4.5)
+        #expect(contrastRatio(R.Panel.accentInk.light, Self.panelGlass.light) >= 4.5)
+    }
+
+    @Test("the chosen segment's ink and a confirm button's ink clear 4.5:1 on their fills")
+    func panelFillInksClearAA() {
+        let pairs = [(R.Panel.segmentInk, R.Panel.segment), (R.Panel.onAccent, R.Panel.accent)]
+        for (ink, fill) in pairs {
+            #expect(contrastRatio(ink.dark, fill.dark) >= 4.5)
+            #expect(contrastRatio(ink.light, fill.light) >= 4.5)
+        }
+    }
+
+    @Test("the panel's glass is dark when dark and light when light")
+    func panelGlassFollowsTheAppearance() {
+        #expect(relativeLuminance(Self.panelGlass.dark) < 0.05)
+        #expect(relativeLuminance(Self.panelGlass.light) > 0.8)
     }
 
     @Test("the sidebar island stays dark in the light appearance")

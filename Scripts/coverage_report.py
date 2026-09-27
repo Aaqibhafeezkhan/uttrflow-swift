@@ -164,6 +164,9 @@ EXCLUDED_FILES = {
     ),
     "Uttrflow/Suggestion/SuggestionView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Panel/QuickPanelController.swift": "owns an on-screen floating window",
+    "Uttrflow/Panel/QuickPanelGlass.swift": (
+        "SwiftUI glass and colours; the tokens it draws are measured in BrandPaletteTests"
+    ),
     "Uttrflow/Panel/QuickPanelView.swift": (
         "SwiftUI, drawn from a tested presentation, apart from the ⌘-chord and Escape handling "
         "it decides itself, which #630 moves into a pure type in UttrflowUX"
