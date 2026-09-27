@@ -258,7 +258,7 @@ public enum FocusedFieldReader {
         _ field: AXUIElement, role: String, value: String?, frame: CGRect?, while goOn: () -> Bool
     ) -> HiddenInputLine.Reading? {
         guard FocusedFieldSnapshot.isTextEntry(role), let frame,
-            HiddenInputLine.isStub(value: value, frame: frame)
+            HiddenInputLine.isStub(value: value, frame: frame, role: role)
         else { return nil }
         return HiddenInputLine.read(around: AXNode(field), at: frame, in: AXElementTree(), while: goOn)
     }

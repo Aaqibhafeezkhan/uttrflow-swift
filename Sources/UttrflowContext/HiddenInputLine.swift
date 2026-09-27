@@ -32,10 +32,15 @@ enum HiddenInputLine {
     /// How far apart two edges may be and still meet, in points.
     static let tolerance: CGFloat = 3
 
-    /// Whether a focused field is the empty, caret-sized input an editor that draws its own text keeps focused.
-    static func isStub(value: String?, frame: CGRect?) -> Bool {
+    /// The tallest a wide text area may be and still be an editor's hidden input: one bare line of type, with no padding.
+    static let wideStubHeight: CGFloat = 18
+
+    /// Whether a focused field is the empty input an editor that draws its own text keeps at the caret: caret-sized, or a bare one-line text area.
+    static func isStub(value: String?, frame: CGRect?, role: String? = nil) -> Bool {
         guard let frame, (value ?? "").isEmpty else { return false }
-        return frame.width <= stubWidth && frame.height <= stubHeight
+        if frame.width <= stubWidth { return frame.height <= stubHeight }
+        // WebKit gets an editor's hidden text area widened to keep pasting fast, so there its bare line height is the tell.
+        return role == "AXTextArea" && frame.height > 0 && frame.height <= wideStubHeight
     }
 
     /// The caret's line around an input stub at `stub`, or nothing when no rendered line sits where the stub is.
