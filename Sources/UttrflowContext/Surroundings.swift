@@ -8,6 +8,8 @@ public protocol ElementTree {
 
     /// The element's Accessibility role, or nothing when it will not say.
     func role(of element: Element) -> String?
+    /// Whether the element hides what is typed into it, judged without reading its text.
+    func isSecure(_ element: Element) -> Bool
     /// The text a person reads on the element: its value, or its title where it has no value.
     func text(of element: Element) -> String?
     /// The element's children in the order they are laid out, which is the order they are read in.
@@ -68,6 +70,8 @@ public struct Surroundings: Sendable, Equatable {
         around focused: Tree.Element, in tree: Tree, windowTitle: String?, windowFrame: CGRect? = nil,
         deadline: ContinuousClock.Instant = .now + .milliseconds(budgetInMilliseconds)
     ) -> Surroundings {
+        // Nothing is gathered around a secure field, so its own value is never read to be left out.
+        guard !tree.isSecure(focused) else { return Surroundings(windowTitle: windowTitle, text: nil) }
         var walk = Walk<Tree>(tree: tree, window: windowFrame, deadline: deadline)
         var levels: [[String]] = []
         var child = focused
@@ -171,8 +175,12 @@ public struct Surroundings: Sendable, Equatable {
             guard isOnScreen(element) else { return }
             let role = tree.role(of: element) ?? ""
             guard !skippedRoles.contains(role) else { return }
+            // A secure field is passed over whole, its text never asked for and its children never walked.
+            guard !tree.isSecure(element) else { return }
             let raw = tree.text(of: element)
             let text = Surroundings.trimmed(raw)
+            // Text of mask characters alone is a password field that does not declare itself, so it is passed over too.
+            guard !(text.map(SecureField.looksMasked) ?? false) else { return }
             // A stamp on its own line, "10:31 AM" beside a name rather than glued to a message, is gone once trimmed.
             if text == nil, Surroundings.isClockOnly(raw) { clockOnlyElements += 1 }
             // A child that only repeats its container's label, as a sticker row does, adds nothing.
