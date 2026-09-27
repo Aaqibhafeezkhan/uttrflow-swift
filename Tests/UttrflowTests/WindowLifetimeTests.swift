@@ -71,9 +71,23 @@ struct WindowLifetimeTests {
             record: NeverFinished(),
             account: OnboardingAccountLayer(
                 authentication: service,
-                profiles: UserDefaultsProfileCache(storage: defaults, verifier: service.verifier),
-                local: InMemoryLocalAccountStore()),
+                profiles: UserDefaultsProfileCache(storage: defaults, verifier: service.verifier)),
             network: AlwaysReachable())
+    }
+
+    @Test("a second onboarding request reuses the open controller instead of building another")
+    func overlappingOnboardingReusesOpenController() {
+        var made = 0
+        var slot: OnboardingWindowController?
+        for _ in 0..<2 {
+            let (controller, isNew) = OnboardingWindowController.reusing(slot) {
+                made += 1
+                return onboardingController()
+            }
+            if isNew { slot = controller }
+            #expect(controller === slot)
+        }
+        #expect(made == 1)
     }
 
     @Test("finishing onboarding reloads settings after closing releases its owner")
@@ -121,6 +135,23 @@ struct WindowLifetimeTests {
 
         #expect(closeCount == 1)
         #expect(finishCount == 0)
+    }
+
+    @Test("the onboarding window is kept on close, so the controller's reference is its only owner")
+    func onboardingWindowIsNotReleasedWhenClosed() {
+        let window = onboardingController().makeWindow()
+        #expect(window.isReleasedWhenClosed == false)
+    }
+
+    @Test("a closed onboarding window is freed once, by its last reference")
+    func closedOnboardingWindowIsFreedOnce() {
+        weak var closed: NSWindow?
+        autoreleasepool {
+            let window = onboardingController().makeWindow()
+            closed = window
+            window.close()
+        }
+        #expect(closed == nil)
     }
 
     @Test("the flow finish event calls the controller's finish callback")
@@ -205,25 +236,25 @@ struct WindowLifetimeTests {
         #expect(model == nil)
     }
 
-    @Test("the Settings window's controller and model are released after every section is drawn five times")
-    func settingsWindowReleasesAfterEverySection() throws {
-        weak var controller: SettingsWindowController?
+    @Test("the Settings page's controller and model are released after every tab is drawn five times")
+    func settingsPageReleasesAfterEveryTab() throws {
+        weak var controller: SettingsPageController?
         weak var model: SettingsViewModel?
         do {
-            let window = SettingsWindowController(
+            let page = SettingsPageController(
                 store: UserDefaultsSettingsStore(store: MemoryDefaults()),
                 personalisation: NoPersonalisation(), capabilities: .everything)
-            let kept = try #require(stored("model", of: window, as: SettingsViewModel.self))
-            controller = window
+            let kept = page.model
+            controller = page
             model = kept
             for _ in 0..<5 {
                 for tab in SettingsTab.allCases {
                     kept.session.tab = tab
-                    window.setSuggestionModel(.ready)
+                    page.setSuggestionModel(.ready)
                     drawOffscreen(
-                        SettingsRootView(model: kept),
-                        size: CGSize(width: SettingsMetrics.windowWidth, height: SettingsMetrics.windowHeight)
-                    )
+                        SettingsPageView(
+                            model: kept, diagnostics: DiagnosticsPresenter.page(for: DiagnosticsSnapshot())),
+                        size: MainMetrics.windowSize)
                 }
             }
         }

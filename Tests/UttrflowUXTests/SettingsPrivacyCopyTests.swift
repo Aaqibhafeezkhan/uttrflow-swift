@@ -10,11 +10,14 @@ import Testing
 /// Every page onboarding can draw, including combinations no single run reaches.
 private let everyOnboardingState: [OnboardingState] = {
     var states: [OnboardingState] = [
-        OnboardingState(step: .welcome, detail: .reading),
+        OnboardingState(step: .signIn, detail: .signIn(.offering)),
+        OnboardingState(step: .signIn, detail: .signIn(.unreachable)),
+        OnboardingState(step: .setup, detail: .installed),
         OnboardingState(step: .setup, detail: .reading),
         OnboardingState(step: .setup, detail: .installing(0.5)),
         OnboardingState(step: .setup, detail: .installFailed("It stopped.")),
         OnboardingState(step: .ready, detail: .reading),
+        OnboardingState(step: .ready, detail: .finishing(.ready, trial: .listening)),
     ]
     for step in [OnboardingStep.microphone, .accessibility] {
         states.append(OnboardingState(step: step, detail: .awaitingSystemSettings))
@@ -55,9 +58,11 @@ private func everyUserFacingString() -> [String] {
                     ].compactMap(\.self)
                 case .action(let title, _):
                     strings += [title]
-                case .text(let value):
+                case .text(let value), .placeholder(let value), .status(let value):
                     strings += [value]
-                case .toggle, .anchorPicker, .shortcut, .tick, .applicationSwitch:
+                case .languages(let chips, let add):
+                    strings += chips.map(\.title) + add.map(\.title)
+                case .toggle, .shortcut, .tick, .applicationSwitch:
                     break
                 }
             }
@@ -66,8 +71,8 @@ private func everyUserFacingString() -> [String] {
 
     for state in everyOnboardingState {
         let page = OnboardingPresenter.page(for: state, hotkey: .optionSpace)
-        strings += [page.title, page.subtitle, page.accessibilityLabel]
-        strings += [page.body, page.note?.text].compactMap(\.self)
+        strings += [page.title, page.accessibilityLabel]
+        strings += [page.hint, page.explanation, page.link?.title].compactMap(\.self)
         strings += page.buttons.map(\.title)
     }
 
@@ -170,6 +175,6 @@ struct SettingsPrivacyCopyTests {
             for: OnboardingState(step: .microphone, detail: .permission(.notDetermined)),
             hotkey: .optionSpace)
         #expect(SettingsPresenter.privacyPromise.contains(SettingsPresenter.recordingsPromise))
-        #expect(microphone.body?.contains(SettingsPresenter.recordingsPromise) == true)
+        #expect(microphone.explanation?.contains(SettingsPresenter.recordingsPromise) == true)
     }
 }

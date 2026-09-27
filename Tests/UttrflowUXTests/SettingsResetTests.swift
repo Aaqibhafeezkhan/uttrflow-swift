@@ -281,7 +281,7 @@ struct SettingsRemovalRequestTests {
     @Test("forgetting what was learned happens at once, because it is recoverable")
     func forgettingNeedsNoDialogue() throws {
         var session = session()
-        let removal = try #require(button(.dictation, "forgetLearned", in: session))
+        let removal = try #require(button(.privacy, "forgetLearned", in: session))
 
         #expect(session.request(removal) == .learnedWords)
         #expect(session.pendingRemoval == nil)
@@ -338,7 +338,7 @@ struct SettingsRemovalRequestTests {
     @Test("refuses to confirm something that was never asked")
     func nothingUnaskedCanBeConfirmed() throws {
         var session = session()
-        let forget = try #require(button(.dictation, "forgetLearned", in: session))
+        let forget = try #require(button(.privacy, "forgetLearned", in: session))
         #expect(session.confirm(forget) == nil)
     }
 
@@ -346,12 +346,12 @@ struct SettingsRemovalRequestTests {
     @Test("refuses to forget what was never learned, and says so on the row first")
     func nothingLearnedIsRefusedAndShown() throws {
         var session = session(SettingsPersonalisationFixtures.onlyAdded)
-        session.tab = .dictation
+        session.tab = .privacy
         let row = try #require(
             session.presentation.pane.groups.flatMap(\.rows).first { $0.id == "forgetLearned" })
         #expect(row.isEnabled == false)
 
-        let removal = try #require(button(.dictation, "forgetLearned", in: session))
+        let removal = try #require(button(.privacy, "forgetLearned", in: session))
         #expect(session.request(removal) == nil)
         #expect(session.rejection == row.unavailability)
     }
@@ -451,7 +451,7 @@ struct SettingsRemovalCopyTests {
     /// The design's wording, with real numbers in it, in the row rather than in a dialogue.
     @Test("says what forgetting takes and what it keeps, counted")
     func forgettingIsCountedOnTheRow() {
-        let row = row(.dictation, "forgetLearned", SettingsPersonalisationFixtures.plenty)
+        let row = row(.privacy, "forgetLearned", SettingsPersonalisationFixtures.plenty)
         #expect(row?.explanation == "Forget 34 learned words, keeping 12 you added yourself.")
         #expect(row?.isEnabled == true)
     }
@@ -459,16 +459,16 @@ struct SettingsRemovalCopyTests {
     @Test("agrees with the number, down to one of each")
     func countsAreWrittenInAgreement() {
         #expect(
-            row(.dictation, "forgetLearned", SettingsPersonalisationFixtures.singular)?.explanation
+            row(.privacy, "forgetLearned", SettingsPersonalisationFixtures.singular)?.explanation
                 == "Forget 1 learned word, keeping 1 you added yourself.")
         #expect(
-            row(.dictation, "forgetLearned", SettingsPersonalisationFixtures.onlyLearned)?
+            row(.privacy, "forgetLearned", SettingsPersonalisationFixtures.onlyLearned)?
                 .explanation == "Forget 34 learned words. You have not added any of your own.")
     }
 
     @Test("describes the trade rather than counting nothing when there is nothing")
     func nothingLearnedStillExplainsTheButton() {
-        let row = row(.dictation, "forgetLearned", SettingsPersonalisationFixtures.onlyAdded)
+        let row = row(.privacy, "forgetLearned", SettingsPersonalisationFixtures.onlyAdded)
         #expect(row?.explanation?.contains("Words you added yourself stay") == true)
         #expect(row?.unavailability?.isEmpty == false)
         // Both are spoken, so the reason is never only a shade of grey.
@@ -564,7 +564,7 @@ struct SettingsRemovalCopyTests {
                 found[tab, default: []].append(removal.reset)
             }
         }
-        #expect(found == [.dictation: [.learnedWords], .privacy: [.everything]])
+        #expect(found == [.privacy: [.learnedWords, .everything]])
     }
 }
 

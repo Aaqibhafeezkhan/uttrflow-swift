@@ -1,4 +1,5 @@
 import Testing
+import UttrflowClipboard
 
 @testable import UttrflowCore
 @testable import UttrflowUX
@@ -150,74 +151,64 @@ struct MenuBarStatusTests {
     }
 }
 
-// MARK: - What the menu contains
+// MARK: - What the popover and its menu contain
 
-@Suite("What the menu offers")
+@Suite("What the popover and its menu offer")
 struct MenuBarContentsTests {
-    /// The order of the design, top to bottom.
-    @Test("lays the menu out the way the design does")
-    func menuOrder() {
-        let shown = MenuBarPresenter.present(MenuBarState(recents: twoRecents))
+    /// Talk, Clipboard, Settings and Home, left to right, with only Talk on the white disc.
+    @Test("lays the round buttons out the way the design does")
+    func buttonOrder() {
+        let shown = MenuBarPresenter.present(MenuBarState())
+        #expect(shown.buttons.map(\.command.title) == ["Talk", "Clipboard", "Settings", "Home"])
         #expect(
-            shown.titles == [
-                // Directly under dictation: the app's two halves, and the one reached for most.
-                "Start Dictation", "Clipboard",
-                twoRecents[0].title, "Copy “\(twoRecents[0].title)”",
-                twoRecents[1].title, "Copy “\(twoRecents[1].title)”",
-                // The three halves of the product, each switched on its own.
-                "Dictation", "Clipboard", "AI Suggestions",
-                "Open Uttrflow", "Settings…", "Quit Uttrflow",
+            shown.buttons.map(\.command.intent) == [
+                .startDictation, .openClipboard, .open(.settings(.general)), .open(.main(.home)),
+            ])
+        #expect(shown.buttons.map(\.isPrimary) == [true, false, false, false])
+        #expect(shown.buttons.map(\.symbolName) == ["mic", "clipboard", "gearshape", "square.grid.2x2"])
+    }
+
+    /// The right-click menu holds what the popover has no room for, with Quit always last.
+    @Test("puts the switches, the windows and Quit in the right-click menu")
+    func rightClickMenuOrder() {
+        let shown = MenuBarPresenter.present(MenuBarState())
+        let titles = shown.items.compactMap {
+            if case .command(let command) = $0 { command.title } else { nil }
+        }
+        #expect(
+            titles == [
+                "Dictation", "Clipboard", "AI Suggestions", "Open Uttrflow", "Settings…", "Quit Uttrflow",
             ])
         guard case .status = shown.items.first else {
             Issue.record("the menu does not begin with the status line")
             return
         }
-        #expect(shown.items.contains(.sectionHeader("Recent")))
+        #expect(shown.items.contains(.sectionHeader("Turn on and off")))
     }
 
-    /// The problem and its fix sit together at the top, with nothing between them to hunt past.
-    @Test("puts the one fix directly under the problem")
-    func recoverySitsUnderTheProblem() {
+    /// Update checks live in Settings, so neither the popover nor its menu offers one.
+    @Test("offers no update check")
+    func noUpdateCheck() {
+        let shown = MenuBarPresenter.present(MenuBarState(updateProgress: .idle))
+        #expect(!shown.commands.map(\.title).contains { $0.contains("Update") })
+    }
+
+    /// The problem and its fix sit together in the header, with nothing between them to hunt past.
+    @Test("puts the one fix beside the problem")
+    func recoverySitsBesideTheProblem() {
         let shown = MenuBarPresenter.present(MenuBarState(failure: microphoneOff))
-        guard case .status = shown.items.first,
-            case .command(let fix) = shown.items[1]
-        else {
-            Issue.record("the fix is not the row under the status line")
+        guard case .status(let status) = shown.header, let fix = status.action else {
+            Issue.record("the header carries no fix")
             return
         }
+        #expect(status.title == microphoneOff.headline)
+        #expect(status.emphasis == .attention)
         #expect(fix.title == "Open System Settings…")
         #expect(fix.intent == .recover(.openSystemSettings(.microphone)))
         #expect(fix.isEnabled)
     }
 
-    /// A missing or broken model has its download offered before any dictation has failed.
-    @Test(
-        "offers the model download when the model is missing or did not load",
-        arguments: [
-            SpeechModelReadiness.notInstalled, .loadFailed,
-        ])
-    func setupIsOfferedWithoutAFailure(speechModel: SpeechModelReadiness) {
-        let shown = MenuBarPresenter.present(MenuBarState(speechModel: speechModel))
-        guard case .command(let fix) = shown.items[1] else {
-            Issue.record("the download is not the row under the status line")
-            return
-        }
-        #expect(fix.title == "Finish Setup")
-        #expect(fix.intent == .recover(.downloadSpeechModel))
-        #expect(fix.isEnabled)
-    }
-
-    @Test(
-        "offers no download while the model is ready, loading or downloading",
-        arguments: [
-            SpeechModelReadiness.ready, .loading, .downloading(fractionCompleted: 0.5),
-        ])
-    func noSetupRowOnceUnderWay(speechModel: SpeechModelReadiness) {
-        let shown = MenuBarPresenter.present(MenuBarState(speechModel: speechModel))
-        #expect(shown.command(.recover(.downloadSpeechModel)) == nil)
-    }
-
-    /// A failure's own fix wins the row, so the menu never offers two at once.
+    /// A failure's own fix wins the pill, so the header never offers two at once.
     @Test("puts a failure's fix ahead of the download")
     func failureFixWinsOverSetup() {
         let shown = MenuBarPresenter.present(MenuBarState(failure: microphoneOff, speechModel: .notInstalled))
@@ -225,11 +216,11 @@ struct MenuBarContentsTests {
         #expect(shown.command(.recover(.downloadSpeechModel)) == nil)
     }
 
-    /// A failure with nothing to offer leaves the row to the download, so a missing model is never a dead end.
-    @Test("offers the download under a failure that has no fix of its own")
+    /// A failure with nothing to offer leaves the pill to the download, so a missing model is never a dead end.
+    @Test("offers the download beside a failure that has no fix of its own")
     func setupFillsAnEmptyFix() {
         let shown = MenuBarPresenter.present(MenuBarState(failure: noWayOut, speechModel: .notInstalled))
-        #expect(shown.command(.recover(.downloadSpeechModel))?.title == "Finish Setup")
+        #expect(shown.command(.recover(.downloadSpeechModel))?.title == "Download")
     }
 
     /// A row that opens something else gets an ellipsis; the banner button stays plain either way.
@@ -241,30 +232,53 @@ struct MenuBarContentsTests {
     }
 
     @Test("offers nothing extra for a failure that has no fix")
-    func noFixMeansNoRow() {
+    func noFixMeansNoPill() {
         let shown = MenuBarPresenter.present(MenuBarState(failure: noWayOut))
         #expect(shown.statusLine == noWayOut.headline)
         #expect(shown.commands.allSatisfy { if case .recover = $0.intent { false } else { true } })
     }
 
-    /// The menu names a ``Destination`` and the app owns the windows, so no callback is added.
+    /// A failure that says why nothing happened is drawn calm, not as a fault.
+    @Test("draws an informational failure in teal")
+    func informationalIsCalm() {
+        let nothingHeard = FailurePresentation(
+            headline: "Nothing heard", detail: "Try again closer to the microphone.",
+            symbolName: "waveform", severity: .informational, placement: .floatingButton, action: nil)
+        let shown = MenuBarPresenter.present(MenuBarState(failure: nothingHeard))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(title: "Nothing heard", detail: "Try again closer to the microphone.")))
+    }
+
+    /// The popover names a ``Destination`` and the app owns the windows, so no callback is added.
     @Test("asks for a window by naming the place, not by opening it")
     func windowsAreNamedAsDestinations() {
         let shown = MenuBarPresenter.present(MenuBarState())
-        #expect(shown.command(.open(.main(.dictation)))?.title == "Open Uttrflow")
-        #expect(shown.command(.open(.settings(.general)))?.title == "Settings…")
+        #expect(shown.command(.open(.main(.home)))?.title == "Home")
+        #expect(shown.command(.open(.settings(.general)))?.title == "Settings")
+        let menu = shown.items.compactMap { if case .command(let command) = $0 { command } else { nil } }
+        #expect(menu.first { $0.intent == .open(.main(.home)) }?.title == "Open Uttrflow")
+        #expect(menu.first { $0.intent == .open(.settings(.general)) }?.title == "Settings…")
     }
 
-    /// Every shortcut the design prints on a menu row.
+    /// Every shortcut the right-click menu prints.
     @Test("prints the shortcuts the design prints")
     func shortcuts() {
         let shown = MenuBarPresenter.present(MenuBarState())
-        #expect(shown.command(.startDictation)?.shortcut == MenuBarShortcut(key: " ", modifiers: .option))
+        let menu = shown.items.compactMap { if case .command(let command) = $0 { command } else { nil } }
+        // ⌃⌥ held has no key to print, so only an earlier install's ⌥Space shows beside Start.
+        #expect(shown.command(.startDictation)?.shortcut == nil)
+        var earlier = MenuBarState()
+        earlier.shortcuts = .earlierDefault
         #expect(
-            shown.command(.open(.main(.dictation)))?.shortcut
+            MenuBarPresenter.present(earlier).command(.startDictation)?.shortcut
+                == MenuBarShortcut(key: " ", modifiers: .option))
+        #expect(
+            menu.first { $0.intent == .open(.main(.home)) }?.shortcut
                 == MenuBarShortcut(key: "0", modifiers: .command))
         #expect(
-            shown.command(.open(.settings(.general)))?.shortcut
+            menu.first { $0.intent == .open(.settings(.general)) }?.shortcut
                 == MenuBarShortcut(key: ",", modifiers: .command))
         #expect(shown.command(.quit)?.shortcut == MenuBarShortcut(key: "q", modifiers: .command))
     }
@@ -276,15 +290,182 @@ struct MenuBarContentsTests {
             let shown = MenuBarPresenter.present(
                 MenuBarState(activity: .working, failure: failure, speechModel: .notInstalled))
             #expect(shown.command(.quit)?.isEnabled == true)
-            #expect(shown.command(.open(.main(.dictation)))?.isEnabled == true)
+            #expect(shown.command(.open(.main(.home)))?.isEnabled == true)
             #expect(shown.command(.open(.settings(.general)))?.isEnabled == true)
         }
     }
 }
 
+// MARK: - The header
+
+@Suite("The popover's header")
+struct MenuBarHeaderTests {
+    @Test("hints at the bound shortcut while nothing else needs saying")
+    func hintAtRest() {
+        var state = MenuBarState()
+        state.shortcuts = ShortcutSet([.dictate: [HotkeyBinding(keyCode: 2, modifiers: [.control, .option])]])
+        let shown = MenuBarPresenter.present(state)
+        #expect(shown.header == .hint(MenuBarHint(verb: "hold", keys: "⌃⌥D")))
+    }
+
+    @Test("says press when the shortcut toggles")
+    func pressWhenToggling() {
+        let shown = MenuBarPresenter.present(MenuBarState(activation: .pressToToggle))
+        #expect(shown.header == .hint(MenuBarHint(verb: "press", keys: "⌃⌥")))
+    }
+
+    @Test("falls back to fn when nothing is bound")
+    func fnWhenUnbound() {
+        var state = MenuBarState()
+        state.shortcuts = ShortcutSet([:])
+        #expect(MenuBarPresenter.hint(for: state).keys == "fn")
+    }
+
+    @Test("keeps the hint once the words have gone in")
+    func hintAfterInsertion() {
+        let shown = MenuBarPresenter.present(MenuBarState(activity: .finished))
+        guard case .hint = shown.header else {
+            Issue.record("a finished dictation replaced the hint")
+            return
+        }
+    }
+
+    @Test("says it is listening in red, and working in teal")
+    func activityStatus() {
+        #expect(
+            MenuBarPresenter.present(MenuBarState(activity: .listening)).header
+                == .status(MenuBarStatus(title: "Listening…", emphasis: .live)))
+        #expect(
+            MenuBarPresenter.present(MenuBarState(activity: .working)).header
+                == .status(MenuBarStatus(title: "Tidying up…")))
+    }
+
+    @Test("counts a download with a bar, and slides one while the fraction is unknown")
+    func settingUp() {
+        let shown = MenuBarPresenter.present(MenuBarState(speechModel: .downloading(fractionCompleted: 0.42)))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Setting up… 42%", detail: "Downloading the speech model",
+                        progress: .fraction(0.42))))
+        let unknown = MenuBarPresenter.present(
+            MenuBarState(speechModel: .downloading(fractionCompleted: nil)))
+        guard case .status(let status) = unknown.header else {
+            Issue.record("no status while downloading")
+            return
+        }
+        #expect(status.progress == .indeterminate)
+        #expect(status.title == "Setting up…")
+    }
+
+    @Test("clamps a nonsense fraction before it reaches the bar")
+    func fractionIsClamped() {
+        let shown = MenuBarPresenter.present(MenuBarState(speechModel: .downloading(fractionCompleted: 1.7)))
+        guard case .status(let status) = shown.header else {
+            Issue.record("no status while downloading")
+            return
+        }
+        #expect(status.progress == .fraction(1))
+    }
+
+    @Test("slides a bar while the model loads")
+    func gettingReady() {
+        let shown = MenuBarPresenter.present(MenuBarState(speechModel: .loading))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Getting ready…", detail: "Loading the speech model", progress: .indeterminate)
+                ))
+    }
+
+    @Test("offers one amber Try again when the model did not load")
+    func didNotLoad() {
+        let shown = MenuBarPresenter.present(MenuBarState(speechModel: .loadFailed))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Model didn’t load", detail: "Nothing was lost", emphasis: .attention,
+                        action: MenuBarCommand(title: "Try again", intent: .recover(.retry)),
+                        actionEmphasis: .attention)))
+    }
+
+    @Test(
+        "offers Download again, not another reload, once the model is incomplete or failed twice",
+        arguments: [SpeechModelReadiness.loadFailedAgain, .incomplete])
+    func damaged(readiness: SpeechModelReadiness) {
+        let shown = MenuBarPresenter.present(MenuBarState(speechModel: readiness))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Model is damaged", detail: "Download it again to repair it",
+                        emphasis: .attention,
+                        action: MenuBarCommand(
+                            title: "Download again", intent: .recover(.downloadSpeechModel)),
+                        actionEmphasis: .attention)))
+    }
+
+    @Test("offers one teal Download, with the real size, when the model is missing")
+    func needed() {
+        let shown = MenuBarPresenter.present(
+            MenuBarState(speechModel: .notInstalled, speechModelBytes: 645_668_913))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Speech model needed", detail: "646 MB · works offline after",
+                        emphasis: .attention,
+                        action: MenuBarCommand(title: "Download", intent: .recover(.downloadSpeechModel)),
+                        actionEmphasis: .normal)))
+        let unsized = MenuBarPresenter.present(MenuBarState(speechModel: .notInstalled))
+        guard case .status(let status) = unsized.header else {
+            Issue.record("no status for a missing model")
+            return
+        }
+        #expect(status.detail == "Works offline after")
+    }
+
+    @Test("dims Talk in every one of the four model states")
+    func talkDimmedDuringSetup() {
+        let states: [SpeechModelReadiness] = [
+            .downloading(fractionCompleted: 0.4), .loading, .loadFailed, .notInstalled,
+        ]
+        for readiness in states {
+            let talk = MenuBarPresenter.present(MenuBarState(speechModel: readiness)).buttons.first
+            #expect(talk?.command.isEnabled == false)
+        }
+    }
+
+    @Test("reads a download's size the way a person does, never undersold")
+    func sizes() {
+        #expect(MenuBarPresenter.size(of: 645_668_913) == "646 MB")
+        #expect(MenuBarPresenter.size(of: 1_000_000) == "1 MB")
+        #expect(MenuBarPresenter.size(of: 1_400_000_000) == "1.4 GB")
+        #expect(MenuBarPresenter.size(of: 1_400_000_001) == "1.5 GB")
+        #expect(MenuBarPresenter.size(of: -5) == "0 MB")
+    }
+
+    @Test("draws an update's progress as the model's is drawn")
+    func updateProgress() {
+        #expect(MenuBarPresenter.progress(of: .idle) == nil)
+        #expect(MenuBarPresenter.progress(of: .readyToInstall) == nil)
+        #expect(MenuBarPresenter.progress(of: .checking) == .indeterminate)
+        #expect(MenuBarPresenter.progress(of: .installing) == .indeterminate)
+        #expect(MenuBarPresenter.progress(of: .downloading(fraction: nil)) == .indeterminate)
+        #expect(MenuBarPresenter.progress(of: .downloading(fraction: 0.5)) == .fraction(0.5))
+        let shown = MenuBarPresenter.present(MenuBarState(updateProgress: .downloading(fraction: 0.5)))
+        #expect(
+            shown.header == .status(MenuBarStatus(title: "Downloading update… 50%", progress: .fraction(0.5)))
+        )
+    }
+}
+
 // MARK: - What may be chosen
 
-@Suite("What the menu lets the user do")
+@Suite("What the popover lets the user do")
 struct MenuBarEnablementTests {
     /// Disabled rather than failing silently, which is what a refused microphone would look like.
     @Test("refuses to start a dictation that cannot happen")
@@ -312,21 +493,21 @@ struct MenuBarEnablementTests {
         #expect(shown.command(.startDictation)?.isEnabled == true)
     }
 
-    @Test("greys the item rather than hiding it")
-    func startDictationIsAlwaysPresent() {
+    @Test("greys Talk rather than hiding it")
+    func talkIsAlwaysPresent() {
         let shown = MenuBarPresenter.present(
             MenuBarState(activity: .idle, failure: microphoneOff, speechModel: .notInstalled))
         #expect(shown.command(.startDictation)?.isEnabled == false)
-        #expect(shown.titles.contains("Start Dictation"))
+        #expect(shown.buttons.first?.command.title == "Talk")
     }
 
-    /// A dictation begun from the menu is endable from the menu, not only by the shortcut.
-    @Test("offers a way to stop a dictation it started")
+    /// A dictation begun from the popover is endable from the popover, not only by the shortcut.
+    @Test("turns Talk into Stop while listening")
     func stopIsOfferedWhileListening() {
         let shown = MenuBarPresenter.present(MenuBarState(activity: .listening))
-
-        #expect(shown.titles.contains("Stop Dictation"))
-        #expect(!shown.titles.contains("Start Dictation"))
+        #expect(shown.buttons.first?.command.title == "Stop")
+        #expect(shown.buttons.first?.symbolName == "stop.fill")
+        #expect(shown.command(.startDictation) == nil)
         #expect(shown.command(.stopDictation)?.isEnabled == true)
     }
 
@@ -335,7 +516,6 @@ struct MenuBarEnablementTests {
     func stopSurvivesABlockingFailure() {
         let shown = MenuBarPresenter.present(
             MenuBarState(activity: .listening, failure: microphoneOff, speechModel: .notInstalled))
-
         #expect(shown.command(.stopDictation)?.isEnabled == true)
     }
 
@@ -343,62 +523,50 @@ struct MenuBarEnablementTests {
     @Test("offers no stop once the words are being worked on")
     func noStopWhileWorking() {
         let shown = MenuBarPresenter.present(MenuBarState(activity: .working))
-
-        #expect(!shown.titles.contains("Stop Dictation"))
+        #expect(shown.command(.stopDictation) == nil)
         #expect(shown.command(.startDictation)?.isEnabled == false)
     }
 
     /// No greyed "No recent dictations" row, which spends a line saying what is already visible.
-    @Test("leaves out the Recent section entirely when there is nothing in it")
+    @Test("leaves out Last dictation entirely when there is none")
     func noRecentsMeansNoSection() {
         let shown = MenuBarPresenter.present(MenuBarState())
-        #expect(!shown.items.contains(.sectionHeader("Recent")))
+        #expect(shown.lastDictation == nil)
         #expect(shown.commands.allSatisfy { if case .insertRecent = $0.intent { false } else { true } })
     }
 
+    /// One row only, the newest, however many the list keeps.
+    @Test("shows only the newest dictation, pasting it on click and copying it on request")
+    func lastDictationIsTheNewest() {
+        let shown = MenuBarPresenter.present(MenuBarState(recents: twoRecents))
+        #expect(
+            shown.lastDictation
+                == MenuBarRow(
+                    title: twoRecents[0].title, tooltip: twoRecents[0].fullText,
+                    insert: MenuBarCommand(
+                        title: "Paste", intent: .insertRecent(index: 0), tooltip: twoRecents[0].fullText),
+                    copy: MenuBarCommand(
+                        title: "Copy", intent: .copyRecent(index: 0), tooltip: twoRecents[0].fullText)))
+        #expect(shown.command(.insertRecent(index: 1)) == nil)
+    }
+
     /// Reaching for an old dictation mid-insertion would race the one already on its way.
-    @Test("will not re-insert a dictation in the middle of another")
-    func recentsAreDisabledWhileBusy() {
+    @Test("will not paste a row in the middle of a dictation")
+    func rowsAreDisabledWhileBusy() {
+        let clips = [PanelFixture.clip("The first thing")]
         for activity in [DictationActivity.listening, .working] {
             let shown = MenuBarPresenter.present(
-                MenuBarState(activity: activity, recents: twoRecents))
+                MenuBarState(activity: activity, recents: twoRecents, clips: clips))
             #expect(shown.command(.insertRecent(index: 0))?.isEnabled == false)
             #expect(shown.command(.copyRecent(index: 0))?.isEnabled == false)
+            #expect(shown.command(.insertClip(index: 0))?.isEnabled == false)
         }
         for activity in [DictationActivity.idle, .finished] {
             let shown = MenuBarPresenter.present(
-                MenuBarState(activity: activity, recents: twoRecents))
+                MenuBarState(activity: activity, recents: twoRecents, clips: clips))
             #expect(shown.command(.insertRecent(index: 0))?.isEnabled == true)
+            #expect(shown.command(.insertClip(index: 0))?.isEnabled == true)
         }
-    }
-
-    /// Positions rather than text: the app looks the row up in the list it already owns.
-    @Test("identifies a recent dictation by where it is in the list")
-    func recentsCarryTheirPosition() {
-        let shown = MenuBarPresenter.present(MenuBarState(recents: twoRecents))
-        #expect(shown.command(.insertRecent(index: 1))?.title == twoRecents[1].title)
-        #expect(shown.command(.insertRecent(index: 2)) == nil)
-    }
-
-    /// Copying hides behind Option, and the tooltip is the whole dictation the title shortens.
-    @Test("hides copying behind Option and tells the truth in the tooltip")
-    func copyIsTheAlternateRow() {
-        let shown = MenuBarPresenter.present(MenuBarState(recents: twoRecents))
-        let insert = shown.command(.insertRecent(index: 0))
-        let copy = shown.command(.copyRecent(index: 0))
-        #expect(insert?.isAlternate == false)
-        #expect(copy?.isAlternate == true)
-        #expect(copy?.shortcut == MenuBarShortcut(key: "", modifiers: .option))
-        #expect(insert?.tooltip == twoRecents[0].fullText)
-        #expect(copy?.tooltip == twoRecents[0].fullText)
-    }
-
-    /// The status line is a label, and a clickable label is a promise the menu cannot keep.
-    @Test("never makes the status line clickable")
-    func statusLineIsNotACommand() {
-        let shown = MenuBarPresenter.present(MenuBarState(failure: microphoneOff))
-        #expect(shown.items.contains(.status(text: microphoneOff.headline, emphasis: .attention)))
-        #expect(!shown.titles.contains(microphoneOff.headline))
     }
 
     /// Two presentations of one moment compare equal, which is how redrawing is decided.
@@ -408,6 +576,62 @@ struct MenuBarEnablementTests {
         #expect(MenuBarPresenter.present(state) == MenuBarPresenter.present(state))
         #expect(MenuBarPresenter.present(state) != MenuBarPresenter.present(MenuBarState()))
     }
+
+    /// The status line is a label, and a clickable label is a promise the menu cannot keep.
+    @Test("never makes the status line clickable")
+    func statusLineIsNotACommand() {
+        let shown = MenuBarPresenter.present(MenuBarState(failure: microphoneOff))
+        #expect(shown.items.contains(.status(text: microphoneOff.headline, emphasis: .attention)))
+        #expect(!shown.commands.map(\.title).contains(microphoneOff.headline))
+    }
+}
+
+// MARK: - The clipboard list
+
+@Suite("The popover's clipboard list")
+struct MenuBarClipListTests {
+    private func clips(_ count: Int) -> [Clip] {
+        (0..<count).map { PanelFixture.clip("Clip number \($0)", minutesAgo: $0) }
+    }
+
+    @Test("shows the five newest, each by its position")
+    func fiveNewest() {
+        let shown = MenuBarPresenter.present(MenuBarState(clips: clips(7)))
+        #expect(shown.clips.map(\.title) == (0..<5).map { "Clip number \($0)" })
+        #expect(shown.clips.map(\.insert.intent) == (0..<5).map { .insertClip(index: $0) })
+        #expect(shown.clips.map(\.copy.intent) == (0..<5).map { .copyClip(index: $0) })
+    }
+
+    @Test("is absent while the clipboard is switched off")
+    func absentWhenOff() {
+        let shown = MenuBarPresenter.present(
+            MenuBarState(clips: clips(3), features: MenuBarFeatures(clipboard: false)))
+        #expect(shown.clips.isEmpty)
+    }
+
+    @Test("shows the first line of a clip, and the whole of it as the tooltip")
+    func firstLine() {
+        let clip = PanelFixture.clip("Line one\nLine two")
+        let row = MenuBarPresenter.present(MenuBarState(clips: [clip])).clips.first
+        #expect(row?.title == "Line one")
+        #expect(row?.tooltip == "Line one\nLine two")
+    }
+
+    @Test("masks a secret and gives it no tooltip")
+    func secretIsMasked() {
+        let secret = PanelFixture.clip("AKIAIOSFODNN7EXAMPLE", kind: .secret)
+        let row = MenuBarPresenter.present(MenuBarState(clips: [secret])).clips.first
+        #expect(row?.title == PanelPresenter.mask)
+        #expect(row?.tooltip == nil)
+    }
+
+    @Test("names a picture by its size")
+    func pictureIsNamed() {
+        let picture = Clip(
+            text: "", kind: .image, copiedAt: PanelFixture.now,
+            image: ClipImage(file: "a.png", width: 1200, height: 800, bytes: 10))
+        #expect(MenuBarPresenter.title(of: picture) == "Picture · 1200 × 800")
+    }
 }
 
 /// A printed shortcut is a promise about which keys do the thing; these keep it.
@@ -416,13 +640,8 @@ struct MenuBarShortcutTests {
     @Test("the clipboard is reachable from the menu, with its real shortcut")
     func clipboardShortcut() {
         let shown = MenuBarPresenter.present(MenuBarState())
-        guard
-            case .command(let clipboard)? = shown.items.first(where: {
-                if case .command(let command) = $0 { return command.intent == .openClipboard }
-                return false
-            })
-        else {
-            Issue.record("the menu has no way to the clipboard")
+        guard let clipboard = shown.command(.openClipboard) else {
+            Issue.record("the popover has no way to the clipboard")
             return
         }
         #expect(clipboard.title == "Clipboard")
@@ -434,13 +653,8 @@ struct MenuBarShortcutTests {
     @Test("an unarmed clipboard shortcut is not advertised")
     func unarmedClipboardShortcut() {
         let shown = MenuBarPresenter.present(MenuBarState(unarmedShortcuts: [.clipboard]))
-        guard
-            case .command(let clipboard)? = shown.items.first(where: {
-                if case .command(let command) = $0 { return command.intent == .openClipboard }
-                return false
-            })
-        else {
-            Issue.record("the menu has no way to the clipboard")
+        guard let clipboard = shown.command(.openClipboard) else {
+            Issue.record("the popover has no way to the clipboard")
             return
         }
         #expect(clipboard.title == "Clipboard")
@@ -584,23 +798,30 @@ struct MenuBarPrintedShortcutTests {
 struct MenuBarUnheardShortcutTests {
     private let reason = "Another app has turned on secure keyboard entry, so the shortcut can't be heard."
 
-    @Test("is said under the status line, and Start Dictation still works")
-    func saysWhyAndKeepsTheMenuPath() {
+    @Test("is said in the header, and Talk still works")
+    func saysWhyAndKeepsTheTalkButton() {
         let shown = MenuBarPresenter.present(MenuBarState(shortcutUnheard: reason))
-
-        #expect(shown.items.prefix(2).last == .status(text: reason, emphasis: .attention))
+        #expect(
+            shown.header
+                == .status(
+                    MenuBarStatus(title: "Shortcut can’t be heard", detail: reason, emphasis: .attention)))
         #expect(shown.command(.startDictation)?.isEnabled == true)
     }
 
     @Test("says nothing when the shortcut can be heard")
     func silentWhenHeard() {
-        let shown = MenuBarPresenter.present(MenuBarState())
-        #expect(shown.items.filter { if case .status = $0 { true } else { false } }.count == 1)
+        guard case .hint = MenuBarPresenter.present(MenuBarState()).header else {
+            Issue.record("the hint is missing")
+            return
+        }
     }
 
     @Test("says nothing while dictation is switched off, since there is no shortcut to miss")
     func silentWhenDictationIsOff() {
         let state = MenuBarState(features: MenuBarFeatures(dictation: false), shortcutUnheard: reason)
-        #expect(!MenuBarPresenter.present(state).items.contains(.status(text: reason, emphasis: .attention)))
+        guard case .hint = MenuBarPresenter.present(state).header else {
+            Issue.record("the unheard shortcut was said while dictation is off")
+            return
+        }
     }
 }

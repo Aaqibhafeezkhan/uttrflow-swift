@@ -19,23 +19,27 @@ struct SuggestionPreferencesTests {
     }
 
     @Test(
-        "Ships switched off in the four editors that already complete from the whole file.",
-        arguments: [
-            "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.apple.dt.Xcode",
-            "dev.zed.Zed",
-        ])
+        "Ships switched off in the two editors that have suggestions of their own.",
+        arguments: ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92"])
     func editorsShipOff(bundleIdentifier: String) {
         let preferences = SuggestionPreferences(isEnabled: true)
         #expect(preferences.state(of: bundleIdentifier) == .offByDefault)
         #expect(!preferences.isEnabled(in: bundleIdentifier, at: moment))
     }
 
+    @Test("Ships switched on in every other editor.", arguments: ["com.apple.dt.Xcode", "dev.zed.Zed"])
+    func otherEditorsShipOn(bundleIdentifier: String) {
+        let preferences = SuggestionPreferences(isEnabled: true)
+        #expect(preferences.state(of: bundleIdentifier) == .on)
+        #expect(preferences.isEnabled(in: bundleIdentifier, at: moment))
+    }
+
     @Test("An editor the user asks for comes back on, and stays on.")
     func anEditorCanBeAskedFor() {
         var preferences = SuggestionPreferences(isEnabled: true)
-        preferences.set("com.apple.dt.Xcode", isOn: true)
-        #expect(preferences.state(of: "com.apple.dt.Xcode") == .on)
-        #expect(preferences.isEnabled(in: "com.apple.dt.Xcode", at: moment))
+        preferences.set("com.microsoft.VSCode", isOn: true)
+        #expect(preferences.state(of: "com.microsoft.VSCode") == .on)
+        #expect(preferences.isEnabled(in: "com.microsoft.VSCode", at: moment))
     }
 
     @Test("Switching an application off says so, and switching it back on undoes exactly that.")
@@ -208,5 +212,33 @@ struct SuggestionApplicationListTests {
         #expect(SuggestionApplications.name(of: "com.trailing.") == "Trailing")
         #expect(SuggestionApplications.name(of: "") == "")
         #expect(SuggestionApplications.name(of: "...") == "...")
+    }
+
+    @Test("Names an application by its installed name before any shipped name or identifier tail.")
+    func installedNameWins() {
+        let notes = "com.example.notetakerpro"
+        #expect(SuggestionApplications.name(of: notes, installed: ["Note Taker Pro"]) == "Note Taker Pro")
+        #expect(SuggestionApplications.name(of: "com.apple.mobilesms", installed: ["Messages"]) == "Messages")
+        #expect(SuggestionApplications.name(of: "com.microsoft.vscode", installed: ["Code"]) == "Code")
+    }
+
+    @Test("Takes the first installed name that has something in it, in the order given.")
+    func firstUsableInstalledName() {
+        let candidates: [String?] = [nil, "  ", "Messages", "MobileSMS"]
+        #expect(SuggestionApplications.name(of: "com.apple.mobilesms", installed: candidates) == "Messages")
+        #expect(SuggestionApplications.firstUsable(["", "Note Taker.app"]) == "Note Taker")
+        #expect(SuggestionApplications.firstUsable([" Note Taker \n"]) == "Note Taker")
+        #expect(SuggestionApplications.firstUsable([".app", nil]) == nil)
+    }
+
+    @Test("Falls back to the shipped name, then the identifier's tail, when nothing installed has a name.")
+    func fallsBackWithoutAnInstalledName() {
+        #expect(
+            SuggestionApplications.name(of: "com.microsoft.vscode", installed: [nil, ""])
+                == "Visual Studio Code")
+        #expect(
+            SuggestionApplications.name(of: "com.example.notetakerpro", installed: [])
+                == "Notetakerpro")
+        #expect(SuggestionApplications.name(of: "", installed: [nil]) == "")
     }
 }

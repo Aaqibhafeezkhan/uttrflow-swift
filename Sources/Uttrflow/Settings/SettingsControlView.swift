@@ -57,9 +57,6 @@ struct SettingsControlView: View {
                 options: options.map { (id: $0.id, title: $0.title) },
                 selection: selection(options, selectedID))
 
-        case .anchorPicker(let selected):
-            SettingsAnchorPicker(selected: selected) { model.apply(.anchor($0)) }
-
         case .shortcut(let action, let keys):
             SettingsShortcutField(action: action, keys: keys, model: model)
 
@@ -67,9 +64,9 @@ struct SettingsControlView: View {
             Button {
                 model.apply(change)
             } label: {
-                Image(systemName: isTicked ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 15))
-                    .foregroundStyle(isTicked ? Color.dockAccent : Color.secondary)
+                Image(systemName: isTicked ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 17))
+                    .foregroundStyle(isTicked ? PagePalette.dictation : SettingsPalette.ink(0.35))
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(isTicked ? [.isButton, .isSelected] : .isButton)
@@ -77,19 +74,66 @@ struct SettingsControlView: View {
         case .removal(let removal):
             // Red without asking; never the default action, since Return must not remove anything.
             Button(removal.title) { model.request(removal) }
-                .buttonStyle(SettingsButtonStyle(isDestructive: true))
+                .buttonStyle(SettingsButtonStyle(isDestructive: removal.reset == .everything))
 
         case .action(let title, let change):
             // Not destructive, so not red and not confirmed: both belong to `removal` alone.
-            Button(title) { model.apply(change) }
-                .buttonStyle(SettingsButtonStyle(isDestructive: false))
+            Button {
+                model.apply(change)
+            } label: {
+                if case .pauseSuggestions(isOn: true) = change {
+                    Label(title, systemImage: "pause")
+                        .labelStyle(SettingsLeadingIconLabelStyle())
+                } else {
+                    Text(title)
+                }
+            }
+            .buttonStyle(SettingsButtonStyle(isDestructive: false))
 
         case .text(let value):
             // Selectable, because a version number exists to be quoted into a bug report.
             Text(value)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12.5, design: .monospaced))
+                .foregroundStyle(SettingsPalette.ink(0.7))
                 .textSelection(.enabled)
+
+        case .placeholder(let value):
+            Text(value)
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsPalette.ink(0.5))
+
+        case .status(let value):
+            SettingsStatusView(text: value)
+
+        case .languages(let chips, let add):
+            HStack(spacing: 6) {
+                ForEach(chips) { chip in
+                    SettingsChipView(
+                        title: chip.title,
+                        onRemove: chip.removal.map { removal in { model.apply(removal) } })
+                }
+                if !add.isEmpty {
+                    Menu {
+                        ForEach(add) { option in
+                            Button(option.title) { model.apply(option.change) }
+                        }
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                            .labelStyle(SettingsLeadingIconLabelStyle())
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(PagePalette.text)
+                            .padding(.horizontal, 12)
+                            .frame(height: 30)
+                            .background(SettingsPalette.ink(0.08), in: .capsule)
+                            .overlay(Capsule().strokeBorder(SettingsPalette.ink(0.12), lineWidth: 1))
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel("Add a language")
+                }
+            }
         }
     }
 
@@ -103,73 +147,6 @@ struct SettingsControlView: View {
                 guard let option = options.first(where: { $0.id == picked }) else { return }
                 model.apply(option.change)
             })
-    }
-}
-
-// MARK: - Where the button parks
-
-/// The four corners the floating button can park in, drawn as a small screen.
-struct SettingsAnchorPicker: View {
-    let selected: DockAnchor
-    let onSelect: (DockAnchor) -> Void
-
-    var body: some View {
-        ZStack {
-            // The screen the button parks on, in this window's own colours.
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color.settingsControl)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(Color.mainSeparator, lineWidth: 1))
-            ForEach(DockAnchor.allCases, id: \.self) { anchor in
-                dot(anchor)
-            }
-        }
-        .frame(width: 46, height: 29)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Where the floating button parks")
-    }
-
-    private func dot(_ anchor: DockAnchor) -> some View {
-        let isSelected = anchor == selected
-        return Button {
-            onSelect(anchor)
-        } label: {
-            Circle()
-                .fill(isSelected ? Color.settingsAccentInk : Color.mainDim)
-                .frame(width: 5, height: 5)
-                .overlay(
-                    Circle().strokeBorder(
-                        isSelected ? Color.settingsAccentInk.opacity(0.45) : .clear, lineWidth: 2)
-                )
-                // A five-point dot is not a target. The hit area is the whole quadrant.
-                .padding(6)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment(anchor))
-        .padding(5)
-        .accessibilityLabel(Self.name(of: anchor))
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private func alignment(_ anchor: DockAnchor) -> Alignment {
-        switch anchor {
-        case .bottomLeft: .bottomLeading
-        case .bottomCentre: .bottom
-        case .bottomRight: .bottomTrailing
-        case .rightEdge: .trailing
-        }
-    }
-
-    /// Spoken, because a dot in a rectangle says nothing to VoiceOver.
-    static func name(of anchor: DockAnchor) -> String {
-        switch anchor {
-        case .bottomLeft: "Bottom left"
-        case .bottomCentre: "Bottom centre"
-        case .bottomRight: "Bottom right"
-        case .rightEdge: "Right edge"
-        }
     }
 }
 
@@ -192,26 +169,41 @@ struct SettingsShortcutField: View {
     var body: some View {
         HStack(spacing: 8) {
             if isRecording {
-                Text(model.session.recorder.prompt)
-                    .font(.system(size: SettingsMetrics.calloutSize))
-                    .foregroundStyle(.secondary)
-            } else if keys.isEmpty {
-                Text("None")
-                    .font(.system(size: SettingsMetrics.calloutSize))
-                    .foregroundStyle(.secondary)
+                // Listening: the old keys dimmed inside a lit box, and a ghost key for the next one.
+                HStack(spacing: 6) {
+                    ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                        SettingsKeycap(key: key).opacity(0.3)
+                    }
+                    SettingsKeycap(key: " ").opacity(0.3)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(PagePalette.dictation.opacity(0.1), in: .rect(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(PagePalette.dictation, lineWidth: 1.5)
+                )
+                .shadow(color: PagePalette.dictation.opacity(0.5), radius: 9)
+                Button("Cancel") { model.cancelRecordingShortcut() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(SettingsPalette.ink(0.6))
             } else {
-                ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
-                    keycap(key)
-                }
-            }
-            Button(isRecording ? "Cancel" : "Change") {
-                if isRecording {
-                    model.cancelRecordingShortcut()
+                if keys.isEmpty {
+                    Text("None")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(PagePalette.faint)
                 } else {
-                    model.beginRecordingShortcut(action)
+                    SettingsKeys(keys: keys)
                 }
+                Button {
+                    model.beginRecordingShortcut(action)
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                        .labelStyle(SettingsLeadingIconLabelStyle())
+                }
+                .buttonStyle(SettingsButtonStyle())
             }
-            .buttonStyle(SettingsButtonStyle())
         }
         .onChange(of: isRecording, initial: true) { _, recording in
             recording ? startListening() : stopListening()
@@ -219,23 +211,6 @@ struct SettingsShortcutField: View {
         .onDisappear(perform: stopListening)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(action.rawValue) shortcut, \(keys.joined(separator: " "))")
-    }
-
-    /// A key drawn as a key, matching first-run so both windows show the same physical thing.
-    private func keycap(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 12.5, weight: .semibold))
-            .fixedSize()
-            .padding(.horizontal, 9)
-            .frame(minWidth: 30, minHeight: 26)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.settingsControl)
-                    .shadow(color: .black.opacity(0.30), radius: 0, y: 1.5)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(Color.mainSeparator, lineWidth: 1))
     }
 
     private func startListening() {

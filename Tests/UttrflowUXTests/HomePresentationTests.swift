@@ -17,7 +17,6 @@ extension HistoryFixture {
         ],
         entries: [HistoryEntry] = [],
         account: Account? = nil,
-        local: LocalAccount? = nil,
         systemName: String? = nil,
         shortcut: String = "⌥Space",
         settings: Settings = .default,
@@ -25,7 +24,7 @@ extension HistoryFixture {
     ) -> HomePresentation {
         HomePresenter.page(
             for: HomeSnapshot(
-                permissions: permissions, entries: entries, account: account, local: local,
+                permissions: permissions, entries: entries, account: account,
                 systemName: systemName, shortcut: shortcut, settings: settings, now: moment),
             calendar: calendar, locale: locale)
     }
@@ -74,7 +73,7 @@ struct HomeGreetingTests {
 
     @Test(
         "the time of day is the one it actually is",
-        arguments: [(6, "Good morning"), (13, "Good afternoon"), (19, "Good evening"), (2, "Good evening")]
+        arguments: [(6, "Good morning"), (13, "Good afternoon"), (19, "Good evening"), (2, "Working late")]
     )
     func timeOfDay(hour: Int, expected: String) {
         #expect(HistoryFixture.home(at: HistoryFixture.atHour(hour)).greeting == expected)
@@ -108,6 +107,37 @@ struct HomeSubtitleTests {
     @Test("somebody who has dictated is not told how to start")
     func noStepOnceStarted() {
         #expect(HistoryFixture.home(entries: [HistoryFixture.entry("said something")]).nextStep == nil)
+    }
+}
+
+@Suite("Home before the first dictation")
+struct HomeEmptyTests {
+    @Test("a new install gets one centred invitation that starts a dictation")
+    func invitation() {
+        let empty = HistoryFixture.home().emptyState
+        #expect(empty?.title == "Nothing dictated yet")
+        #expect(empty?.message == "Hold the shortcut anywhere and talk.")
+        #expect(empty?.action?.title == "Try it now")
+        #expect(empty?.action?.intent == .dictate)
+        #expect(empty?.scene == .dictation)
+    }
+
+    @Test("the verb follows how the shortcut is set up")
+    func pressToToggle() {
+        let page = HistoryFixture.home(settings: Settings(hotkeyActivation: .pressToToggle))
+        #expect(page.emptyState?.message == "Press the shortcut anywhere and talk.")
+    }
+
+    @Test("gone once there is a dictation, a missing permission, or a model not ready")
+    func notWhenSomethingElseApplies() {
+        #expect(HistoryFixture.home(entries: [HistoryFixture.entry("said something")]).emptyState == nil)
+        #expect(
+            HistoryFixture.home(permissions: [.microphone: .denied, .accessibility: .granted])
+                .emptyState == nil)
+        let downloading = HomePresenter.page(
+            for: HomeSnapshot(shortcut: "⌥Space", now: HistoryFixture.now, speechDownload: 0.4),
+            calendar: HistoryFixture.calendar, locale: HistoryFixture.locale)
+        #expect(downloading.emptyState == nil)
     }
 }
 
@@ -162,7 +192,9 @@ struct HomeRecentTests {
     /// Home must not show a dictation the History page has already promised is deleted.
     @Test("anything past its retention is gone from home too")
     func retention() {
-        let page = HistoryFixture.home(entries: [HistoryFixture.entry("ancient", daysAgo: 400)])
+        let page = HistoryFixture.home(
+            entries: [HistoryFixture.entry("ancient", daysAgo: 400)],
+            settings: Settings(transcriptRetentionDays: 7))
         #expect(page.recent.isEmpty)
         #expect(page.subtitle == "Nothing dictated yet. Hold the shortcut anywhere and talk.")
     }
@@ -278,7 +310,7 @@ struct HomeAccountTests {
             systemName: "Somebody Else"
         ).account
 
-        #expect(corner == .signedIn(initials: "NB", name: "Naveen", open: .account))
+        #expect(corner == .signedIn(initials: "N", name: "Naveen", open: .account))
     }
 
     @Test("uses the same first two name words as the Account page")
@@ -287,7 +319,7 @@ struct HomeAccountTests {
             account: HistoryFixture.account(name: "Naveen Kumar Bhatt")
         ).account
 
-        #expect(corner == .signedIn(initials: "NK", name: "Naveen", open: .account))
+        #expect(corner == .signedIn(initials: "N", name: "Naveen", open: .account))
     }
 
     @Test("uses whitespace-separated words consistently")
@@ -296,7 +328,7 @@ struct HomeAccountTests {
             account: HistoryFixture.account(name: "Nadia\tStone")
         ).account
 
-        #expect(corner == .signedIn(initials: "NS", name: "Nadia\tStone", open: .account))
+        #expect(corner == .signedIn(initials: "N", name: "Nadia\tStone", open: .account))
     }
 
     @Test("uses the Account page fallback for names without letters")
@@ -346,44 +378,6 @@ struct HomeAccountTests {
         ).account
 
         #expect(corner == .signedIn(initials: "?", name: "account-1", open: .account))
-    }
-
-    /// Once the person has chosen this Mac, a monogram is the truth; the view draws it unfilled.
-    @Test("shows the Mac's owner once they have chosen to be one")
-    func onThisMac() {
-        let corner = HistoryFixture.home(
-            local: LocalAccount(name: "Naveen Bhatt", since: HistoryFixture.now),
-            systemName: "Naveen Bhatt"
-        ).account
-
-        #expect(corner == .onThisMac(initials: "NB", name: "Naveen", open: .account))
-        #expect(corner.open.intent == .show(.account), "there is a page there to open now")
-    }
-
-    /// Only the recorded choice counts, which is why the chip reads the local account and not `systemName`.
-    @Test("the Mac's name alone is still not an account")
-    func systemNameIsNotAChoice() {
-        #expect(HistoryFixture.home(systemName: "Naveen Bhatt").account == .signedOut(open: .signIn))
-    }
-
-    @Test("a Mac account with no name still draws something honest")
-    func onThisMacWithNoName() {
-        let corner = HistoryFixture.home(
-            local: LocalAccount(name: nil, since: HistoryFixture.now)
-        ).account
-
-        #expect(corner == .onThisMac(initials: "TM", name: "This", open: .account))
-    }
-
-    /// The signed value wins here too, and for the same reason the Account page's does.
-    @Test("a real account beats a Mac account in the corner")
-    func accountBeatsLocal() {
-        let corner = HistoryFixture.home(
-            account: HistoryFixture.account(name: "Naveen Bhatt"),
-            local: LocalAccount(name: "Somebody Else", since: HistoryFixture.now)
-        ).account
-
-        #expect(corner == .signedIn(initials: "NB", name: "Naveen", open: .account))
     }
 
     @Test("the chip leads to the Account page")
@@ -490,5 +484,32 @@ struct HomeSubtitleCountTests {
         ])
 
         #expect(page.subtitle == "2 dictations today, 5 words.")
+    }
+}
+
+@Suite("Home's missing speech model")
+struct HomeMissingModelSizeTests {
+    private func status(bytes: Int64?) -> HomeModelStatus? {
+        HomePresenter.page(
+            for: HomeSnapshot(
+                shortcut: "⌥Space", now: HistoryFixture.now, speechModel: .missing,
+                speechModelBytes: bytes),
+            calendar: HistoryFixture.calendar, locale: HistoryFixture.locale
+        ).hero.modelStatus
+    }
+
+    @Test("the not-installed line says how big the download is when the size is known")
+    func namesTheSize() {
+        let known = status(bytes: 646_000_000)
+        #expect(known?.subtitle == "Dictation needs it · 646 MB · works offline after")
+        #expect(known?.accessibilityLabel.contains("646 MB") == true)
+    }
+
+    @Test("the not-installed line leaves the size out when it is not known")
+    func omitsAnUnknownSize() {
+        let unknown = status(bytes: nil)
+        #expect(unknown?.subtitle == "Dictation needs it · works offline after")
+        #expect(unknown?.accessibilityLabel.contains("MB") == false)
+        #expect(unknown == HomeModelStatus.load(.missing))
     }
 }

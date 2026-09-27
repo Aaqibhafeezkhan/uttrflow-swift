@@ -228,7 +228,7 @@ struct EnvironmentIndexTests {
     @Test("An answer is believed for its lifetime and read again after it.")
     func staleAnswersAreReadAgain() async {
         let reader = StubEnvironment([.file: ["notes.md"]])
-        let index = EnvironmentIndex(reader: reader)
+        let index = EnvironmentIndex(reader: reader, seconds: { 0 })
         _ = await index.values(of: .file, in: "/repo", now: moment)
         await index.settle()
 

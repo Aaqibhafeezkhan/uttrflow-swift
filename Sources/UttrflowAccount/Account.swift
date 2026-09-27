@@ -34,16 +34,47 @@ public struct Account: Sendable, Equatable, Codable {
     /// A path on our own API for the picture, or `nil`; never the provider's host, and decides nothing.
     public let avatarPath: String?
 
-    /// Assembles an account; the avatar path defaults to none.
+    /// When the backend created the account, or `nil` when it did not say; displayed, never enforced.
+    public let createdAt: Date?
+
+    /// Assembles an account; the avatar path and the creation date default to none.
     public init(
         identifier: String, displayName: String?, emailAddress: String?,
-        provider: SignInProvider, avatarPath: String? = nil
+        provider: SignInProvider, avatarPath: String? = nil, createdAt: Date? = nil
     ) {
         self.identifier = identifier
         self.displayName = displayName
         self.emailAddress = emailAddress
         self.provider = provider
         self.avatarPath = avatarPath
+        self.createdAt = createdAt
+    }
+
+    /// The wire keys; `createdAt` is an ISO-8601 string, as the backend writes it.
+    private enum CodingKeys: String, CodingKey {
+        case identifier, displayName, emailAddress, provider, avatarPath, createdAt
+    }
+
+    /// Decodes the account; an unreadable creation date reads as none rather than failing the document.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        identifier = try container.decode(String.self, forKey: .identifier)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        emailAddress = try container.decodeIfPresent(String.self, forKey: .emailAddress)
+        provider = try container.decode(SignInProvider.self, forKey: .provider)
+        avatarPath = try container.decodeIfPresent(String.self, forKey: .avatarPath)
+        createdAt = try? Timestamp.decodeIfPresent(from: container, forKey: .createdAt)
+    }
+
+    /// Encodes the account with the creation date as a string.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(identifier, forKey: .identifier)
+        try container.encodeIfPresent(displayName, forKey: .displayName)
+        try container.encodeIfPresent(emailAddress, forKey: .emailAddress)
+        try container.encode(provider, forKey: .provider)
+        try container.encodeIfPresent(avatarPath, forKey: .avatarPath)
+        try container.encodeIfPresent(createdAt.map(Timestamp.string(from:)), forKey: .createdAt)
     }
 }
 

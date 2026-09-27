@@ -99,8 +99,10 @@ struct MemoryPressureTests {
     /// An app over the caller's sandbox, which the caller keeps until the test ends.
     private func app(_ steps: Steps, in sandbox: borrowing Sandbox) -> AppDelegate {
         let app = AppDelegate(
-            container: sandbox.root, prepareModel: { _ in await steps.record("load") },
+            container: sandbox.root, account: HeldSession(signedIn: true).layer,
+            prepareModel: { _ in await steps.record("load") },
             releaseModel: { await steps.record("release") })
+        app.drawsWindows = false
         app.memoryPressure = SuggestionModelPressure(firstWait: .zero, longestWait: .seconds(1_800))
         return app
     }
@@ -153,6 +155,26 @@ struct MemoryPressureTests {
         await app.modelPreparation?.value
         #expect(await steps.all == ["load", "release"])
         #expect(app.memoryPressure.isReleased)
+    }
+
+    @Test("a repeated calm keeps the countdown that is already running")
+    func repeatedCalmKeepsCountdown() async {
+        let steps = Steps()
+        let sandbox = Sandbox()
+        let app = app(steps, in: sandbox)
+        app.memoryPressure = SuggestionModelPressure(
+            firstWait: .milliseconds(200), longestWait: .seconds(1_800))
+        app.settingsChanged(to: settings(suggesting: true))
+        await app.modelPreparation?.value
+        app.memoryPressureChanged(to: .warning)
+        app.memoryPressureChanged(to: .normal)
+        let first = app.pressureReload
+        app.memoryPressureChanged(to: .normal)
+        #expect(app.pressureReload == first)
+        await first?.value
+        await app.modelPreparation?.value
+        #expect(await steps.all == ["load", "release", "load"])
+        #expect(!app.memoryPressure.isReleased)
     }
 
     @Test("pressure on a Mac that never loaded the model does nothing")

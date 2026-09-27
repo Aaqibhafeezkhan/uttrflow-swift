@@ -37,11 +37,11 @@ struct MotionBudgetTests {
         #expect(MotionBudget.demonstrationFrameInterval == 1.0 / 30)
     }
 
-    @Test("walks the working dots unless Reduce Motion is on")
-    func workingDots() {
-        #expect(MotionBudget().workingDotsMove)
-        #expect(MotionBudget(energy: EnergyConditions(isLowPowerMode: true)).workingDotsMove)
-        #expect(!MotionBudget(reducesMotion: true).workingDotsMove)
+    @Test("moves the working bars unless Reduce Motion is on")
+    func workingBars() {
+        #expect(MotionBudget().workingBarsMove)
+        #expect(MotionBudget(energy: EnergyConditions(isLowPowerMode: true)).workingBarsMove)
+        #expect(!MotionBudget(reducesMotion: true).workingBarsMove)
     }
 
     @Test("caps the dock at 60 frames a second on a Mac that asks for nothing less")
@@ -69,5 +69,15 @@ struct MotionBudgetTests {
 
         #expect(current.reducesMotion == NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         #expect(current.energy == EnergyConditions.current())
+    }
+}
+
+@Suite("A one-off animation under Reduce Motion")
+struct MotionBudgetAllowingTests {
+    @Test("runs when the Mac asks for nothing and lands in place under Reduce Motion")
+    func allowing() {
+        #expect(MotionBudget().allowing(.easeOut) == .easeOut)
+        #expect(MotionBudget(reducesMotion: true).allowing(.easeOut) == nil)
+        #expect(MotionBudget(energy: EnergyConditions(isLowPowerMode: true)).allowing(.easeOut) == .easeOut)
     }
 }

@@ -5,7 +5,9 @@ public enum DestructiveCommand {
         // A fork bomb carries no ordinary tokens, so it is matched on the whitespace-stripped text.
         if text.lowercased().filter({ !$0.isWhitespace }).contains(":(){:|:&};:") { return true }
         let lower = text.lowercased()
-        if lower.contains("of=/dev/") || lower.contains("/dev/sd") || lower.contains("/dev/disk") {
+        if lower.contains("of=/dev/") || lower.contains("/dev/sd") || lower.contains("/dev/disk")
+            || lower.contains("/dev/rdisk")
+        {
             return true
         }
         guard let clauses = ShellWords.commands(in: text, home: "") else { return failClosedOnUnresolved }
@@ -63,6 +65,22 @@ public enum DestructiveCommand {
         return .none
     }
 
+    /// The first kubectl argument that is neither a global flag nor the value a flag takes.
+    private static func kubectlVerb(_ lowered: [String]) -> String? {
+        let valued: Set = [
+            "-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user", "-s", "--server",
+            "--token", "--as", "--as-group", "--as-uid", "--request-timeout", "-v", "--v", "--cache-dir",
+            "--certificate-authority", "--client-certificate", "--client-key", "--tls-server-name",
+            "--password", "--username", "--profile", "--profile-output", "--log-file", "--vmodule",
+        ]
+        var rest = lowered[...]
+        while let word = rest.popFirst() {
+            guard word.hasPrefix("-") else { return word }
+            if valued.contains(word), !rest.isEmpty { rest.removeFirst() }
+        }
+        return nil
+    }
+
     /// A parsed command word as the program it names, lowercased.
     private static func programName(_ word: String) -> String {
         (word.split(separator: "/").last.map(String.init) ?? word).lowercased()
@@ -80,42 +98,78 @@ public enum DestructiveCommand {
             if matchesDestructiveGit(arguments) { return true }
         case "find":
             if lowered.contains("-delete") { return true }
-            if let exec = lowered.firstIndex(where: { $0 == "-exec" || $0 == "-execdir" }),
-                let program = lowered.dropFirst(exec + 1).first, destroyers.contains(programName(program))
+            // The command `-exec` runs is judged as its own clause, so a wrapper in front of it is read past.
+            if let exec = tokens.firstIndex(where: { ["-exec", "-execdir"].contains($0.text.lowercased()) }),
+                destroys(Array(tokens[(exec + 1)...]), failClosedOnUnresolved: failClosedOnUnresolved)
             {
                 return true
             }
         case "diskutil":
-            let verbs = ["erase", "zerodisk", "randomdisk", "securerase", "partitiondisk", "reformat"]
+            let verbs = [
+                "erase", "zerodisk", "randomdisk", "securerase", "partitiondisk", "reformat", "deletevolume",
+                "deletecontainer",
+            ]
             if lowered.contains(where: { word in verbs.contains(where: word.hasPrefix) }) { return true }
         case "docker", "podman":
             if lowered.contains("prune") || (lowered.first == "volume" && lowered.dropFirst().first == "rm") {
                 return true
             }
         case "kubectl":
-            if lowered.first == "delete" { return true }
+            if kubectlVerb(lowered) == "delete" { return true }
         case "terraform", "tofu":
             if lowered.contains("destroy") || lowered.contains("-destroy") { return true }
         case "crontab":
             if lowered.contains("-r") { return true }
+        case "sh", "bash", "zsh", "dash", "ksh", "fish":
+            if let script = shellScript(arguments),
+                matches(script, failClosedOnUnresolved: failClosedOnUnresolved)
+            {
+                return true
+            }
         case "mv", "cp":
             if lowered.last == "/dev/null" { return true }
         default:
             break
         }
 
-        let words = Set(tokens.map { $0.text.lowercased() })
-        // SQL that drops or empties a table, wherever the verb sits in the clause.
+        guard sqlVerbs.contains(command) || sqlClients.contains(command) else { return false }
+        // SQL that drops or empties a table, wherever the verb sits in the statement.
+        let words = Set(
+            ([command] + lowered).flatMap {
+                $0.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" }).map(String.init)
+            })
         if words.contains("drop"), words.contains(where: droppableObject) { return true }
-        if words.contains("truncate") { return true }
-        return false
+        return words.contains("truncate")
     }
+
+    /// The command string a shell is given with `-c`, which it runs as a line of its own.
+    private static func shellScript(_ arguments: [String]) -> String? {
+        guard
+            let flag = arguments.firstIndex(where: {
+                $0.hasPrefix("-") && !$0.hasPrefix("--") && $0.dropFirst().contains("c")
+            })
+        else { return nil }
+        return arguments.dropFirst(flag + 1).first { !$0.hasPrefix("-") }
+    }
+
+    /// SQL verbs that begin a statement typed straight into a database prompt.
+    private static let sqlVerbs: Set<String> = ["drop", "truncate", "alter"]
+
+    /// Programs that run the SQL they are given.
+    private static let sqlClients: Set<String> = [
+        "psql", "mysql", "mariadb", "sqlite3", "sqlite", "sqlcmd", "duckdb", "clickhouse",
+        "clickhouse-client", "cockroach", "snowsql", "bq", "pgcli", "mycli", "litecli", "usql", "osql",
+        "isql", "sqlplus", "db2",
+        "trino", "presto", "spark-sql", "hive", "beeline", "cqlsh", "impala-shell", "vsql", "redshift",
+    ]
 
     /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash or discarded changes.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
-        // The flag has to stand after the subcommand it belongs to, so a word quoted elsewhere is not one.
+        let head = subcommandIndex(arguments)
+        // The flags of the clause's own subcommand, so the same word as a message or path is not one.
         func flags(after subcommand: String) -> ArraySlice<String>? {
-            arguments.firstIndex(of: subcommand).map { arguments[($0 + 1)...] }
+            guard let head, arguments[head] == subcommand else { return nil }
+            return arguments[(head + 1)...]
         }
         if let flags = flags(after: "push"),
             flags.contains(where: {
@@ -143,12 +197,33 @@ public enum DestructiveCommand {
             return true
         }
         if let flags = flags(after: "stash"), flags.first == "drop" || flags.first == "clear" { return true }
-        if let flags = flags(after: "checkout"), flags.contains("--") || flags.contains(".") { return true }
+        if let flags = flags(after: "checkout"),
+            flags.contains("--") || flags.contains(".") || flags.contains("--force")
+                || flags.contains(where: { $0.hasPrefix("-") && !$0.hasPrefix("--") && $0.contains("f") })
+        {
+            return true
+        }
         if let flags = flags(after: "restore"), !flags.contains("--staged") || flags.contains("--worktree") {
             return true
         }
         return false
     }
+
+    /// Where the subcommand stands once git's own leading options are skipped, or nil when there is none.
+    private static func subcommandIndex(_ arguments: [String]) -> Int? {
+        var index = arguments.startIndex
+        while index < arguments.endIndex {
+            let word = arguments[index]
+            guard word.hasPrefix("-") else { return index }
+            index += gitOptionsTakingValue.contains(word) ? 2 : 1
+        }
+        return nil
+    }
+
+    /// Git's leading options whose value is the next word.
+    private static let gitOptionsTakingValue: Set<String> = [
+        "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env",
+    ]
 
     /// The kinds of thing a DROP destroys, which is what makes the statement irreversible.
     private static func droppableObject(_ word: String) -> Bool {

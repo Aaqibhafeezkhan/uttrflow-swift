@@ -21,6 +21,8 @@ struct DestructiveCommandTests {
             "TRUNCATE TABLE orders",
             "dd if=/dev/zero of=/dev/disk2",
             "mkfs.ext4 /dev/sdb",
+            "cat ubuntu.img > /dev/rdisk4",
+            "asr restore --source a.dmg --target /dev/rdisk2s1",
             "shutdown -h now",
             "reboot",
             ":(){ :|:& };:",
@@ -55,7 +57,9 @@ struct DestructiveCommandTests {
             "git push -d origin feature", "git branch -D feature", "git branch -dD x",
             "git branch --delete --force feature", "git stash drop", "git stash clear", "git checkout -- .",
             "git checkout .", "git restore Sources", "git restore --staged --worktree x", "git clean --force",
-            "git clean -xdF", "diskutil eraseDisk APFS Disk disk4", "docker system prune -a",
+            "git clean -xdF", "diskutil eraseDisk APFS Disk disk4", "diskutil apfs deleteVolume disk1s5",
+            "diskutil apfs deleteContainer disk1", "diskutil apfs eraseVolume disk1s5",
+            "docker system prune -a",
             "docker volume rm data", "kubectl delete pod api", "terraform destroy",
             "terraform apply -destroy",
             "crontab -r", "mv secrets.txt /dev/null", "mkfs.apfs /dev/disk4",
@@ -101,7 +105,7 @@ struct DestructiveCommandTests {
             "git stash pop",
             "git checkout main", "git push origin main", "find . -name '*.swift'", "docker rm api",
             "kubectl get pods", "terraform plan", "crontab -l", "mv a b", "sudo", "xargs", "FOO=1",
-            "diskutil list", "git clean -n",
+            "diskutil list", "diskutil apfs list", "git clean -n",
         ])
     func leavesLookalikesAlone(_ line: String) {
         #expect(!DestructiveCommand.matches(line), "\(line) should be ordinary")
@@ -129,5 +133,50 @@ struct DestructiveCommandTests {
         ])
     func keepsClausesApart(_ line: String) {
         #expect(!DestructiveCommand.matches(line), "\(line) destroys nothing")
+    }
+
+    @Test func sqlWordsInAnUnrelatedCommandAreNotDestructive() {
+        #expect(!DestructiveCommand.matches("echo Please drop the users table before you truncate the log"))
+        #expect(!DestructiveCommand.matches("git commit -m Drop the staging database index"))
+        #expect(!DestructiveCommand.matches("grep truncate notes.txt"))
+    }
+
+    @Test func gitJudgesOnlyTheSubcommandAtTheHeadOfTheClause() {
+        for command in [
+            "git commit -m checkout .", "git commit -m reset --hard", "git log --grep push -f",
+            "git add clean -f", "git commit -m stash drop",
+        ] {
+            #expect(!DestructiveCommand.matches(command), "\(command)")
+        }
+        for command in ["git -C repo checkout .", "git -c core.x=y reset --hard", "git --no-pager push -f"] {
+            #expect(DestructiveCommand.matches(command), "\(command)")
+        }
+    }
+
+    @Test func sqlGivenToADatabaseClientIsDestructive() {
+        #expect(DestructiveCommand.matches("psql -c \"DROP TABLE users;\""))
+        #expect(DestructiveCommand.matches("mysql -e \"TRUNCATE logs\""))
+        #expect(DestructiveCommand.matches("sudo sqlite3 app.db 'drop index idx_users'"))
+        #expect(DestructiveCommand.matches("ALTER TABLE users DROP COLUMN email"))
+    }
+
+    @Test func aShellRunningAStringIsJudgedByThatString() {
+        #expect(DestructiveCommand.matches("sh -c \"rm -rf ~\""))
+        #expect(DestructiveCommand.matches("bash -c 'dd if=/dev/zero of=/dev/disk2'"))
+        #expect(DestructiveCommand.matches("zsh -c 'git reset --hard'"))
+        #expect(DestructiveCommand.matches("sudo /bin/bash -lc \"rm -rf build\""))
+        #expect(DestructiveCommand.matches("nohup sh -c 'shred notes.txt'"))
+        #expect(!DestructiveCommand.matches("sh -c \"echo hi\""))
+        #expect(!DestructiveCommand.matches("bash script.sh"))
+    }
+
+    @Test func kubectlDeleteIsFoundPastGlobalFlags() {
+        #expect(DestructiveCommand.matches("kubectl -n production delete deployment critical-app"))
+        #expect(DestructiveCommand.matches("kubectl --context=prod delete namespace staging"))
+        #expect(DestructiveCommand.matches("kubectl --kubeconfig ~/.kube/alt -v 6 delete pod api"))
+        #expect(DestructiveCommand.matches("kubectl delete pod api"))
+        #expect(!DestructiveCommand.matches("kubectl -n production get pods"))
+        #expect(!DestructiveCommand.matches("kubectl -n delete get pods"))
+        #expect(!DestructiveCommand.matches("kubectl get pod delete"))
     }
 }

@@ -22,20 +22,31 @@ public enum PredictionEngine {
     public static func decision(
         from candidates: [Candidate], in context: PredictionContext, now: Date
     ) -> (suggestion: Suggestion, silence: Quieting.Reason?) {
-        if let refused = Quieting.reason(context) { return (.silent, refused) }
-        guard !context.isMinimised else { return (.minimised, .minimised) }
+        let ranked = ranked(from: candidates, in: context, now: now)
+        return (ranked.suggestion, ranked.silence)
+    }
+
+    /// The decision with the ranking it was read from, nil only when the context refused before ranking.
+    static func ranked(
+        from candidates: [Candidate], in context: PredictionContext, now: Date
+    ) -> (suggestion: Suggestion, silence: Quieting.Reason?, ranking: Ranking?) {
+        if let refused = Quieting.reason(context) { return (.silent, refused, nil) }
+        guard !context.isMinimised else { return (.minimised, .minimised, nil) }
 
         let ranking = Ranking(candidates, now: now)
+        let decided = decision(from: ranking)
+        return (decided.suggestion, decided.silence, ranking)
+    }
+
+    /// What to draw from an already built ranking, once the context has allowed speaking.
+    private static func decision(from ranking: Ranking) -> (suggestion: Suggestion, silence: Quieting.Reason?)
+    {
         guard let leader = ranking.candidates.first else { return (.silent, .nothingOffered) }
         guard ranking.support >= supportFloor else { return (.silent, .evidenceTooThin) }
 
-        let separated = ranking.separation >= separationThreshold
-        // An irreversible completion is offered only when it clearly beats a real rival, never alone on thin evidence.
-        let dominatesRivals = separated && ranking.candidates.count > 1
-        guard !leader.candidate.isIrreversible || dominatesRivals else {
-            return (.silent, .irreversibleNotCertain)
-        }
-        guard !separated else { return (.certain(leader.text), nil) }
+        // An irreversible leader is never offered, and never stepped past to promote a rival it outranked.
+        guard !leader.candidate.isIrreversible else { return (.silent, .irreversibleNotCertain) }
+        guard ranking.separation < separationThreshold else { return (.certain(leader.text), nil) }
 
         let others =
             ranking.candidates
@@ -43,6 +54,8 @@ public enum PredictionEngine {
             .filter { !$0.candidate.isIrreversible }
             .prefix(maximumChoices - 1)
             .map(\.text)
-        return (others.isEmpty ? .certain(leader.text) : .choice(leader: leader.text, others: others), nil)
+        // A close race whose every rival was barred is still unseparated, so it is not shown as certain.
+        guard !others.isEmpty else { return (.silent, .irreversibleNotCertain) }
+        return (.choice(leader: leader.text, others: others), nil)
     }
 }

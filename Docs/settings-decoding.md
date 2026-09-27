@@ -49,13 +49,15 @@ with the right type and no warning. The error is caught by hand for that reason.
 Decoding cleanly is not the same as being usable.
 
 - **Retention.** Zero or less would wipe the user's history the instant the app launched,
-  so a value that says so is treated as a corrupt one and becomes
-  `Settings.defaultRetentionDays` (7: long enough to find yesterday's dictation, short
-  enough that a user who never opens the screen is not quietly hoarding their own words).
+  so a value that says so is treated as a corrupt one and becomes that field's default:
+  `Settings.defaultTranscriptRetentionDays` (keep until deleted) for transcripts, and
+  `Settings.defaultRetentionDays` (7) for unkept clips. Only a missing or unusable value
+  takes the default; a period the user saved, 7 included, is kept as it is.
 - **The dictation shortcut.** `{"keyCode": 49, "modifiers": []}` is a perfectly good
   `HotkeyBinding` and a shortcut that never fires. There is no screen for choosing another,
   so the only way back would be deleting the preferences file from a terminal. An
-  undeliverable shortcut falls back to Option+Space.
+  undeliverable shortcut falls back to Option+Space, and so does a file that names no
+  dictation shortcut, since only an earlier build writes one. See `Docs/shortcuts.md`.
 - **The clipboard shortcut.** It has no such obligation, so an unusable one resolves to
   nothing rather than to a key the user never chose and would meet by surprise in another
   app.

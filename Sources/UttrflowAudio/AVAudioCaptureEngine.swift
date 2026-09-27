@@ -1,5 +1,18 @@
 // Owns the lifecycle of a microphone recording, without any audio machinery of its own.
 public import UttrflowCore
+private import Synchronization
+
+/// Admits one recording's samples until it ends, so a callback still in flight at teardown lands nowhere.
+private final class RecordingGate: Sendable {
+    private let open = Mutex(true)
+
+    /// Runs `body` only while the recording is live, holding the lock so `close()` waits for it to finish.
+    func ifOpen(_ body: () -> Void) {
+        open.withLock { if $0 { body() } }
+    }
+
+    func close() { open.withLock { $0 = false } }
+}
 
 /// Records the microphone into a canonical-format buffer, owning only the lifecycle, so its rules test dry.
 public actor AVAudioCaptureEngine: AudioCaptureEngine {
@@ -8,6 +21,8 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
     /// Where each recording is also written as it happens, when the app keeps them.
     private let recordings: RecordingStore?
     private var writer: RecordingWriter?
+    /// The current recording's gate, closed the moment it stops or is cancelled.
+    private var gate: RecordingGate?
     private var currentState: AudioCaptureState = .idle
     /// Set when the microphone stops for good mid-recording, and thrown by `stop()` rather than half a recording.
     private var failure: AudioCaptureError?
@@ -15,6 +30,8 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
     private var isGapped = false
     /// How many interruptions have reached the actor, so a test can wait for the hop instead of a clock.
     private(set) var interruptionsHandled = 0
+    /// Counts `start()` calls, so an interruption reaching the actor late is applied only to its own recording.
+    private var generation = 0
     /// Played the moment the microphone closes, since this engine alone knows that instant.
     private let cue: any RecordingCueing
 
@@ -47,16 +64,22 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
 
         failure = nil
         isGapped = false
+        generation += 1
+        let mine = generation
         let accumulator = self.accumulator
-        // Opened before the tap, so the file holds every block the buffer does.
+        let gate = RecordingGate()
+        self.gate = gate
+        // Started before the tap and without touching the disk, so the file holds every block the buffer does.
         let writer = await recordings?.begin()
         self.writer = writer
         do {
             try source.start { samples in
-                accumulator.append(samples)
-                writer?.append(samples)
+                gate.ifOpen {
+                    accumulator.append(samples)
+                    writer?.append(samples)
+                }
             } onInterruption: { [weak self] interruption in
-                Task { await self?.microphoneInterrupted(interruption) }
+                Task { await self?.microphoneInterrupted(interruption, in: mine) }
             }
         } catch {
             await abandonWriter()
@@ -69,6 +92,7 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
         guard currentState == .recording else { throw .notRecording }
         // Drained, so the block the hardware was still filling at key-up reaches the buffer instead of being dropped.
         await source.stop(draining: true)
+        closeGate()
         // After the microphone closes and before the buffer is taken, so the stop cue is heard but never recorded.
         cue.playStop()
         currentState = .idle
@@ -93,9 +117,9 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
     }
 
     /// Remembers what a device change did, since only `stop()` has somewhere to report it.
-    private func microphoneInterrupted(_ interruption: CaptureInterruption) {
+    private func microphoneInterrupted(_ interruption: CaptureInterruption, in recording: Int) {
         interruptionsHandled += 1
-        guard currentState == .recording else { return }
+        guard currentState == .recording, recording == generation else { return }
         switch interruption {
         case .began: isGapped = true
         case .ended(let error): failure = error
@@ -108,13 +132,25 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
         return .canonical(accumulator.snapshot)
     }
 
+    /// What the microphone has delivered from sample `start` onwards, copying none of the audio before it.
+    public func capturedSoFar(from start: Int) async -> AudioSamples {
+        guard currentState == .recording else { return .empty }
+        return .canonical(accumulator.samples(from: start))
+    }
+
     public func cancel() async {
         guard currentState == .recording else { return }
         // Not drained: the audio is being thrown away, so waiting for more of it buys nothing.
         await source.stop(draining: false)
+        closeGate()
         accumulator.reset()
         currentState = .idle
         await abandonWriter()
+    }
+
+    private func closeGate() {
+        gate?.close()
+        gate = nil
     }
 
     private func abandonWriter() async {

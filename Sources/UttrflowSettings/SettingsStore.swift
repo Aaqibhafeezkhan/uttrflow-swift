@@ -67,10 +67,15 @@ public struct Settings: Sendable, Equatable, Codable {
     /// Whether a found update installs itself or waits to be asked; `UpdateGate` picks the moment.
     public var installsUpdatesAutomatically: Bool
 
+    /// Whether anonymous counts and timings are sent; never what was dictated. See `Docs/account-telemetry.md`.
+    public var sharesUsageStatistics: Bool
+    /// Whether crash and hang reports go to Uttrflow; off until the user turns it on. See `Docs/crash-reporting.md`.
+    public var sendsCrashReports: Bool
+
     /// Whether the interface is drawn light, dark, or however the Mac is set.
     public var appearance: AppAppearance
 
-    /// How many days finished text is kept before it is deleted automatically.
+    /// How many days finished text is kept before it is deleted automatically; ``keepAlwaysDays`` keeps it.
     public var transcriptRetentionDays: Int
 
     /// How many days an unkept clip survives; a clip with an alias, category or pin has no clock.
@@ -97,8 +102,10 @@ public struct Settings: Sendable, Equatable, Codable {
         playsSoundWhenRecordingStarts: Bool = true,
         opensAtLogin: Bool = true,
         installsUpdatesAutomatically: Bool = true,
+        sharesUsageStatistics: Bool = true,
+        sendsCrashReports: Bool = false,
         appearance: AppAppearance = .dark,
-        transcriptRetentionDays: Int = Settings.defaultRetentionDays,
+        transcriptRetentionDays: Int = Settings.defaultTranscriptRetentionDays,
         clipboardRetentionDays: Int = Settings.defaultRetentionDays,
         suggestions: SuggestionPreferences = .default
     ) {
@@ -118,17 +125,29 @@ public struct Settings: Sendable, Equatable, Codable {
         self.playsSoundWhenRecordingStarts = playsSoundWhenRecordingStarts
         self.opensAtLogin = opensAtLogin
         self.installsUpdatesAutomatically = installsUpdatesAutomatically
+        self.sharesUsageStatistics = sharesUsageStatistics
+        self.sendsCrashReports = sendsCrashReports
         self.appearance = appearance
         self.transcriptRetentionDays = transcriptRetentionDays
         self.clipboardRetentionDays = clipboardRetentionDays
         self.suggestions = suggestions
     }
 
-    /// A week: long enough to find yesterday's dictation, short enough not to hoard the user's words.
+    /// A week: how long an unkept clip lives unless the user chooses otherwise.
     public static let defaultRetentionDays = 7
+
+    /// The period that stands for "keep until I delete it", longer than anything can be kept waiting.
+    public static let keepAlwaysDays = 36_500
+
+    /// Transcripts stay until the user deletes them or chooses a shorter period.
+    public static let defaultTranscriptRetentionDays = keepAlwaysDays
 
     /// What a user gets before they configure anything.
     public static let `default` = Settings()
+
+    /// The defaults an install onboarded on an earlier build keeps: ⌥Space, and transcripts kept for a week.
+    public static let earlierInstall = Settings(
+        shortcuts: .earlierDefault, transcriptRetentionDays: Settings.defaultRetentionDays)
 }
 
 extension Settings {
@@ -156,6 +175,8 @@ extension Settings {
         case playsSoundWhenRecordingStarts
         case opensAtLogin
         case installsUpdatesAutomatically
+        case sharesUsageStatistics
+        case sendsCrashReports
         case appearance
         case transcriptRetentionDays
         case clipboardRetentionDays
@@ -174,7 +195,8 @@ extension Settings {
             profile: container.value(forKey: .profile, default: fallback.profile),
             cleaning: container.value(forKey: .cleaning, default: fallback.cleaning),
             destinations: container.value(forKey: .destinations, default: fallback.destinations),
-            shortcuts: Settings.shortcuts(from: decoder, default: fallback.shortcuts),
+            // A saved file with no dictation shortcut predates ⌃⌥ held, so it keeps ⌥Space.
+            shortcuts: Settings.shortcuts(from: decoder, default: .earlierDefault),
             hotkeyActivation: container.value(
                 forKey: .hotkeyActivation, default: fallback.hotkeyActivation
             ),
@@ -206,24 +228,31 @@ extension Settings {
                 forKey: .installsUpdatesAutomatically,
                 default: fallback.installsUpdatesAutomatically
             ),
+            sharesUsageStatistics: container.value(
+                forKey: .sharesUsageStatistics, default: fallback.sharesUsageStatistics
+            ),
+            sendsCrashReports: container.value(
+                forKey: .sendsCrashReports, default: fallback.sendsCrashReports),
             appearance: container.value(forKey: .appearance, default: fallback.appearance),
             transcriptRetentionDays: Settings.retention(
                 container.value(
                     forKey: .transcriptRetentionDays, default: fallback.transcriptRetentionDays
-                )
+                ),
+                default: fallback.transcriptRetentionDays
             ),
             clipboardRetentionDays: Settings.retention(
                 container.value(
                     forKey: .clipboardRetentionDays, default: fallback.clipboardRetentionDays
-                )
+                ),
+                default: fallback.clipboardRetentionDays
             ),
             suggestions: container.value(forKey: .suggestions, default: fallback.suggestions)
         )
     }
 
-    /// The stored retention, or the default when it is zero or less and would wipe the history at once.
-    static func retention(_ days: Int) -> Int {
-        days > 0 ? days : defaultRetentionDays
+    /// The stored retention, or `fallback` when it is zero or less and would wipe the history at once.
+    static func retention(_ days: Int, default fallback: Int) -> Int {
+        days > 0 ? days : fallback
     }
 
     /// The dictation shortcut, or Option+Space when macOS could never deliver it.

@@ -132,7 +132,15 @@ struct SettingsRetentionTests {
 
     @Test("the shipped default is one of the periods on offer")
     func defaultIsOffered() {
-        #expect(SettingsRetention.offeredDays.contains(Settings.defaultRetentionDays))
+        #expect(SettingsRetention.offeredDays.contains(Settings.defaultTranscriptRetentionDays))
+    }
+
+    @Test("offers Always first, and reads it as a word rather than a number of days")
+    func alwaysComesFirst() {
+        #expect(SettingsRetention.offeredDays.first == Settings.keepAlwaysDays)
+        #expect(SettingsRetention.title(days: Settings.keepAlwaysDays) == "Always")
+        #expect(SettingsRetention.isAlways(days: Settings.keepAlwaysDays))
+        #expect(!SettingsRetention.isAlways(days: 90))
     }
 
     @Test("refuses a period that is not on offer")

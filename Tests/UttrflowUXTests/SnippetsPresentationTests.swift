@@ -37,7 +37,7 @@ struct SnippetsPageTests {
             HistoryFixture.snippet("my address"), HistoryFixture.snippet("sign off", used: 64),
         ])
         #expect(page.rows.map(\.trigger.text) == ["my address", "sign off"])
-        #expect(page.caption == "2 snippets")
+        #expect(page.chrome.caption == "Say a short phrase; Uttrflow types the whole thing. · 2 snippets")
         #expect(page.chrome.title == "Snippets")
         #expect(page.emptyState == nil)
     }
@@ -108,6 +108,7 @@ struct SnippetsEditorTests {
         let page = HistoryFixture.snippets([], draft: SnippetDraft())
         #expect(page.editor?.editing == nil)
         #expect(page.editor?.badge.text == "New")
+        #expect(page.editor?.title == "New snippet")
         #expect(page.editor?.triggerLabel == "When I say")
         #expect(page.editor?.textLabel == "Type this")
         #expect(page.editor?.cancel.intent == .cancelSnippetEdit)
@@ -121,6 +122,7 @@ struct SnippetsEditorTests {
             draft: SnippetDraft(editing: snippet.id, trigger: snippet.trigger, text: "New text"))
 
         #expect(page.editor?.badge.text == "Editing")
+        #expect(page.editor?.title == "Edit snippet")
         #expect(page.editor?.canSave == true)
         #expect(
             page.editor?.save.intent
@@ -164,7 +166,6 @@ struct SnippetsEditorTests {
     func editorInsteadOfEmpty() {
         let page = HistoryFixture.snippets([], draft: SnippetDraft())
         #expect(page.emptyState == nil)
-        #expect(page.example == nil)
         #expect(page.editor != nil)
     }
 }
@@ -178,14 +179,10 @@ struct SnippetsEmptyTests {
         #expect(page.emptyState?.action?.intent == .addSnippet)
     }
 
-    /// The idea lands before the form does.
-    @Test("the empty page shows one worked example")
-    func example() {
+    @Test("the empty page says the idea in one line")
+    func oneLine() {
         let page = HistoryFixture.snippets()
-        #expect(page.example?.heading == "For example")
-        #expect(page.example?.trigger.text == "my address")
-        #expect(page.example?.trigger.tone == .accent)
-        #expect(page.example?.text.contains("Example Residences") == true)
+        #expect(page.emptyState?.message == "Say a short phrase, and Uttrflow types the whole thing.")
     }
 
     @Test("a search that matched nothing says what it was looking for")
@@ -193,8 +190,6 @@ struct SnippetsEmptyTests {
         let page = HistoryFixture.snippets([HistoryFixture.snippet()], query: "invoice")
         #expect(page.emptyState?.title == "No matches")
         #expect(page.emptyState?.message.contains("“invoice”") == true)
-        // The example belongs to somebody with no snippets, not to a failed search.
-        #expect(page.example == nil)
     }
 }
 
@@ -222,5 +217,26 @@ struct UntouchedEditorTests {
     func wordSpeaksOnceTouched() {
         let touched = DictionaryDraft(word: "", pronunciation: "nik-hil")
         #expect(DictionaryPresenter.problem(with: touched, in: DictionarySnapshot(now: .now)) != nil)
+    }
+}
+
+@Suite("Snippet pill tints")
+struct SnippetTintTests {
+    @Test("each snippet keeps the tint of its place in the store, cycling through four")
+    func cycles() {
+        let snippets = (0..<6).map { HistoryFixture.snippet("trigger \($0)", text: "text \($0)") }
+        #expect(HistoryFixture.snippets(snippets).rows.map(\.tint) == [0, 1, 2, 3, 0, 1])
+    }
+
+    @Test("a search does not repaint the snippets it leaves")
+    func stableUnderSearch() {
+        let snippets = (0..<3).map { HistoryFixture.snippet("trigger \($0)", text: "text \($0)") }
+        #expect(HistoryFixture.snippets(snippets, query: "trigger 2").rows.map(\.tint) == [2])
+    }
+
+    @Test("an empty page has no count in its caption")
+    func emptyCaption() {
+        #expect(
+            HistoryFixture.snippets().chrome.caption == "Say a short phrase; Uttrflow types the whole thing.")
     }
 }

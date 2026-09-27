@@ -94,6 +94,9 @@ final class GatedInstaller: OnboardingModelInstaller {
     /// Whether the model is on disk.
     var isInstalled: Bool { installed.withLock { $0 } }
 
+    /// Takes the model off disk, the way a user deleting it behind the app's back would.
+    func remove() { installed.withLock { $0 = false } }
+
     /// How many downloads have started, so a retry can be told from a page that merely redrew.
     var startedDownloads: Int { attempts.withLock { $0 } }
 
@@ -321,8 +324,6 @@ final class Harness {
     let authentication: FakeAuthenticationService
     /// The profile cache.
     let profiles: InMemoryProfileCache
-    /// Where "continue on this Mac" writes, so a test can assert on what the button recorded.
-    let local = InMemoryLocalAccountStore()
     /// The connection.
     let network: FakeReachability
     /// Where the browser was sent.
@@ -352,9 +353,8 @@ final class Harness {
         // Gated by default, so `choose` leaves the flow waiting on a browser until `returnFromBrowser`.
         authentication: FakeAuthenticationService = FakeAuthenticationService(completeGate: Gate()),
         reachable: Bool = true,
-        /// What macOS would call the person at this Mac, fixed so no test depends on who runs it.
-        systemName: String? = "Naveen Bhatt",
-        now: Date = Date(timeIntervalSince1970: 1_800_000_000)
+        now: Date = Date(timeIntervalSince1970: 1_800_000_000),
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
     ) {
         self.microphone = FakePermissionGate(
             kind: .microphone, status: microphone, statusAfterRequest: microphoneAfterAsking)
@@ -379,21 +379,14 @@ final class Harness {
             record: record,
             authentication: authentication,
             profiles: self.profiles,
-            local: local,
             network: network,
-            systemName: { systemName },
             openBrowser: browser.open,
             openSystemSettings: panes.open,
-            now: { now }
+            now: { now },
+            pause: pause
         )
         flow.onChange = { [weak self] state in self?.published.append(state) }
         flow.onFinish = { [weak self] readiness in self?.finishedWith = readiness }
-    }
-
-    /// Starts and reads past the welcome page, so moving the pitch again is one edit.
-    func startPastWelcome() async {
-        await flow.start()
-        if flow.state.step == .welcome { await flow.perform(.advance) }
     }
 
     /// Where the flow is.

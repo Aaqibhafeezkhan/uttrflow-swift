@@ -215,6 +215,8 @@ jobs:
       - name: Build a notarisable app
         env:
           UTTRFLOW_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          # Written into Info.plist by bundle.sh; empty leaves the crash reporter off for good.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: make app-dist
 
       - name: Notarise and staple the app
@@ -242,6 +244,22 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: make publish
+
+      # Symbol files for crash reports; skipped when the token is absent, since `secrets` cannot gate an `if:`.
+      - name: Upload debug symbols for crash reports
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
+            echo "No SENTRY_AUTH_TOKEN; skipping the symbol upload."
+            exit 0
+          fi
+          brew install getsentry/tools/sentry-cli
+          sentry-cli debug-files upload --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" \
+            .build/xcode/Build/Products/Release
 
       # Kept for the same reason a build log is: when somebody asks what shipped as
       # v2026.9.14, the answer should not depend on a runner that has been recycled.

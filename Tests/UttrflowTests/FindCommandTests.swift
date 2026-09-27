@@ -1,4 +1,4 @@
-// That Edit ▸ Find reaches the page's search field, and is offered only where there is one.
+// That Edit ▸ Find reaches the page's search field, or Home's search on a page without one.
 
 import AppKit
 import Foundation
@@ -69,16 +69,18 @@ struct FindCommandTests {
         #expect(!open.controller.canFocusSearch)
     }
 
-    @Test("the menu item is grey until a page with a search field is on screen")
-    func validationFollowsThePage() throws {
+    @Test("the menu item is offered on every page while the window is on screen, and grey once it is not")
+    func validationFollowsTheWindow() throws {
         let sandbox = Sandbox()
         let open = try opened(in: sandbox.root)
         let item = try #require(MainMenu.edit.items.first { $0.title == "Find" })
 
         open.controller.show(.home)
-        #expect(!open.app.validateMenuItem(item))
+        #expect(open.app.validateMenuItem(item))
         open.controller.show(.history)
         #expect(open.app.validateMenuItem(item))
+        open.controller.hide()
+        #expect(!open.app.validateMenuItem(item))
     }
 
     /// The sidebar item still names itself, so the switch added for Find did not take that over.
@@ -105,16 +107,29 @@ struct FindCommandTests {
         #expect(open.model.searchFocusRequest == before + 1)
     }
 
-    /// Nothing to focus means nothing asked for, so a stale request cannot fire on the next page.
-    @Test("choosing it on a page with no search field asks for nothing")
-    func choosingItWithNoFieldAsksForNothing() throws {
+    @Test("choosing it on Home opens the search, as ⌘K does")
+    func choosingItOnHomeOpensTheSearch() throws {
         let sandbox = Sandbox()
         let open = try opened(in: sandbox.root)
         open.controller.show(.home)
+
+        open.app.findFromMenu(nil)
+
+        #expect(open.controller.page == .history)
+    }
+
+    /// Off screen there is nowhere to search, so a stale request cannot fire when the window returns.
+    @Test("choosing it with the window off screen does nothing")
+    func choosingItOffScreenDoesNothing() throws {
+        let sandbox = Sandbox()
+        let open = try opened(in: sandbox.root)
+        open.controller.show(.home)
+        open.controller.hide()
         let before = open.model.searchFocusRequest
 
         open.app.findFromMenu(nil)
 
         #expect(open.model.searchFocusRequest == before)
+        #expect(open.model.page == .home)
     }
 }

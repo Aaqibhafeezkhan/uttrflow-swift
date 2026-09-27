@@ -4,8 +4,10 @@
 public enum SpeechModelLoad: Sendable, Equatable {
     /// Still loading, for this long so far.
     case loading(elapsed: Duration)
-    /// The load ended without a model that can transcribe.
+    /// The load ended without a model that can transcribe, and loading again is worth one try.
     case failed
+    /// The model on disk is incomplete or failed to load twice, so only a fresh download repairs it.
+    case broken
     /// There is no model on disk to load, because it was never downloaded or was removed.
     case missing
 
@@ -21,6 +23,12 @@ public enum SpeechModelLoad: Sendable, Equatable {
         return elapsed >= Self.estimateAfter
     }
 
+    /// The guessed progress and time left, only for a load past ``estimateAfter``.
+    public var estimate: SpeechModelLoadEstimate? {
+        guard case .loading(let elapsed) = self, showsEstimate else { return nil }
+        return SpeechModelLoadEstimate(elapsed: elapsed)
+    }
+
     /// Whether the load is still under way, as opposed to over and failed.
     public var isLoading: Bool {
         if case .loading = self { return true }
@@ -32,6 +40,7 @@ public enum SpeechModelLoad: Sendable, Equatable {
         switch self {
         case .loading: "Loading the speech model…"
         case .failed: "The speech model didn’t load"
+        case .broken: "The speech model is damaged"
         case .missing: "The speech model isn’t downloaded"
         }
     }
@@ -44,6 +53,7 @@ public enum SpeechModelLoad: Sendable, Equatable {
         switch self {
         case .loading: "Loading speech model…"
         case .failed: "Speech model didn’t load"
+        case .broken: "Speech model is damaged"
         case .missing: "Speech model not downloaded"
         }
     }
@@ -53,7 +63,7 @@ public enum SpeechModelLoad: Sendable, Equatable {
         switch self {
         case .loading where showsEstimate: "First load after restart: about 2–3 min"
         case .loading: "Dictation starts once it’s ready"
-        case .failed, .missing: "Dictation can’t start without it"
+        case .failed, .broken, .missing: "Dictation can’t start without it"
         }
     }
 
@@ -62,18 +72,25 @@ public enum SpeechModelLoad: Sendable, Equatable {
         switch self {
         case .loading: "Loading speech model"
         case .failed: "Speech model didn’t load"
+        case .broken: "Speech model is damaged"
         case .missing: "Speech model not downloaded"
         }
     }
 
     /// What VoiceOver reads: the heading and the sentence, with nothing only an eye can parse.
     public var accessibilityLabel: String {
-        "\(String(title.filter { $0 != "…" })). \(sentence(range: "2 to 3"))"
+        let heading = String(title.filter { $0 != "…" })
+        if let estimate { return "\(heading), \(estimate.spokenTimeLeft). \(Self.whenReady)" }
+        return "\(heading). \(sentence(range: "2 to 3"))"
     }
 
-    /// The one way forward: a download of a model that is missing or failed to load, and nothing while it is still going.
+    /// The one way forward: a reload after a first failure, a download once a reload cannot help, nothing while loading.
     public var recovery: RecoveryAction? {
-        isLoading ? nil : .downloadSpeechModel
+        switch self {
+        case .loading: nil
+        case .failed: .retry
+        case .broken, .missing: .downloadSpeechModel
+        }
     }
 
     private static let whenReady = "Dictation starts working as soon as it’s ready."
@@ -86,6 +103,8 @@ public enum SpeechModelLoad: Sendable, Equatable {
         case .loading:
             Self.whenReady
         case .failed:
+            "Dictation can’t start without it. Try loading it again."
+        case .broken:
             "Dictation can’t start without it. Download it again to repair it."
         case .missing:
             "Dictation can’t start without it. Download it to start dictating."

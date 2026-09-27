@@ -94,6 +94,20 @@ struct FirstWordPassTests {
         #expect(fromCaret("The build failed.", state: state) == "The build failed.")
     }
 
+    /// A terminal's caret is reported as `.unknown`; with `.asSpoken` the heard case is what survives.
+    @Test(
+        "as spoken keeps the heard case of a terminal command at an unknown caret",
+        arguments: [
+            ("ls dash la", "ls dash la"),
+            ("npm run build", "npm run build"),
+            ("git commit dash m fix the login bug", "git commit dash m fix the login bug"),
+        ]
+    )
+    func asSpokenForTerminalAtUnknownCaret(text: String, expected: String) {
+        let pass = FirstWordPass(policy: .asSpoken, state: .unknown, heard: text)
+        #expect(cleaned(text, by: pass) == expected)
+    }
+
     @Test(
         "keeps the capital of I, its contractions and an acronym mid-sentence",
         arguments: [

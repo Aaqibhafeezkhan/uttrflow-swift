@@ -29,6 +29,15 @@ final class DockHostingView<Content: View>: NSHostingView<Content> {
             owner: self)
         addTrackingArea(area)
         hoverTracking = area
+        // A replaced area never sends the exit the old one owed, so ask where the pointer really is.
+        resyncHover()
+    }
+
+    /// Reports hover from the pointer's real position, not from the last enter or exit AppKit delivered.
+    func resyncHover() {
+        guard let window else { onHoverChange?(false); return }
+        let point = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        onHoverChange?(visibleRect.contains(point))
     }
 
     override func mouseEntered(with event: NSEvent) { onHoverChange?(true) }
@@ -59,7 +68,7 @@ final class DockPanelController {
 
     init(
         presentation: DockPresentation = DictationPresenter.dock(for: .idle),
-        shortcut: String = "⌥Space",
+        shortcut: String = "⌃⌥",
         anchor: DockAnchor = .bottomRight
     ) {
         let model = DockViewModel(
@@ -103,6 +112,9 @@ final class DockPanelController {
     func hide() {
         panel.orderOut(nil)
     }
+
+    /// Whether the button is on screen.
+    var isVisible: Bool { panel.isVisible }
 
     /// The only way the button's appearance ever changes.
     func update(with presentation: DockPresentation) {

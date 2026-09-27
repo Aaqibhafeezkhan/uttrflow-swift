@@ -22,12 +22,19 @@ fetched weights.
 An empty directory is what a cancelled download leaves behind, and is likewise not installed:
 treating it as installed would fail later, further from the cause.
 
-Weights are detected by the files a load reads (`WeightsAssets`): `coremldata.bin` and
-`weights/weight.bin` inside each of `MelSpectrogram.mlmodelc`, `AudioEncoder.mlmodelc` and
-`TextDecoder.mlmodelc`, each at least one byte. Any other file counting as weights is how a
-download killed partway came to read as installed, fail every load, and never be repaired.
-There is no manifest of sizes to check against, so a file truncated to a non-zero length is not
-detected here; staging below is what keeps one from arriving in the model's directory.
+Weights are detected by the model's manifest (`SpeechModel.weightFiles`, read through
+`WeightsAssets`): every file in the model's folder at the pinned commit — each `.mlmodelc` bundle's
+`coremldata.bin`, `model.mil`, `metadata.json`, `analytics/coremldata.bin` and
+`weights/weight.bin`, the optional `TextDecoderContextPrefill.mlmodelc`, `config.json` and
+`generation_config.json` — each at least one byte. A bundle without its `model.mil` fails to load
+with "Failed to parse ML Program", so a folder missing any listed file is not installed.
+`isIncomplete(_:)` names that case: the folder is there and a file is not, so the app offers to
+download it again rather than to load it. The manifest adds up to `downloadBytes`, and a test holds
+it there, so a manifest that forgets a file fails before it ships.
+
+The size check is presence and non-empty, not the recorded size or digest: the store answers on
+every menu draw, and hashing 600 MB there is not affordable. Every file is hashed before it is moved
+into staging, and staging below is what keeps a half-fetched one out of the model's directory.
 
 ## Missing components are ordered weights-first
 
@@ -93,8 +100,8 @@ The app does not call `WhisperKit.download` for installs. That downloader has no
 for these weights and can fall back to the person's own Hugging Face token. Uttrflow fetches public
 files directly instead, with `huggingface.co` and the commit named in source.
 
-**To bump a weight revision**, take the CoreML repository's current commit and the LFS metadata for
-the files in `WeightsAssets.fileNames`:
+**To bump a weight revision**, take the CoreML repository's current commit and the metadata for
+every file in the model's folder:
 
 ```bash
 curl -s https://huggingface.co/api/models/argmaxinc/whisperkit-coreml \
@@ -103,7 +110,9 @@ curl -s "https://huggingface.co/api/models/argmaxinc/whisperkit-coreml/tree/<com
   | python3 -c 'import sys,json; [print(i["path"], i["size"], i.get("lfs", {}).get("oid")) for i in json.load(sys.stdin)]'
 ```
 
-Put the commit in `weightsRevision`, and put each file's `size` and LFS `oid` in `weightFiles`.
+Put the commit in `weightsRevision`, and put every file's `size` and SHA-256 in `weightFiles`: the
+LFS `oid` for a file stored in LFS, and `shasum -a 256` of the downloaded file for one that is not
+(`model.mil`, `metadata.json`, `config.json`), whose `oid` is a git hash and not a digest.
 
 **To bump a tokenizer revision**, take the repository's current commit and the files' digests:
 

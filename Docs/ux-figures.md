@@ -52,10 +52,11 @@ paragraph. `nil` when nothing was timed.
 Counted back from the most recent day, not from today, so a streak is not reported broken
 at breakfast. A streak that merely reaches the oldest entry the app happens to have is not
 evidence of anything: a new user's whole history is "the oldest thing kept". The "at
-least — anything older has been deleted" comment only appears when the run's length
-reaches the retention window itself, since entries older than that are already filtered
-out before the streak is counted — reaching that many days without a gap is the actual
-evidence that something older existed and was deleted. Short of that, the comment reads
+least — anything older has been deleted" comment only appears when the snapshot still
+carries an entry retention drops, on the run's oldest day or the day before it — that entry
+is the evidence that the run went further back than what is shown. A run that merely fills
+the retention window proves nothing, since a new install dictating every day for its first
+week fills it too. Short of that evidence, the comment reads
 plainly: "days in a row".
 
 ## Comparisons
@@ -64,3 +65,15 @@ The Dictation page compares today against earlier days once there is at least on
 (`comparisonFloor = 1`). The "Words dictated" figure is the total within the retention
 window and is never called a lifetime total, because older words are gone and cannot be
 counted.
+
+## The Insights calendar
+
+Insights draws the chosen range — 7, 30 or 90 days, today last — as weeks of tiles starting on
+the calendar's own first weekday. A tile's teal is `0.15 + 0.85 × words ÷ busiest day's words`,
+so a quiet day still reads as spoken on and the busiest is full strength; a day with nothing said
+is a bare tile. The figures beside it are the range's words and dictations, the pooled pace
+above, and the streak Home counts, so the two pages cannot disagree.
+
+A range longer than history is kept cannot be picked: it would be a calendar of days whose
+transcripts are already deleted. A week is always offered, and the page opens on a month where
+history reaches that far. The wait for seven days spoken on still comes first.

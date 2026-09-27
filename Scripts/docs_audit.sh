@@ -672,13 +672,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. The worktree cleanup recipe must wait for a merged pull request.
+# 4. The worktree cleanup recipe must keep the pull request's remote branch.
 # ---------------------------------------------------------------------------
 #
-# The contributor recipe once opened a pull request and immediately deleted the worktree,
-# local branch and remote branch. `git branch -d` does not prove the branch reached `main`;
-# it can succeed when the local branch is merely merged to its upstream. The doc must keep
-# every cleanup command below a GitHub merged-state check.
+# The remote branch is the pull request's source ref, open or merged, and it is never
+# deleted. The local worktree and branch are disposable once the branch is pushed and the
+# pull request exists, so the recipe may clean them up then — but only after both, and it
+# must never carry a command that deletes the remote branch.
 printf '\nWorktree cleanup order\n'
 
 read -r -d '' CLEANUP_PROGRAM <<'PYTHON' || true
@@ -686,18 +686,18 @@ import re
 
 text = open("AGENTS.md", errors="ignore").read()
 start = text.find("**Every feature is built in a worktree")
-end = text.find("`sasta-trader` is a different project", start)
+end = text.find("**Never run `swift build`", start)
 if start == -1 or end == -1:
     print("AGENTS.md  cannot find the worktree recipe section")
     raise SystemExit
 
 section = text[start:end]
 required = [
+    ("branch push", r"^git push -u origin"),
     ("pull request creation", r"^gh pr create --base main"),
-    ("GitHub merge-state check", r"^gh pr view [^\n]*--json mergedAt"),
     ("worktree removal", r"^git worktree remove"),
     ("local branch deletion", r"^git branch -[dD]"),
-    ("remote branch deletion", r"^git push origin --delete"),
+    ("the never-delete rule", r"Remote branches are never deleted"),
 ]
 
 positions = {}
@@ -708,26 +708,26 @@ for name, pattern in required:
     else:
         positions[name] = match.start()
 
-merge = positions.get("GitHub merge-state check")
-if merge is not None:
-    for name in ("worktree removal", "local branch deletion", "remote branch deletion"):
-        where = positions.get(name)
-        if where is not None and where < merge:
-            print(f"AGENTS.md  {name} appears before the GitHub merge-state check")
-
 create = positions.get("pull request creation")
-if create is not None and merge is not None and merge < create:
-    print("AGENTS.md  merge-state check appears before pull request creation")
+push = positions.get("branch push")
+for name in ("worktree removal", "local branch deletion"):
+    where = positions.get(name)
+    for before, label in ((push, "branch push"), (create, "pull request creation")):
+        if where is not None and before is not None and where < before:
+            print(f"AGENTS.md  {name} appears before {label}")
+
+if re.search(r"^git push origin --delete", section, re.MULTILINE):
+    print("AGENTS.md  the recipe deletes the remote branch, which is the pull request's source ref")
 PYTHON
 cleanup_order="$(python3 -c "$CLEANUP_PROGRAM")"
 
 if [[ -n "${cleanup_order//[[:space:]]/}" ]]; then
-    fail "the worktree cleanup recipe can delete a pull request branch before it is merged" \
-        "Keep the worktree and both feature-branch refs while the pull request is open." \
-        "Verify through GitHub that the pull request has merged before cleanup commands." \
+    fail "the worktree cleanup recipe can lose a pull request's branch" \
+        "Push the branch and open the pull request before removing the local worktree and branch," \
+        "and never delete the remote branch: it is the pull request's source ref, open or merged." \
         "" $'\n'"$cleanup_order"
 else
-    pass "branch cleanup follows GitHub merge verification in AGENTS.md"
+    pass "the cleanup recipe keeps the remote branch and cleans up only after the pull request exists"
 fi
 
 # ---------------------------------------------------------------------------
@@ -861,6 +861,39 @@ else
         fail "Scripts/design_token_parity_audit.py --self-test failed" \
             "The audit's own self-test could not resolve a BrandPalette identifier reference," \
             "so the Swift parser is broken. Fix the audit, not the artboard."
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 7c. The Dictation artboards match DictationPresenter's own figures.
+# ---------------------------------------------------------------------------
+#
+# #153 renamed the populated rail's cleanup-ratio tile from "Accuracy" to
+# `DictationPresenter.accuracyTitle`, said plainly that it does not say whether words were
+# heard correctly, and dropped the baseline meter beside it. Nothing tied the design
+# generator to that decision, so #1139 found `Design/_gen_app.py` had drifted back to a
+# 97.2% "Accuracy" tile with a "Baseline" meter row.
+printf '\nDictation artboard contract\n'
+
+if [[ ! -x "$PACKAGE_ROOT/Scripts/design_dictation_contract_audit.py" ]]; then
+    fail "Scripts/design_dictation_contract_audit.py is missing or not executable" \
+        "The audit pins the Dictation rail to DictationPresenter's accuracyTitle and" \
+        "accuracyCaption, and refuses a restored Accuracy label or baseline meter; without" \
+        "it either side can drift and nothing notices."
+else
+    if "$PACKAGE_ROOT/Scripts/design_dictation_contract_audit.py" --self-test; then
+        if "$PACKAGE_ROOT/Scripts/design_dictation_contract_audit.py" >&2; then
+            pass "the Dictation rail matches DictationPresenter, with no Accuracy label or baseline meter"
+        else
+            fail "the Dictation rail disagrees with DictationPresenter" \
+                "The audit prints which title, caption or retired label broke. Update" \
+                "Design/_gen_app.py's Dictation section to match, then regenerate both" \
+                "Main-Dictation artboards."
+        fi
+    else
+        fail "Scripts/design_dictation_contract_audit.py --self-test failed" \
+            "The audit's own self-test could not resolve a known-good fixture or catch a" \
+            "known regression, so the parser is broken. Fix the audit, not the artboard."
     fi
 fi
 
@@ -1060,6 +1093,39 @@ PYTHON
             "" $'\n'"$corpus_problems"
     else
         pass "Docs/bakeoff.md's corpus inventory matches EvaluationCorpus"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# The identity sheet's teal ramp must match BrandPalette's production roles.
+# ---------------------------------------------------------------------------
+#
+# #1130: `Design/_gen_identity.py`'s RAMP named `#17A398` the listening-state colour years
+# after production moved to `BrandPalette.Teal.primary` (`#29C0B4`), and regenerating the
+# sheet reproduced the stale value byte-for-byte because the generator's own literal was
+# wrong. The audit reads each RAMP entry's hex by role and compares it to the `Teal` case
+# documented as that production role, so a colour that drifts from `BrandPalette.swift`
+# fails here instead of surviving silently in a design reference nobody re-reads.
+printf '\nIdentity sheet teal roles\n'
+
+if [[ ! -x "$PACKAGE_ROOT/Scripts/identity_role_audit.py" ]]; then
+    fail "Scripts/identity_role_audit.py is missing or not executable" \
+        "The audit pins the identity sheet's swatches to BrandPalette.Teal; without it a" \
+        "role can drift from production again the way #1130 did."
+else
+    if "$PACKAGE_ROOT/Scripts/identity_role_audit.py" --self-test; then
+        if "$PACKAGE_ROOT/Scripts/identity_role_audit.py" >&2; then
+            pass "every identity swatch matches its BrandPalette.Teal role"
+        else
+            fail "an identity swatch disagrees with BrandPalette.Teal" \
+                "BrandPalette.swift is the documented colour source of truth. Update" \
+                "RAMP in Design/_gen_identity.py to match it, then re-run every" \
+                "Design/_gen_*.py so the regenerated artboards carry the fix."
+        fi
+    else
+        fail "Scripts/identity_role_audit.py --self-test failed" \
+            "The audit's own self-test (a known match and a known mismatch) is no longer" \
+            "both passing, so the comparison is broken. Fix the audit, not the sheet."
     fi
 fi
 

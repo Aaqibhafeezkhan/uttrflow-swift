@@ -181,4 +181,22 @@ struct ReplayedExchangeTests {
             ResponseUnwrapper.unwrap("Text: Texting you now.", spoken: "texting you now")
                 == "Texting you now.")
     }
+
+    /// A contraction's apostrophe is not a nested quotation.
+    @Test("removes a single-quote wrap around an answer with a contraction")
+    func singleQuoteWrapWithContraction() {
+        #expect(
+            ResponseUnwrapper.unwrap("'I'll call you back.'", spoken: "I will call you back")
+                == "I'll call you back.")
+        #expect(
+            ResponseUnwrapper.unwrap("'We're done, aren't we?'", spoken: "we are done are not we")
+                == "We're done, aren't we?")
+    }
+
+    /// A single quote that is not between two letters still marks a nested quotation.
+    @Test("keeps a single-quote wrap around a nested single quotation")
+    func singleQuoteWrapWithNestedQuote() {
+        let quoted = "'She said 'stop' to him.'"
+        #expect(ResponseUnwrapper.unwrap(quoted, spoken: "she said stop to him") == quoted)
+    }
 }

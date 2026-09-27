@@ -9,14 +9,14 @@ import UttrflowSettings
 
 /// A ``SoundPlayer`` that makes no sound and remembers what it was asked to play.
 private final class HeardPlayer: SoundPlayer {
-    private let heard = Mutex<[SystemSound]>([])
+    private let heard = Mutex<[CueSound]>([])
 
-    func play(_ sound: SystemSound) -> Bool {
+    func play(_ sound: CueSound) -> Bool {
         heard.withLock { $0.append(sound) }
         return true
     }
 
-    var played: [SystemSound] { heard.withLock { $0 } }
+    var played: [CueSound] { heard.withLock { $0 } }
 }
 
 /// Settings with only the recording sound decided.
@@ -39,7 +39,7 @@ struct RecordingSoundsTests {
         sounds.cue.playStart()
         sounds.cue.playStop()
 
-        #expect(player.played == [.tink, .morse])
+        #expect(player.played == [.start, .stop])
         #expect(!sounds.isEnabled)
     }
 
@@ -54,7 +54,7 @@ struct RecordingSoundsTests {
         sounds.cue.playStart()
         sounds.cue.playStop()
 
-        #expect(player.played == [.tink, .morse])
+        #expect(player.played == [.start, .stop])
         #expect(sounds.isEnabled)
     }
 
@@ -79,6 +79,6 @@ struct RecordingSoundsTests {
         sounds.apply(settings(sound: false))
         sounds.cue.playStop()
 
-        #expect(player.played == [.tink])
+        #expect(player.played == [.start])
     }
 }

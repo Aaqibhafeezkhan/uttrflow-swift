@@ -1,9 +1,9 @@
 # Changelog
 
 Notable changes to Uttrflow. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are calendar dates,
-`YEAR.MONTH.DAY` with no leading zeros, for the day a release is cut; a second release on
-the same day adds a fourth number, `2026.9.14.1`. Releases up to 0.5.0 used semantic
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are
+`YY.MMDD.REVISION` for the day a release is cut: `26.0926.0`, then `26.0926.1` for a second
+release that day. 2026.9.14 used `YEAR.MONTH.DAY`, and releases up to 0.5.0 used semantic
 versioning.
 
 Each released version is a git tag and a build at
@@ -11,7 +11,92 @@ Each released version is a git tag and a build at
 
 ## [Unreleased]
 
+### Changed
+- **Uttrflow needs you to sign in before anything opens.** Without a session only the sign-in
+  window shows: the main window, Settings, the menu bar popover, the floating button, the
+  clipboard panel, suggestions and dictation all wait for it. Signing out, or a session that
+  has ended, closes them and returns to sign-in. A signed-in Mac still works offline.
+
+### Removed
+- **Working on this Mac without an account.** A Mac that used it is asked to sign in after
+  updating; its transcripts, dictionary and snippets stay where they are.
+
+## [26.0926.0] — 2026-09-27
+
+The first release numbered `YY.MMDD.REVISION`. Nothing about updating changes: an installed
+copy of 2026.9.14 is offered this release like any other.
+
+### Added
+- **A redesigned app, in light and dark.** A new sidebar holds Home, History, Insights, Dictionary,
+  Snippets and Settings, with your account card at its foot (#1960).
+- **Home** greets you for the time of day over an illustration, with a search that opens History
+  (⌘K) and a Start speaking button (#1960).
+- **History** lists each day's dictations on a time rail. A recording whose words were lost can be
+  played back and tried again (#1972).
+- **Insights** is a calendar of what you said over 7, 30 or 90 days, with your words, dictations,
+  pace and streak (#1971).
+- **Dictionary and Snippets** are searchable tables. Dictionary shows today's corrections, each
+  with Undo (#1973).
+- **Settings is a page of the main window**, with a search field and six tabs. The separate Settings
+  window is gone (#1977).
+- **Profile** shows your account on one page, with one button to sign in or out (#1974).
+- **The menu bar opens a popover** with Talk, Clipboard, Settings and Home, your last dictation and
+  your newest clips (#1969).
+- **The clipboard panel and the floating button are redrawn on glass**, and the clipboard panel now
+  follows the app's light or dark appearance (#1967, #1953).
+- **Onboarding is five steps on one card**, ending with a first try of your own shortcut (#1976).
+- **Empty pages show a small scene and one action.** Notices appear as a toast, and confirmations as
+  a centred sheet (#1970).
+- **The speech model's state shows on Home, the floating button and the menu bar**, with a way to
+  download it or try again when it is missing or did not load (#1968).
+- **An estimated time left while the speech model loads**, in place of an open-ended "Getting
+  ready…" (#1982).
+- **Uttrflow now shares usage statistics linked to your account, and this is on by default**, also
+  for copies updated from an earlier release. It sends counts and timings, such as how many
+  dictations ran and how long they took, with your dictation language and the app and macOS
+  versions, never your words or audio. Turn it off in Settings › Privacy › "Share anonymous usage
+  statistics" (#1810).
+
+### Changed
+- **A new install dictates with ⌃⌥ held.** Hold Control and Option, talk, and let go. Installs
+  that finished onboarding on an earlier build keep ⌥Space, and a shortcut already chosen in
+  Settings is left as it is (#1986).
+- **New, softer start and stop sounds**, shaped from the Mac's own system sounds (#1978).
+- **Transcripts are now kept until you delete them, by default.** A period you already chose is
+  kept, and installs that finished onboarding on an earlier build keep a week (#1977).
+- **AI suggestions now start on in Xcode and Zed**, like any other app. A choice you already made is
+  kept (#1977).
+- **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
+  bar switch, the notes on that screen and what VoiceOver reads for a suggestion all use the
+  new name. Nothing you chose there changes: every setting is kept as it was.
+
 ### Fixed
+- **History, snippets and the dictionary are no longer read from disk again after every save**
+  (#1983).
+- **The AI suggestions lists in Settings name apps as they are installed**, so Messages no longer
+  shows as "Mobilesms" (#1980).
+- **Pressing the shortcut during a dictation started from the floating button no longer cancels
+  it** and loses its words (#1907).
+- **Dictating into a terminal keeps the case of commands**: `npm run build` no longer becomes
+  `Npm run build` (#1923).
+- **Dictated words are spaced from the text beside the caret**, so `I went to the` and "store" no
+  longer read `thestore` (#1908).
+- **AI suggestions no longer read the same text on a page twice**, which pushed the message you
+  were replying to out of view (#1947).
+- **An accepted AI suggestion whose save failed is no longer lost.** It is saved again before the
+  next keystroke (#1597).
+- **Forgetting a learned line also forgets what it led to and followed**, so it is not offered
+  again (#1655).
+- **Shell history is imported only into a terminal that AI suggestions may learn from** (#1648).
+- **`find -exec` through `sudo` or `env`, and a forced `git checkout`, are never learned or
+  offered** (#1659).
+- **AI suggestions read only a field that belongs to the app in front**, never one of Uttrflow's own
+  panels (#1666).
+- **A field read for AI suggestions stops as soon as you move on** (#1575).
+- **Repeated calm memory notices no longer put off reloading the AI suggestion model** (#1561).
+- **Diagnostics no longer calls a missing speech model downloaded**, and the Home hint names your
+  own shortcut (#1975, #1985).
+- **Small print keeps 4.5:1 contrast in both appearances** (#1985).
 - **The performance doc's memory headline no longer reads as a whole-app claim.** It reported
   a suggestions-off dictation reading (379 MB peak footprint) as unconditional 8 GB-Mac safety,
   while the same document budgets AI suggestions on as a separate multi-gigabyte mode. The
@@ -81,13 +166,6 @@ Each released version is a git tag and a build at
 - **`uttrflow-dev bench` can idle between jobs** with `--idle-before`, so a cold tidier session is
   reproducible, and each `clean` line names the steps that changed something and any refused
   answer (#916).
-
-### Changed
-- **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
-  bar switch, the notes on that screen and what VoiceOver reads for a suggestion all use the
-  new name. Nothing you chose there changes: every setting is kept as it was.
-
-### Fixed
 - **A copied picture the clipboard does not keep no longer leaves its file on disk.** A
   screenshot dropped the moment it arrives, because the pictures folder is already at its
   limit, used to leave a PNG behind that nothing ever deleted, so repeated copies grew the

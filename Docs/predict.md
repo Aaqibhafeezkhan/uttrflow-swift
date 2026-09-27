@@ -151,7 +151,8 @@ watch the keyboard, and to put the completion into the field.
 
 The rest of the screen follows from the master switch: **Only suggest when it is sure**
 draws a completion and never a list, **Pause everywhere** stops for half an hour, and the
-**Applications** list carries the four editors that ship switched off, everything the user
+**Applications** list carries the two editors that ship switched off (Cursor and Visual
+Studio Code, which have suggestions of their own), everything the user
 has switched off since, and everything the corpus has learned from — so a switch that is
 off can always be found and turned back on.
 
@@ -159,6 +160,9 @@ Where suggestions may be offered is where typing may be learned from: one decisi
 the AI suggestions screen. The answer is kept in
 `~/Library/Application Support/Uttrflow/predict-consent.v1.json`, written the first time the
 loop meets an application the screen already allows, and rewritten when a switch there moves.
+
+Importing a shell's history asks the same question of the terminal it seeds: an application not
+yet allowed, or declined, gets nothing, and the one-time import stays unspent until it is allowed.
 
 Both sides file an application under `ApplicationKey`, which is its bundle identifier lowercased,
 because macOS is not consistent about the case and the two sides do not see it from the same

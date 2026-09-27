@@ -89,6 +89,16 @@ struct KeyInterceptorLifetimeTests {
         #expect(CFGetRetainCount(first) == baseline, "retain count \(CFGetRetainCount(first)) vs \(baseline)")
     }
 
+    @Test("a new tap re-enables on its own first disable, whatever the previous tap's history")
+    func newTapForgetsThePreviousTapsDisables() throws {
+        let state = Self.makeState()
+        state.adopt(try #require(Self.makePort()))
+        #expect(state.shouldReEnable())
+        state.adopt(try #require(Self.makePort()))
+        #expect(state.shouldReEnable())
+        #expect(!state.shouldReEnable())
+    }
+
     @Test("a stopped tap releases the port it gave the state")
     func stoppingReleasesThePort() async throws {
         let state = Self.makeState()

@@ -240,6 +240,80 @@ struct DiagnosticsEngineTests {
             "the page must list only engines this build actually contains")
     }
 
+    @Test("the speech row names the recogniser in use, not the one just chosen")
+    func speechRowFollowsTheEngineInUse() {
+        var engines = EngineConfiguration.default
+        engines.speech = .appleSpeech
+        let page = DiagnosticsPresenter.page(
+            for: DiagnosticsSnapshot(engines: engines, speechInUse: .whisperKit),
+            locale: DiagnosticsFixture.locale)
+
+        #expect(page.engines.first?.detail == "Downloaded speech model")
+    }
+
+    @Test("the speech row is not green while the model it needs is missing")
+    func speechRowAgreesWithTheMissingModel() {
+        let missing = DiagnosticsModelPresence(isInstalled: false, bytesOnDisk: nil, isMultilingual: true)
+        let page = DiagnosticsFixture.page(model: missing)
+
+        #expect(page.engines.first?.state == .attention)
+        #expect(page.engines.first?.detail == "Speech model to download")
+        #expect(page.storage.first?.detail == "Not downloaded")
+
+        let installed = DiagnosticsFixture.page(
+            model: DiagnosticsModelPresence(isInstalled: true, bytesOnDisk: nil, isMultilingual: true))
+        #expect(installed.engines.first?.state == .good)
+
+        let system = DiagnosticsFixture.page(
+            engines: EngineConfiguration(speech: .appleSpeech, transformerPreference: [.rules]),
+            model: missing)
+        #expect(system.engines.first?.state == .good)
+        #expect(system.engines.first?.detail == "Built-in speech recognition")
+    }
+
+    /// The shared readiness decides the words, so Diagnostics never says "In use" while Home says it failed.
+    @Test(
+        "the speech model card and row say the model's real state",
+        arguments: [
+            (SpeechModelReadiness.notInstalled, "Not downloaded", "Not downloaded"),
+            (.incomplete, "Incomplete", "Incomplete, download it again"),
+            (.downloading(fractionCompleted: 0.4), "Downloading", "Downloading"),
+            (.loading, "Loading", "on this Mac, every language, loading"),
+            (.loadFailed, "Failed to load", "On this Mac, but it failed to load"),
+            (.loadFailedAgain, "Failed to load", "On this Mac, but it failed to load"),
+            (.ready, "In use", "on this Mac, every language"),
+        ])
+    func speechModelSaysItsRealState(
+        readiness: SpeechModelReadiness, status: String, detail: String
+    ) throws {
+        let onDisk = readiness != .notInstalled && readiness != .incomplete
+        let page = DiagnosticsPresenter.page(
+            for: DiagnosticsSnapshot(
+                speechModel: DiagnosticsModelPresence(
+                    isInstalled: onDisk, bytesOnDisk: nil, isMultilingual: true),
+                speechReadiness: readiness),
+            locale: DiagnosticsFixture.locale)
+        let card = try #require(page.models.first { $0.title == "Speech" })
+
+        #expect(card.status == status)
+        #expect(page.storage.first?.detail == detail)
+        let broken = [SpeechModelReadiness.notInstalled, .incomplete, .loadFailed, .loadFailedAgain]
+        #expect((card.state == .attention) == broken.contains(readiness))
+    }
+
+    @Test("a failed load of the recogniser not in use leaves the downloaded model's card alone")
+    func failedLoadOfTheOtherRecogniser() throws {
+        let page = DiagnosticsPresenter.page(
+            for: DiagnosticsSnapshot(
+                engines: EngineConfiguration(speech: .appleSpeech, transformerPreference: [.rules]),
+                speechModel: DiagnosticsModelPresence(
+                    isInstalled: true, bytesOnDisk: nil, isMultilingual: true),
+                speechReadiness: .loadFailed),
+            locale: DiagnosticsFixture.locale)
+
+        #expect(try #require(page.models.first { $0.title == "Speech" }).status == "Ready")
+    }
+
     /// The first one that can run is the one that runs; the rest are standing by.
     @Test("only the first available clean-up engine is in use")
     func firstAvailableIsInUse() {
@@ -487,9 +561,12 @@ struct DiagnosticsSummaryTests {
     /// Somebody who opens this page to be told nothing is wrong should be told, not left to check.
     @Test("says so plainly when there is nothing to do")
     func allClear() {
-        let page = DiagnosticsFixture.page(permissions: [
-            .microphone: .granted, .accessibility: .granted,
-        ])
+        let page = DiagnosticsFixture.page(
+            availability: Dictionary(
+                uniqueKeysWithValues: TransformerKind.allCases.map { ($0, true) }),
+            model: DiagnosticsModelPresence(
+                isInstalled: true, bytesOnDisk: 1_000, isMultilingual: true),
+            permissions: [.microphone: .granted, .accessibility: .granted])
 
         #expect(!page.summary.needsAttention)
         #expect(page.summary.text == "Everything Uttrflow needs is in place.")
@@ -500,5 +577,44 @@ struct DiagnosticsSummaryTests {
     @Test("an unchecked permission is not a problem")
     func unknownIsNotAttention() {
         #expect(!DiagnosticsFixture.page().summary.needsAttention)
+    }
+
+    /// #1668: a check that has not answered was read as everything being in place.
+    @Test("an unanswered check is named rather than called all clear")
+    func unknownIsNotAllClear() {
+        let page = DiagnosticsFixture.page(
+            availability: Dictionary(
+                uniqueKeysWithValues: TransformerKind.allCases.map { ($0, true) }),
+            permissions: [.microphone: .granted, .accessibility: .granted])
+
+        #expect(page.storage.first?.detail == "Not checked yet")
+        #expect(page.summary.text == "Still checking: Speech model.")
+        #expect(!page.summary.needsAttention)
+    }
+
+    @Test("a missing speech model and the summary agree")
+    func missingModelReachesTheSummary() {
+        let page = DiagnosticsFixture.page(
+            availability: Dictionary(
+                uniqueKeysWithValues: TransformerKind.allCases.map { ($0, true) }),
+            model: DiagnosticsModelPresence(
+                isInstalled: false, bytesOnDisk: nil, isMultilingual: true),
+            permissions: [.microphone: .granted, .accessibility: .granted])
+
+        #expect(page.summary.needsAttention)
+        #expect(page.summary.text == "Speech model: Not downloaded")
+    }
+
+    @Test("a missing speech model is no problem for the system recogniser")
+    func missingModelWithSystemSpeech() {
+        let page = DiagnosticsFixture.page(
+            engines: EngineConfiguration(speech: .appleSpeech, transformerPreference: [.rules]),
+            availability: [.rules: true],
+            model: DiagnosticsModelPresence(
+                isInstalled: false, bytesOnDisk: nil, isMultilingual: true),
+            permissions: [.microphone: .granted, .accessibility: .granted])
+
+        #expect(page.storage.first?.state == .good)
+        #expect(!page.summary.needsAttention)
     }
 }

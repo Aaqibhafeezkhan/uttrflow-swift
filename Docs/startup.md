@@ -88,7 +88,7 @@ the one home for the words and for when the minutes are said.
 | Floating button | A wide pill with an hourglass: **Loading speech model…** | **Speech model didn’t load**, with **Download**. |
 | Shortcut or button pressed | **Speech model still loading…** through the same notice every dictation failure uses, informational, and the microphone never opens. | Dictation starts, and the recogniser tries the load again on demand. |
 | Clipboard panel | The microphone is off: *Speech model still loading*. | Off, as for a model that is not ready. |
-| Menu bar | *Getting ready…* | *Speech model didn't load* |
+| Menu bar | *Getting ready…*, then the estimate below | *Speech model didn't load* |
 
 **A model that is not on disk at all** is `SpeechModelLoad.missing`, read from the same
 `.notInstalled` readiness the menu bar reads. Home shows **The speech model isn’t downloaded**
@@ -102,10 +102,37 @@ model's own status. It never says *Listening*, which on the menu bar and the flo
 means the microphone is open.
 
 **The minutes are said only once a load has run for five seconds** (`SpeechModelLoad.estimateAfter`).
-A warm load is over in about two, so it never claims minutes; one still going at five seconds is
-almost certainly the cold case, and from then the card reads *The first load after a restart can
-take about 2–3 minutes*, and the button's second line *First load after restart: about 2–3 min*.
-There is no progress bar, because nothing reports how far a load has got.
+A warm load is over in about two, so it never claims minutes, and until then home, the menu bar
+and the floating button say *Getting ready…* over a sliding bar or a spinner. A load still going at
+five seconds is almost certainly the cold case, and from then every surface shows an estimate.
+
+### The estimate
+
+Nothing reports how far a load has got; the app knows only how long it has run. So the bar is a
+guess paced to a typical cold load, from `SpeechModelLoadEstimate`
+(`Sources/UttrflowCore/Models/SpeechModelLoadEstimate.swift`):
+
+- **`SpeechModelLoadEstimate.typicalColdLoad` is the one number to tune.** It is 150 seconds,
+  from the 154-second cold load measured above. A slower Mac overruns it and holds at 90 %
+  for longer; a faster one jumps to done early. Change the constant, not the curve.
+- **The bar eases out** from 0 to 90 % (`ceiling`) over that time — `0.9 × (1 − (1 − t)²)` with
+  `t` the share of the typical load gone — so it moves quickly at first, slows as it nears the
+  ceiling, and never goes backwards. It then **holds at 90 %** until the model is really ready,
+  and the surface drops the bar for the ready state.
+- **The time left is said in four phrases**, from the typical load minus the elapsed time: more
+  than 90 s left is *about 2 min left*, more than 45 s *about 1 min left*, anything less *less
+  than a minute left*, and once holding *almost ready*. The floating button uses the short form
+  (*~2 min*, *~1 min*, *<1 min*), and VoiceOver hears the minutes written out.
+
+| Where | Past five seconds |
+|---|---|
+| Home hero | **Getting ready · about 1 min left**, under it *Only after a restart. Everything else already works.*, and the bar filled to the estimate. Holding: **Almost ready…** |
+| Floating button | A ring filled to the estimate, **Getting ready**, and *~1 min*. Holding: **Almost ready**. |
+| Menu bar popover | The same heading as home over a bar filled to the estimate. |
+
+The app redraws these surfaces once a second while the load runs, from `AppDelegate`'s ticker,
+which starts at `estimateAfter` and ends with the load; nothing ticks once the model is ready.
+The bars ease between ticks, and under Reduce Motion they step instead.
 
 The refusal lives in `DictationPipeline.startRecording`, which declines while its own `prepare()`
 is running. A pipeline nobody prepared still records and loads on demand, as before. When the

@@ -258,4 +258,16 @@ struct PromptTests {
             surroundings: "Rahul: kal milte hain? 👍🏽", recentLines: ["haan bilkul"])
         #expect(!message("haan ", latin).contains(PromptBuilder.scriptInstruction))
     }
+
+    @Test("A double quote in the window title or the leading suggestion is made single, so quoting holds.")
+    func quotedSpansCannotBeForged() {
+        let situation = GenerationSituation(application: "Browser", windowTitle: "Say \"hello\" - Mail")
+        let titled = message("hi", situation)
+        #expect(titled.hasPrefix("In application Browser, window \"Say 'hello' - Mail\".\n"))
+        let others = PromptBuilder.message(
+            typed: "echo ", in: situation, register: casual, asking: .others(excluding: "echo \"done\""))
+        let line = others.split(separator: "\n").first { $0.contains("different from") } ?? ""
+        #expect(line.contains("different from \"echo 'done'\", "))
+        #expect(line.filter { $0 == "\"" }.count == 2)
+    }
 }

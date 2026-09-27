@@ -1505,6 +1505,48 @@ public enum EvaluationCorpus {
             mustBeginWith: "the",
             mustEndWith: "failure."
         ),
+        .init(
+            id: "terminal-command-keeps-case", category: .contextual,
+            spoken: "um npm run build",
+            expected: "npm run build",
+            mustKeep: ["run", "build"],
+            context: AppContext(
+                applicationName: "Terminal",
+                bundleIdentifier: "com.apple.Terminal"
+            ),
+            mustNotAdd: ["um"],
+            destination: .terminal,
+            mustBeginWith: "npm",
+            mustEndWith: "build"
+        ),
+        .init(
+            id: "terminal-command-keeps-case-mid-pipeline", category: .contextual,
+            spoken: "uh ls dash la",
+            expected: "ls dash la",
+            mustKeep: ["dash", "la"],
+            context: AppContext(
+                applicationName: "iTerm",
+                bundleIdentifier: "com.googlecode.iterm2"
+            ),
+            mustNotAdd: ["uh"],
+            destination: .terminal,
+            mustBeginWith: "ls",
+            mustEndWith: "la"
+        ),
+        .init(
+            id: "terminal-command-keeps-no-stop", category: .contextual,
+            spoken: "um git status",
+            expected: "git status",
+            mustKeep: ["git", "status"],
+            context: AppContext(
+                applicationName: "Warp",
+                bundleIdentifier: "dev.warp.Warp-Stable"
+            ),
+            mustNotAdd: ["um", "."],
+            destination: .terminal,
+            mustBeginWith: "git",
+            mustEndWith: "status"
+        ),
         // A question mark from the shape of a sentence needs the model; the rules are not asked to pass this one.
         .init(
             id: "message-question-keeps-its-mark", category: .contextual,

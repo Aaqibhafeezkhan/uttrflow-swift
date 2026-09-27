@@ -2,6 +2,40 @@
 public import Foundation
 public import UttrflowDictionary
 
+/// Where a word came from as its chip says it, with a retired word counted apart from its origin.
+public enum DictionarySource: String, Sendable, Equatable, CaseIterable {
+    case added
+    case learned
+    case seen
+    case shipped
+    case retired
+
+    /// The chip's words.
+    public var title: String {
+        switch self {
+        case .added: "Added by you"
+        case .learned: "Learned"
+        case .seen: "Seen on screen"
+        case .shipped: "Shipped"
+        case .retired: "Retired"
+        }
+    }
+
+    /// The source an entry is listed under.
+    public init(_ entry: DictionaryEntry) {
+        guard entry.isTrustworthy else {
+            self = .retired
+            return
+        }
+        switch entry.origin {
+        case .added: self = .added
+        case .learned: self = .learned
+        case .observed: self = .seen
+        case .shipped: self = .shipped
+        }
+    }
+}
+
 /// One word as the dictionary page lists it, drawn from ``DictionaryEntry`` and never a second rule.
 public struct DictionaryRow: Sendable, Equatable, Identifiable {
     /// The entry's identity.
@@ -12,18 +46,20 @@ public struct DictionaryRow: Sendable, Equatable, Identifiable {
     public let pronunciation: String
     /// "Learned", "Added by you", "Seen on screen".
     public let origin: String
+    /// The chip the row wears, "Retired" in place of the origin once the word has retired.
+    public let source: DictionarySource
     /// "12 Aug".
     public let added: String
     /// How often it has been applied, as text.
     public let timesUsed: String
     /// How often the user has undone it, as text.
     public let timesUndone: String
+    /// Whether the word has been undone at all, which tints the count.
+    public let hasBeenUndone: Bool
     /// Whether the undo count is the reason this word is in trouble; drawn in red before it retires.
     public let undoneIsConcerning: Bool
     /// A word that undid itself more often than it helped; dimmed and badged, but still operable.
     public let isRetired: Bool
-    /// "Retired", on a retired word.
-    public let badge: MainPill?
     /// Restore on a retired word, delete on any other.
     public let actions: [MainAction]
 
@@ -33,24 +69,26 @@ public struct DictionaryRow: Sendable, Equatable, Identifiable {
         word: String,
         pronunciation: String,
         origin: String,
+        source: DictionarySource,
         added: String,
         timesUsed: String,
         timesUndone: String,
+        hasBeenUndone: Bool,
         undoneIsConcerning: Bool,
         isRetired: Bool,
-        badge: MainPill?,
         actions: [MainAction]
     ) {
         self.id = id
         self.word = word
         self.pronunciation = pronunciation
         self.origin = origin
+        self.source = source
         self.added = added
         self.timesUsed = timesUsed
         self.timesUndone = timesUndone
+        self.hasBeenUndone = hasBeenUndone
         self.undoneIsConcerning = undoneIsConcerning
         self.isRetired = isRetired
-        self.badge = badge
         self.actions = actions
     }
 }
@@ -130,18 +168,24 @@ public struct DictionarySnapshot: Sendable, Equatable {
     public let refusal: String?
     /// What has been typed into the search field.
     public let query: String
+    /// The chosen filter chip's identifier; empty or unknown lists every word.
+    public let filter: String
+    /// Dictionary corrections, newest first, from which today's are drawn as cards.
+    public let corrections: [Correction]
     /// The clock the page is drawn against.
     public let now: Date
 
     /// Builds a snapshot; everything but the clock defaults to empty.
     public init(
         entries: [DictionaryEntry] = [], draft: DictionaryDraft? = nil, refusal: String? = nil,
-        query: String = "", now: Date
+        query: String = "", filter: String = "", corrections: [Correction] = [], now: Date
     ) {
         self.entries = entries
         self.draft = draft
         self.refusal = refusal
         self.query = query
+        self.filter = filter
+        self.corrections = corrections
         self.now = now
     }
 }
@@ -150,9 +194,13 @@ public struct DictionarySnapshot: Sendable, Equatable {
 public struct DictionaryPresentation: Sendable, Equatable {
     /// The title, caption, search field and Add button across the top.
     public let chrome: MainPageChrome
-    /// "24 words Uttrflow knows and a general model does not".
-    public let caption: String
-    /// The words that match the query.
+    /// "Fixed today · 3 corrections", over today's cards; absent when nothing was fixed today.
+    public let fixesLabel: String?
+    /// Today's corrections still standing, newest first, at most three.
+    public let fixes: [CorrectionRow]
+    /// The filter chips over the table, empty while there are no words to filter.
+    public let filters: [MainScopeOption]
+    /// The words that match the query and the filter.
     public let rows: [DictionaryRow]
     /// The open editor, above the rows. Present only while a word is being written.
     public let editor: DictionaryEditor?
@@ -164,14 +212,18 @@ public struct DictionaryPresentation: Sendable, Equatable {
     /// Builds the page from its parts.
     public init(
         chrome: MainPageChrome,
-        caption: String,
+        fixesLabel: String?,
+        fixes: [CorrectionRow],
+        filters: [MainScopeOption],
         rows: [DictionaryRow],
         editor: DictionaryEditor?,
         emptyState: MainEmptyState?,
         footnote: String?
     ) {
         self.chrome = chrome
-        self.caption = caption
+        self.fixesLabel = fixesLabel
+        self.fixes = fixes
+        self.filters = filters
         self.rows = rows
         self.editor = editor
         self.emptyState = emptyState
@@ -193,26 +245,69 @@ public enum DictionaryPresenter {
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent
     ) -> DictionaryPresentation {
+        let filter = self.filter(named: snapshot.filter)
         let listed = matches(snapshot.entries, query: snapshot.query, locale: locale)
+            .filter { filter == nil || DictionarySource($0) == filter }
         let rows = listed.map { row(for: $0, locale: locale) }
         let editor = snapshot.draft.map { self.editor(for: $0, in: snapshot) }
+        let today = fixedToday(in: snapshot, calendar: calendar)
 
         return DictionaryPresentation(
             chrome: MainPageChrome(
                 title: "Dictionary",
-                caption: "Names and terms Uttrflow would otherwise get wrong.",
+                caption: caption(for: snapshot.entries.count),
                 search: snapshot.entries.isEmpty
                     ? nil
                     : MainSearchField(placeholder: searchPlaceholder, query: snapshot.query),
                 addAction: MainAction(title: "Add Word", symbolName: "plus", intent: .addWord)),
-            caption: """
-                \(MainFormatting.count(snapshot.entries.count, "word", "words")) Uttrflow knows \
-                and a general model does not
-                """,
+            fixesLabel: today.isEmpty
+                ? nil
+                : "Fixed today · \(MainFormatting.count(today.count, "correction", "corrections"))",
+            fixes: today.prefix(fixesShown).map { CorrectionsPresenter.row(for: $0, locale: locale) },
+            filters: snapshot.entries.isEmpty ? [] : filters(selecting: filter),
             rows: rows,
             editor: editor,
-            emptyState: rows.isEmpty && editor == nil ? emptyState(for: snapshot) : nil,
+            emptyState: rows.isEmpty && editor == nil ? emptyState(for: snapshot, filter: filter) : nil,
             footnote: rows.isEmpty ? nil : footnote(for: listed))
+    }
+
+    /// How many of today's corrections are drawn as cards.
+    static let fixesShown = 3
+
+    /// "Names and terms Uttrflow would otherwise get wrong. · 24 words", the count once there is one.
+    static func caption(for count: Int) -> String {
+        let lede = "Names and terms Uttrflow would otherwise get wrong."
+        return count == 0 ? lede : "\(lede) · \(MainFormatting.count(count, "word", "words"))"
+    }
+
+    // MARK: - Today's fixes
+
+    /// Corrections made today and not undone, newest first, matching the sidebar's count.
+    static func fixedToday(in snapshot: DictionarySnapshot, calendar: Calendar) -> [Correction] {
+        snapshot.corrections
+            .filter { !$0.isUndone && calendar.isDate($0.when, inSameDayAs: snapshot.now) }
+            .sorted { $0.when > $1.when }
+    }
+
+    // MARK: - Filtering
+
+    /// The chips in order: every word, then each source a word can be listed under but shipped.
+    static let filterSources: [DictionarySource] = [.added, .learned, .seen, .retired]
+
+    /// The chip identifier that lists every word.
+    public static let allFilter = "all"
+
+    /// The source a chip identifier names, or `nil` for every word.
+    static func filter(named id: String) -> DictionarySource? {
+        DictionarySource(rawValue: id).flatMap { filterSources.contains($0) ? $0 : nil }
+    }
+
+    /// The chips, with the chosen one selected.
+    static func filters(selecting chosen: DictionarySource?) -> [MainScopeOption] {
+        [MainScopeOption(id: allFilter, title: "All", isSelected: chosen == nil)]
+            + filterSources.map {
+                MainScopeOption(id: $0.rawValue, title: $0.title, isSelected: $0 == chosen)
+            }
     }
 
     /// What the four origins mean, and what a retired word is only when one is on screen.
@@ -250,12 +345,13 @@ public enum DictionaryPresenter {
             word: entry.word,
             pronunciation: entry.pronunciation ?? "—",
             origin: title(for: entry.origin),
+            source: DictionarySource(entry),
             added: entry.firstSeen.formatted(.dateTime.day().month(.abbreviated).locale(locale)),
             timesUsed: "\(entry.timesUsed)",
             timesUndone: "\(entry.timesReverted)",
+            hasBeenUndone: entry.timesReverted > 0,
             undoneIsConcerning: entry.timesReverted > concerningUndos,
             isRetired: isRetired,
-            badge: isRetired ? MainPill(text: "Retired", tone: .warning) : nil,
             actions: (isRetired ? [MainAction(title: "Restore", intent: .restoreWord(entry.id))] : [])
                 + [.delete(.forgetWord(entry.id))])
     }
@@ -325,24 +421,25 @@ public enum DictionaryPresenter {
 
     // MARK: - Nothing to show
 
-    /// No matches, or no words at all.
-    static func emptyState(for snapshot: DictionarySnapshot) -> MainEmptyState {
+    /// No matches, nothing under the chosen chip, or no words at all.
+    static func emptyState(for snapshot: DictionarySnapshot, filter: DictionarySource?) -> MainEmptyState {
         let query = SearchQuery.needle(in: snapshot.query)
         if !query.isEmpty {
             return .noMatches("No word in your dictionary looks or sounds like “\(query)”.")
         }
+        if let filter, !snapshot.entries.isEmpty {
+            return MainEmptyState(
+                symbolName: "line.3.horizontal.decrease",
+                title: "Nothing in this view",
+                message: """
+                    \(MainFormatting.count(snapshot.entries.count, "word", "words")), and none of \
+                    them is listed as \(filter.title.lowercased()).
+                    """)
+        }
         return MainEmptyState(
             symbolName: "character.book.closed",
             title: "No words of your own yet",
-            message: """
-                Uttrflow learns the names, products and jargon a general model has never heard. \
-                Select a word it spelt wrong, say it again, and the spelling you keep lands \
-                here. So does a term the title of your window keeps showing while you say it.
-                """,
-            action: MainAction(title: "Add a Word", symbolName: "plus", intent: .addWord),
-            footnote: """
-                Nothing is pre-loaded. An empty dictionary means Uttrflow has not yet changed a \
-                single word of yours.
-                """)
+            message: "Add names and terms Uttrflow would otherwise get wrong.",
+            action: MainAction(title: "Add Word", symbolName: "plus", intent: .addWord))
     }
 }

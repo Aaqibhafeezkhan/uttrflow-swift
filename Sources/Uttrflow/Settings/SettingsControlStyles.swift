@@ -1,9 +1,8 @@
-// The switch, segmented control, pop-up and button drawn in the app's own style.
+// The switch, segmented control, pop-up, buttons, keycaps and chips drawn in the redesign's style.
 
 import AppKit
 import SwiftUI
-
-/// The controls this window draws in the app's own vocabulary; behaviour stays the platform's.
+import UttrflowUX
 
 // MARK: - Switch
 
@@ -15,24 +14,26 @@ struct SettingsSwitchStyle: ToggleStyle {
         } label: {
             Capsule()
                 .fill(track(isOn: configuration.isOn))
-                .frame(width: 38, height: 22)
+                .frame(width: 40, height: 24)
                 .overlay(
                     Capsule()
                         .strokeBorder(
-                            configuration.isOn ? .clear : Color.mainSeparator, lineWidth: 1)
+                            configuration.isOn ? .clear : SettingsPalette.ink(0.1), lineWidth: 1)
                 )
                 .overlay(alignment: configuration.isOn ? .trailing : .leading) {
                     Circle()
-                        .fill(configuration.isOn ? .white : Color.mainMuted)
-                        .frame(width: 18, height: 18)
+                        .fill(.white)
+                        .frame(width: 20, height: 20)
                         .padding(.horizontal, 2)
-                        .shadow(color: .black.opacity(0.28), radius: 1, y: 1)
+                        .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
                 }
                 .shadow(
-                    color: configuration.isOn ? .dockAccent.opacity(0.40) : .clear,
-                    radius: 8, y: 2
+                    color: configuration.isOn ? PagePalette.dictation.opacity(0.6) : .clear,
+                    radius: 6
                 )
-                .animation(.snappy(duration: 0.18), value: configuration.isOn)
+                .animation(
+                    MotionBudget.current().allowing(.snappy(duration: 0.18)), value: configuration.isOn
+                )
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -40,7 +41,12 @@ struct SettingsSwitchStyle: ToggleStyle {
     }
 
     private func track(isOn: Bool) -> AnyShapeStyle {
-        isOn ? AnyShapeStyle(LinearGradient.accentFill) : AnyShapeStyle(Color.settingsControl)
+        isOn
+            ? AnyShapeStyle(
+                LinearGradient(
+                    colors: [PagePalette.dictation, SettingsPalette.dictationDeep],
+                    startPoint: .top, endPoint: .bottom))
+            : AnyShapeStyle(SettingsPalette.ink(0.16))
     }
 }
 
@@ -52,7 +58,7 @@ struct SettingsSegmented: View {
     @Binding var selection: String
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ForEach(options, id: \.id) { option in
                 let isSelected = option.id == selection
                 Button {
@@ -60,13 +66,13 @@ struct SettingsSegmented: View {
                 } label: {
                     Text(option.title)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(isSelected ? .white : Color.mainMuted)
-                        .padding(.horizontal, 13)
-                        .frame(height: 24)
+                        .foregroundStyle(isSelected ? SettingsPalette.inverseInk : SettingsPalette.ink(0.65))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 11)
+                        .frame(height: 26)
                         .background(
-                            isSelected
-                                ? AnyShapeStyle(LinearGradient.accentFill) : AnyShapeStyle(Color.clear),
-                            in: .rect(cornerRadius: 6)
+                            isSelected ? SettingsPalette.inverseFill : .clear, in: .rect(cornerRadius: 8)
                         )
                         .contentShape(.rect)
                 }
@@ -75,10 +81,7 @@ struct SettingsSegmented: View {
             }
         }
         .padding(3)
-        .background(Color.settingsControl, in: .rect(cornerRadius: 9))
-        .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(Color.mainSeparator, lineWidth: 1))
+        .background(SettingsPalette.ink(0.06), in: .rect(cornerRadius: 10))
     }
 }
 
@@ -105,18 +108,18 @@ struct SettingsMenu: View {
         } label: {
             HStack(spacing: 8) {
                 Text(options.first { $0.id == selection }?.title ?? selection)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.mainText)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color.settingsAccentInk)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(PagePalette.text)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(PagePalette.faint)
             }
             .padding(.horizontal, 10)
             .frame(height: 28)
-            .background(Color.settingsControl, in: .rect(cornerRadius: 8))
+            .background(SettingsPalette.ink(0.07), in: .rect(cornerRadius: 9))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.mainSeparator, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(SettingsPalette.ink(0.12), lineWidth: 1)
             )
             .contentShape(.rect)
         }
@@ -130,22 +133,26 @@ struct SettingsMenu: View {
 
 // MARK: - Buttons
 
-/// The quiet button beside a control: Change, Cancel, and the like.
+/// The quiet button beside a control: Edit, Check Now, Remove, and the red one that removes for good.
 struct SettingsButtonStyle: ButtonStyle {
     var isDestructive = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(isDestructive ? Color(nsColor: .systemRed) : Color.mainMuted)
-            .padding(.horizontal, 11)
-            .frame(height: 26)
-            .background(Color.settingsControl, in: .rect(cornerRadius: 7))
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundStyle(isDestructive ? SettingsPalette.dangerInk : PagePalette.text)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 13)
+            .frame(height: 28)
+            .background(
+                isDestructive ? SettingsPalette.danger.opacity(0.12) : SettingsPalette.ink(0.08),
+                in: .rect(cornerRadius: 9)
+            )
             .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(
-                        isDestructive
-                            ? Color(nsColor: .systemRed).opacity(0.35) : Color.mainSeparator,
+                        isDestructive ? SettingsPalette.danger.opacity(0.3) : SettingsPalette.ink(0.14),
                         lineWidth: 1)
             )
             .opacity(configuration.isPressed ? 0.75 : 1)
@@ -153,13 +160,163 @@ struct SettingsButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Colours
+/// An icon and its words side by side, closer than the system's label puts them.
+struct SettingsLeadingIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon.font(.system(size: 11, weight: .medium))
+            configuration.title
+        }
+    }
+}
 
-extension Color {
-    /// The fill under a control on a card, one step lifted, so a switch does not read as a hole.
-    static let settingsControl = Color(nsColor: .orbit(BrandPalette.Surface.control))
-    /// The callout's ground. Its ink is `.secondary`, which follows the theme, so this must too.
-    static let settingsCalloutWash = Color(nsColor: .settingsCalloutWash)
-    /// The accent as a mark rather than a fill, in a window that follows the system's appearance.
-    static let settingsAccentInk = Color(nsColor: .orbit(BrandPalette.Teal.ink))
+// MARK: - Keys
+
+/// A key drawn as a key: lit from above, with a shadow under its lip.
+struct SettingsKeycap: View {
+    let key: String
+    var size: CGFloat = 30
+
+    var body: some View {
+        Text(key)
+            .font(.system(size: (size * 0.42).rounded(), weight: .medium))
+            .foregroundStyle(PagePalette.text)
+            .fixedSize()
+            .padding(.horizontal, (size * 0.28).rounded())
+            .frame(minWidth: size, minHeight: size)
+            .background(
+                RoundedRectangle(cornerRadius: (size * 0.27).rounded(), style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [SettingsPalette.ink(0.2), SettingsPalette.ink(0.06)],
+                            startPoint: .top, endPoint: .bottom)
+                    )
+                    .shadow(color: .black.opacity(0.5), radius: 0, y: max(2, (size * 0.08).rounded()))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: (size * 0.27).rounded(), style: .continuous)
+                    .strokeBorder(SettingsPalette.ink(0.12), lineWidth: 0.5)
+            )
+            .overlay(alignment: .top) {
+                // The highlight along the top edge that makes it read as raised.
+                RoundedRectangle(cornerRadius: (size * 0.27).rounded(), style: .continuous)
+                    .stroke(SettingsPalette.ink(0.25), lineWidth: 1)
+                    .mask(alignment: .top) { Rectangle().frame(height: 1.5) }
+            }
+    }
+}
+
+/// A row of keycaps.
+struct SettingsKeys: View {
+    let keys: [String]
+    var size: CGFloat = 30
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                SettingsKeycap(key: key, size: size)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(keys.joined(separator: " "))
+    }
+}
+
+// MARK: - Chips
+
+/// A removable pill: a language being listened for, with the × that stops it.
+struct SettingsChipView: View {
+    let title: String
+    var onRemove: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 12.5))
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(PagePalette.faint)
+                        .frame(width: 14, height: 14)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Stop listening for \(title)")
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, onRemove == nil ? 12 : 8)
+        .frame(height: 30)
+        .background(SettingsPalette.ink(0.08), in: .capsule)
+        .overlay(Capsule().strokeBorder(SettingsPalette.ink(0.12), lineWidth: 1))
+        .fixedSize()
+    }
+}
+
+// MARK: - Status
+
+/// A fact that is fine: a green dot and a word.
+struct SettingsStatusView: View {
+    let text: String
+    var tone: Color = SettingsPalette.good
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(tone).frame(width: 7, height: 7)
+            Text(text)
+                .font(.system(size: 12))
+        }
+        .foregroundStyle(tone)
+        .fixedSize()
+    }
+}
+
+// MARK: - Tiles
+
+/// The tinted square at the left of a row.
+struct SettingsIconTile: View {
+    let icon: SettingsIcon
+    var size: CGFloat = 32
+
+    var body: some View {
+        switch icon {
+        case .symbol(let name, let tint):
+            let colour = SettingsPalette.tint(tint)
+            Image(systemName: name)
+                .font(.system(size: size * 0.48, weight: .regular))
+                .foregroundStyle(colour)
+                .frame(width: size, height: size)
+                .background(colour.opacity(0.18), in: .rect(cornerRadius: size * 0.28, style: .continuous))
+                .accessibilityHidden(true)
+        case .application(let bundleIdentifier, let name):
+            SettingsApplicationIcon(bundleIdentifier: bundleIdentifier, name: name)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// An application's own icon, asked of the system once and remembered.
+struct SettingsApplicationIcon: View {
+    let bundleIdentifier: String
+    let name: String
+
+    var body: some View {
+        let application = HistoryApplication(
+            name: name, initial: name.first.map(String.init) ?? "", identifier: bundleIdentifier)
+        if let image = ApplicationIcons.shared.icon(for: application) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+        } else {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(SettingsPalette.ink(0.08))
+                .overlay(
+                    Image(systemName: "app")
+                        .font(.system(size: 13))
+                        .foregroundStyle(PagePalette.faint))
+        }
+    }
 }

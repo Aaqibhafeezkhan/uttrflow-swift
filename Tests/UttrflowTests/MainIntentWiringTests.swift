@@ -553,6 +553,7 @@ struct MainIntentWiringTests {
         let signedIn = try await SignedInAccount()
         let sandbox = Sandbox()
         let app = AppDelegate(container: sandbox.root, account: signedIn.layer)
+        app.drawsWindows = false
 
         app.carryOut(.signOut)
 
@@ -566,6 +567,7 @@ struct MainIntentWiringTests {
         let signedIn = try await SignedInAccount()
         let sandbox = Sandbox()
         let app = AppDelegate(container: sandbox.root, account: signedIn.layer)
+        app.drawsWindows = false
         app.readAccount()
         #expect(app.accountPage(at: .now).identity?.name == "Development User")
 
@@ -574,6 +576,35 @@ struct MainIntentWiringTests {
         let page = app.accountPage(at: .now)
         #expect(page.identity == nil)
         #expect(page.emptyState?.action?.intent == .signIn)
+    }
+
+    // MARK: Copy and clipboard-only outcomes
+
+    /// A copy that lands on the clipboard is shown on the page so the user knows the words are waiting.
+    @Test("a copy from the row says where the words went")
+    func copyShowsANotice() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+
+        app.carryOut(.copy("Copy this back to me"))
+
+        let notice = try #require(app.actionNotice)
+        #expect(notice.message == "Copied — click where you want it, then press ⌘V")
+        #expect(notice.symbolName == "doc.on.clipboard")
+    }
+
+    /// A page change drops the notice, since the sentence describes the button the user just left behind.
+    @Test("moving to another page drops the copy notice")
+    func copyNoticeDropsOnPageChange() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+
+        app.carryOut(.copy("Copy me"))
+        #expect(app.actionNotice != nil)
+
+        app.carryOut(.show(.snippets))
+
+        #expect(app.actionNotice == nil)
     }
 }
 
@@ -634,8 +665,7 @@ private struct SignedInAccount {
         profiles = UserDefaultsProfileCache(
             storage: MemoryStorage(), verifier: authentication.backend.verifier)
         layer = OnboardingAccountLayer(
-            authentication: authentication, profiles: profiles,
-            local: UserDefaultsLocalAccountStore(storage: MemoryStorage()))
+            authentication: authentication, profiles: profiles)
         authentication.profiles.withLock { [profiles] in $0 = profiles }
         let challenge = try await authentication.beginSignIn(with: .google)
         try profiles.save(await authentication.completeSignIn(challenge))

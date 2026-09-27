@@ -1,35 +1,31 @@
-// Plays recording cues through AppKit's system sounds.
+// Plays recording cues through AppKit's system sounds, unshaped, when the shaped player cannot.
 import UttrflowCore
 private import AppKit
 private import Synchronization
 
 /// The part that makes noise, excluded from coverage; whether to play lives next door and is tested.
 // MARK: - The part that makes noise
-/// Plays system sounds through AppKit; the start cue lands in the recording, accepted by Docs/audio-capture.md.
+/// Plays a cue's named system sound at the cue's volume, without its pitch or filter; see Docs/audio-capture.md.
 public final class SystemSoundPlayer: SoundPlayer {
     /// Sounds are kept rather than looked up per cue, since a restart is only reliable on the same instance.
     private let sounds = Mutex<[SystemSound: NSSound]>([:])
-    private let volume: Float
 
-    /// Plays at under half volume by default, since every decibel of a cue is also in the recording.
-    public init(volume: Float = 0.4) {
-        self.volume = volume
-    }
+    public init() {}
 
     @discardableResult
-    public func play(_ sound: SystemSound) -> Bool {
-        guard let nsSound = resolve(sound) else { return false }
+    public func play(_ cue: CueSound) -> Bool {
+        guard let nsSound = resolve(cue.sound) else { return false }
 
         // Stopped first, so a retrigger inside the previous cue's tail restarts the sound instead of failing.
         nsSound.stop()
-        nsSound.volume = volume
+        nsSound.volume = cue.volume
         return nsSound.play()
     }
 
-    public func prewarm(_ sounds: [SystemSound]) {
+    public func prewarm(_ cues: [CueSound]) {
         // Warming each is cheap and does not assume which sound a cue reaches for first.
-        for sound in sounds {
-            guard let nsSound = resolve(sound) else { continue }
+        for cue in cues {
+            guard let nsSound = resolve(cue.sound) else { continue }
             nsSound.volume = 0
             nsSound.play()
             nsSound.stop()

@@ -50,6 +50,8 @@ struct RulesCorpusTests {
         "code-editor-line-break-preserved", "code-editor-numeral-no-stop",
         "code-editor-code-keeps-no-stop", "code-editor-comment-gets-a-stop",
         "code-editor-comment-keeps-its-stop",
+        "terminal-command-keeps-case", "terminal-command-keeps-case-mid-pipeline",
+        "terminal-command-keeps-no-stop",
         "message-short-no-stop", "email-greeting-kept", "email-continues-mid-sentence",
         "email-two-paragraphs",
         "numbered-items-for-a-trip", "numbered-items-three-of-them", "numbered-items-a-plan",
@@ -93,7 +95,7 @@ struct RulesCorpusTests {
         // Grammar cases name a destination too, but repairs are the model's alone; the floor is below.
         let named = Set(
             EvaluationCorpus.all.filter { $0.destination != .plain && $0.category != .grammar }.map(\.id))
-        #expect(named.count == 53)
+        #expect(named.count == 56)
         #expect(named.subtracting(Self.modelOnly).isSubset(of: Self.rulesMustPass))
         #expect(Self.modelOnly.isSubset(of: named))
         #expect(Self.modelOnly.isDisjoint(with: Self.rulesMustPass))

@@ -1,6 +1,6 @@
 # The settings screen's model
 
-Why the choices on the Settings and Style screens are shaped the way they are. The code is
+Why the choices on the Settings page are shaped the way they are. The code is
 `Sources/UttrflowUX/SettingsChoices.swift`, `SettingsPresenter.swift`, `SettingsEditor.swift`
 and `SettingsReset.swift`.
 
@@ -18,10 +18,11 @@ always runs. Offering an "off" would promise a state the pipeline has no way to 
 
 ## One copy for the tidying row
 
-`SettingsTidyingLevel.rowLabel` and `.rowExplanation` are held on the type because two screens
-draw the row. When each screen held its own wording they disagreed about what Light does — one
-said punctuation only, when Light does capitalisation and spacing too. A user comparing the two
-screens would reasonably conclude the app has two settings.
+`SettingsTidyingLevel.rowLabel` and `.rowExplanation` are held on the type so that any screen
+drawing the row uses one wording. When two screens held their own they disagreed about what Light
+does — one said punctuation only, when Light does capitalisation and spacing too — and a user
+comparing them would reasonably conclude the app has two settings. The row is on the Languages tab
+now, above the example that shows the level in force.
 
 ## The preference order is normalised, not trusted
 
@@ -38,9 +39,15 @@ screens would reasonably conclude the app has two settings.
 
 The settings store treats a period of zero or less as corrupt and quietly replaces it, so a
 screen offering one would show a choice, save it, and reopen showing something else.
-`SettingsRetention.offeredDays` is therefore 1, 3, 7, 14, 30 and 90 days, and
+`SettingsRetention.offeredDays` is therefore Always, then 1, 3, 7, 14, 30 and 90 days, and
 `SettingsRetentionTests` proves each survives by putting it through `Settings` rather than by
 restating the store's rule.
+
+Always is stored as `Settings.keepAlwaysDays`, a period of a hundred years, rather than as a
+special value: every store already measures a window in days, so a long one needs no new branch
+where a transcript is kept or swept. It is the shipped default for transcripts. Screens that
+would otherwise count the period out loud say "until you delete it" instead, and every Insights
+range fits inside it.
 
 Transcripts are the only thing there is a period for: audio is never written to disk, so there
 is nothing about a recording for the user to set.

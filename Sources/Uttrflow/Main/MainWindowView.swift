@@ -1,4 +1,4 @@
-// The main window's chrome: sidebar, strip, page header and page switch.
+// The main window's chrome: sidebar, page header and page switch.
 
 import UttrflowUX
 import SwiftUI
@@ -12,96 +12,139 @@ struct MainWindowView: View {
     var onDraft: () -> Void = {}
     var onToggleSidebar: () -> Void = {}
 
+    /// The question a button is asking before it acts, drawn over the whole window.
+    @State private var confirmations = MainConfirmationCenter()
+
     var body: some View {
         HStack(spacing: 0) {
             SidebarView(
                 presentation: model.content.sidebar,
-                isExpanded: model.isSidebarExpanded
-            ) { destination in
-                switch destination {
-                case .page(let page):
-                    // Through the app, so the sidebar's highlight and badge are rebuilt with the page.
-                    onIntent(.show(page))
-                case .settings(let tab):
-                    // Settings is a window of its own, and the app owns every window.
-                    onIntent(.go(.settings(tab)))
-                }
-            }
+                account: model.content.home.account,
+                picture: model.content.account.identity?.picture,
+                isExpanded: model.isSidebarExpanded,
+                onSelect: { destination in
+                    switch destination {
+                    case .page(let page):
+                        // Through the app, so the sidebar's highlight and badge are rebuilt with the page.
+                        onIntent(.show(page))
+                    case .settings(let tab):
+                        // Through the app too, which refreshes what the Settings page shows.
+                        onIntent(.go(.settings(tab)))
+                    }
+                },
+                onAccount: { onIntent(model.content.home.account.open.intent) },
+                onToggle: onToggleSidebar)
             pane
         }
         // The one animation in the window: the sidebar's width moves the page beside it.
-        .animation(.snappy(duration: 0.22), value: model.isSidebarExpanded)
-        .background(Color.mainBackground)
+        .animation(MotionBudget.current().allowing(.snappy(duration: 0.22)), value: model.isSidebarExpanded)
+        .background(Color.redesignWindow)
         .foregroundStyle(Color.mainText, Color.mainMuted, Color.mainDim)
         // One tint at the root, so a control added later cannot arrive in the stock blue.
         .tint(Color.dockAccent)
-        // SwiftUI still reserves a safe area for the transparent title bar; the rail keeps its own inset.
+        .confirmationSheet(confirmations, onIntent: onIntent)
+        // SwiftUI still reserves a safe area for the transparent title bar; the island keeps its own inset.
         .ignoresSafeArea(.container, edges: .top)
     }
 
     // MARK: - Pane
 
+    /// The shown pane with the notice floating in its corner, over Settings as well as the pages.
     private var pane: some View {
-        VStack(spacing: 0) {
-            MainWindowStrip(
-                account: model.content.home.account,
-                isSidebarExpanded: model.isSidebarExpanded,
-                onToggleSidebar: onToggleSidebar,
-                onIntent: onIntent)
-            if model.page != .home {
-                OrbitPageHeader(
-                    chrome: model.chrome, query: $model.searchQuery,
-                    searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
-                    onSearch: onSearch, onScope: onScope)
+        shownPane
+            .overlay(alignment: .topTrailing) {
+                if let notice = model.content.notice {
+                    MainNoticeBar(notice: notice, onIntent: onIntent)
+                        // Below every page's title and search row, so the notice covers content, never the header.
+                        .padding(.top, Self.noticeTopInset)
+                        .padding(.trailing, 20)
+                        // Fades in place under Reduce Motion rather than sliding from the top.
+                        .transition(
+                            MotionBudget.current().reducesMotion
+                                ? .opacity : .move(edge: .top).combined(with: .opacity))
+                }
             }
-            if let notice = model.content.notice {
-                MainNoticeBar(notice: notice)
-                    .padding(.horizontal, MainMetrics.contentPadding)
-                    .padding(.top, 12)
+            .animation(.easeOut(duration: 0.2), value: model.content.notice)
+    }
+
+    /// Clears the tallest header, Home's greeting beside its search field, which ends 90 points down.
+    private static let noticeTopInset: CGFloat = 98
+
+    /// Settings when it is showing, which draws its own title and search, or the selected page.
+    @ViewBuilder private var shownPane: some View {
+        if model.showsSettings, let settings = model.settings {
+            SettingsPageView(
+                model: settings, diagnostics: model.content.diagnostics,
+                searchFocusRequest: model.searchFocusRequest, onIntent: onIntent)
+        } else {
+            pagePane
+        }
+    }
+
+    private var pagePane: some View {
+        VStack(spacing: 0) {
+            // The band under the title bar, which the traffic lights and the window's drag own; some pages draw their own.
+            if !drawsOwnHeader {
+                Color.clear.frame(height: MainMetrics.toolbarHeight)
+                if isRedesigned {
+                    PageTitleBar(
+                        chrome: model.chrome, query: $model.searchQuery,
+                        searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
+                        onSearch: onSearch)
+                } else {
+                    OrbitPageHeader(
+                        chrome: model.chrome, query: $model.searchQuery,
+                        searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
+                        onSearch: onSearch, onScope: onScope)
+                }
             }
             page
-                // Home draws its stage edge to edge; every other page is a document and wants a margin.
-                .padding(.horizontal, model.page == .home ? 0 : MainMetrics.contentPadding)
-                .padding(.top, model.page == .home ? 0 : 18)
-                .padding(.bottom, model.page == .home ? 0 : 14)
+                // A page with its own header sets its own margins; a redesigned page is set wider than the rest.
+                .padding(.horizontal, horizontalMargin)
+                .padding(.top, drawsOwnHeader ? 0 : (isRedesigned ? 16 : 18))
+                .padding(.bottom, drawsOwnHeader ? 0 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .environment(\.dictationKeycaps, model.content.shortcutKeycaps)
         // The field holds what is being typed, so it is only put back in step when the page changes.
         .onChange(of: model.page) { _, _ in
             model.searchQuery = model.chrome.search?.query ?? ""
         }
     }
 
+    /// Whether the page draws its own title, and so its own margins.
+    private var drawsOwnHeader: Bool { [.home, .history, .insights, .account].contains(model.page) }
+
+    /// Whether the page draws the redesign's title bar and margins.
+    private var isRedesigned: Bool { [.dictionary, .snippets].contains(model.page) }
+
+    /// A page with its own header sets its own margins; a redesigned page is set wider than the others.
+    private var horizontalMargin: CGFloat {
+        if drawsOwnHeader { return 0 }
+        return isRedesigned ? PageMetrics.margin : MainMetrics.contentPadding
+    }
+
     @ViewBuilder private var page: some View {
         switch model.page {
         case .home:
             HomePageView(presentation: model.content.home, onIntent: onIntent)
-        case .dictation:
-            DictationPageView(presentation: model.content.dictation, onIntent: onIntent)
         case .history:
-            ScrollView {
-                HistoryPageView(presentation: model.content.history, onIntent: onIntent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            HistoryPageView(
+                presentation: model.content.history, chrome: model.chrome, query: $model.searchQuery,
+                searchFocusRequest: model.searchFocusRequest, onIntent: onIntent, onSearch: onSearch)
         case .dictionary:
             DictionaryPageView(
                 presentation: model.content.dictionary, draft: reporting($model.wordDraft),
-                onIntent: onIntent)
+                onIntent: onIntent, onFilter: onScope)
         case .corrections:
             CorrectionsPageView(presentation: model.content.corrections, onIntent: onIntent)
         case .insights:
-            InsightsPageView(presentation: model.content.insights, onIntent: onIntent)
+            InsightsPageView(
+                presentation: model.content.insights, onIntent: onIntent, onScope: onScope)
         case .snippets:
             SnippetsPageView(
                 presentation: model.content.snippets, draft: reporting($model.snippetDraft),
                 onIntent: onIntent)
-        case .style:
-            StylePageView(presentation: model.content.style, onIntent: onIntent)
-        case .diagnostics:
-            ScrollView {
-                DiagnosticsPageView(presentation: model.content.diagnostics, onIntent: onIntent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         case .account:
             AccountPageView(presentation: model.content.account, onIntent: onIntent)
         }
@@ -114,38 +157,6 @@ struct MainWindowView: View {
             set: {
                 binding.wrappedValue = $0; onDraft()
             })
-    }
-}
-
-/// The strip across the top: traffic lights over the rail at one end, the account chip at the other.
-struct MainWindowStrip: View {
-    let account: HomeAccount
-    var isSidebarExpanded: Bool = false
-    var onToggleSidebar: () -> Void = {}
-    var onIntent: (MainIntent) -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            sidebarToggle
-            Spacer(minLength: 0)
-            AccountChip(account: account, onIntent: onIntent)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: MainMetrics.toolbarHeight)
-    }
-
-    /// The one control in the band; its symbol says which way it goes, as every Mac app's does.
-    private var sidebarToggle: some View {
-        Button(action: onToggleSidebar) {
-            Image(systemName: isSidebarExpanded ? "sidebar.leading" : "sidebar.left")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color.mainMuted)
-                .frame(width: 26, height: 22)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .help(isSidebarExpanded ? "Hide Sidebar" : "Show Sidebar")
-        .accessibilityLabel(isSidebarExpanded ? "Hide Sidebar" : "Show Sidebar")
     }
 }
 

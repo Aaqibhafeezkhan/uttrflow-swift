@@ -31,14 +31,14 @@
 
 <p align="center">
   <img src="Docs/media/readme-dictation.png" width="820"
-       alt="A chat composer holding a dictated message, beside a card showing what was said, with the fillers struck out, and the cleaned sentence that landed.">
+       alt="A chat composer holding a dictated message, beside a card showing what was said, with um and uh struck out, and the cleaned sentence that landed.">
 </p>
 
-**Hold ⌥ Space** in any app and talk. Let go, and the words land at your cursor.
+**Hold ⌃ ⌥** (Control and Option) in any app and talk. Let go, and the words land at your cursor.
 
 - Recognition runs on your Mac.
 - Clean-up removes fillers, adds punctuation and applies your dictionary, matched by sound.
-- Works offline, with or without an account.
+- Works offline once you have signed in.
 
 **In the code:** `UttrflowAudio` → `UttrflowSpeech` → `UttrflowAI` → `UttrflowPipeline` →
 `UttrflowInput`, with the dock in `Sources/Uttrflow/Dock`. Read
@@ -151,7 +151,7 @@ Thank you to everyone who has sent a fix, filed an issue or asked a good questio
   alias you gave a clip. ↑↓ to choose, **⌘1** for All, **⌘2–⌘9** to choose a collection, ⏎ to paste where the caret already was, **⌘⏎** to
   paste as plain text however it was copied, **⌘Z** to undo a delete, Esc to close. The window underneath never loses
   focus.
-- **Hold ⌥Space** and talk. Let go, and the words land at the cursor in the app you were
+- **Hold ⌃⌥** and talk. Let go, and the words land at the cursor in the app you were
   already in. The floating button at the screen edge shows the microphone level while you
   hold it, and the shortcut can be changed in Settings.
 - **Dictionary.** A name the recogniser keeps getting wrong is fixed once; matching is by
@@ -195,22 +195,21 @@ three completions typed past in one field are each reason enough to draw nothing
 editors ship switched off, because their own completion already reads the whole file.
 [`Docs/predict.md`](Docs/predict.md) is the full account.
 
-**Works offline.** Signing in needs a network exactly once, and "Continue on this Mac"
-needs none at all. After that every launch, every dictation and every paste works with
+**Works offline.** Signing in needs a network exactly once. After that every launch, every dictation and every paste works with
 Wi-Fi off — proven by a sandbox that fails any test touching the network.
 
 </details>
 
-## It runs without an account, and without anything of ours
+## A clone runs without anything of ours
 
 Worth saying early, because it is the question every reader of a client repository has:
-**you do not need an account, an API key, or access to any server we run.**
+**you do not need an API key or access to any server we run.**
 
 Dictation is on-device. The clipboard, history, dictionary and snippets live in Application
-Support and are never sent anywhere. The one screen that would need a network — sign-in —
-offers **"continue on this Mac"** beside the providers, which uses the name macOS already
-knows you by and needs nothing. An account buys the things that genuinely need one:
-carrying a dictionary between Macs, and a subscription to bill.
+Support and are never sent anywhere. The released app asks you to sign in before anything
+else opens; a development build signs in against an in-process stand-in, so its sign-in
+needs no network and no account of ours. An account buys the things that genuinely need
+one: carrying a dictionary between Macs, and a subscription to bill.
 
 So a clone builds, tests and runs, complete. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -220,7 +219,7 @@ Apple Silicon Mac, macOS 26 or later. Xcode 26.6 or later supplies the toolchain
 itself is SwiftPM.
 
 ```bash
-make verify     # lint, PII audit, build, 5,000+ tests, coverage floor, offline audit
+make verify     # lint, PII audit, build, 6,000+ tests, coverage floor, offline audit
 make app        # builds and ad-hoc signs dist/Uttrflow.app
 open dist/Uttrflow.app
 make help       # every target
@@ -408,21 +407,29 @@ data if they were ever completed and run, and anything shorter than two characte
 (`CaptureGate` in `Sources/UttrflowPredictCapture`). A field keeps at most 2,000 entries.
 You can forget one line, everything one application taught, or all of it.
 
-**There is an account, and the first run asks for it — but it is not required to
-dictate.** "Continue on this Mac", on that same page from the start, records the choice to
-do without one and permits dictation, with no network involved. Signing in instead needs a
-network exactly once; every launch after that works without one, and an entitlement that
-has aged out still lets you dictate rather than locking you out.
+**There is an account, and nothing opens until you sign in.** Signing in needs a network
+exactly once; every launch after that works without one, and an entitlement that has aged
+out still lets you dictate rather than locking you out. Signing out, or a session the
+server has ended, closes every window and stops dictation until you sign in again.
 
-**Nothing is sent, and the telemetry that will be sent can only carry numbers.** The app
-does not report anything today: the collector exists, is tested, and is wired to nothing,
-so no measurement leaves this Mac. What it is built to carry is counts, durations, words
-per minute, language mix, which stage failed, latency percentiles — and it is not that we
-choose not to send your words, it is that the type that gets encoded has no field capable
-of holding text at any depth, and a test walks it and fails on anything `String`-shaped.
-Audio, transcripts, dictionary contents, window titles and application names have nowhere
-to go. There is no opt-out switch, because there is nothing yet to opt out of. Before
-anything is ever sent there will be one, and a way to read exactly what was sent.
+**Anonymous usage statistics are sent, they can only carry numbers, and one switch turns
+them off.** Once an hour, and when the app quits, Uttrflow sends a report of counts and
+timings: how many dictations started, were cancelled or failed, total recording and waiting
+time, how many characters were inserted, latency percentiles, language mix, which stage
+failed, and the app and macOS versions. It is not that we choose not to send your words: the
+type that gets encoded has no field capable of holding text at any depth, and a test walks
+it and fails on anything `String`-shaped. Audio, transcripts, dictionary contents, window
+titles and application names have nowhere to go. It is on by default; Settings → Privacy →
+"Share anonymous usage statistics" turns it off, which also drops anything not yet sent.
+[`Docs/account-telemetry.md`](Docs/account-telemetry.md) has the detail.
+
+**Crash reports are off unless you turn them on.** Settings → Privacy → *Send crash
+reports* is the one exception to the paragraph above, and it starts off. When it is on, a
+crash or a freeze is reported to Sentry, the error tracker the project uses: the app and
+macOS versions, the Mac model and architecture, the exception, and the stack as binary
+names and addresses. No user or host name, no file paths (each is cut to its file name), no
+breadcrumbs, and nothing you dictated or copied. Builds made from source carry no reporting
+key and never send anything. [Docs/crash-reporting.md](Docs/crash-reporting.md) has the details.
 
 The app is not hermetic and does not claim to be: it downloads a speech model on first run,
 roughly 646 MB, and signs you in once. After that it dictates with no network at all. A

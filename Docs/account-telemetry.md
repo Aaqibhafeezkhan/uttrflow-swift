@@ -1,16 +1,40 @@
-# Telemetry: what would leave the Mac, and why a dictation never waits for it
+# Telemetry: what leaves the Mac, and why a dictation never waits for it
 
 Three types carry Uttrflow's usage reporting: `TelemetryCollector` accumulates counters,
 `TelemetryReport` is the value that goes on the wire, and `TelemetryService` sends it and
 remembers what it sent. The code says what each does; this page says what the shapes
 guarantee and where the numbers come from.
 
-**None of it runs in the shipping app.** Nothing outside `UttrflowAccount` builds a
-`TelemetryService` — `grep -rn 'TelemetryService\|TelemetryCollector' Sources --include='*.swift'`
-answers nowhere else — so nothing is collected and nothing is sent. There is no opt-out
-switch because there is nothing yet to opt out of, which is what `README.md` says too. Read
-every sentence below as the design that sits in the tree, ready for the day it is wired up,
-rather than as behaviour a user has today.
+## What is sent, when, and how to turn it off
+
+**It is on by default, and one switch turns it off.** Settings → Privacy → "Share anonymous
+usage statistics" is `Settings.sharesUsageStatistics`, `true` unless the user has said
+otherwise. Turning it off stops collection at once and drops every report still waiting to
+be sent; turning it back on starts from an empty window.
+
+**What is sent** is one `TelemetryReport` per window, and nothing else: how many
+dictations started, were cancelled and failed; how long the microphone was open and how
+long the user waited, in total; how many characters were inserted, as a count; end-to-end
+latency percentiles; how many dictations were in each language on a closed list; per-stage
+failure counts and latency percentiles; the app version as three numbers and the macOS
+major version. Every field is below; none of them can hold text.
+
+**When:** `UsageTelemetry` in the app target flushes the service once an hour and once more
+while the app quits, after any dictation in flight has landed and for at most three
+seconds. A flush closes the window, queues its report and posts everything queued. A window
+with no dictation in it produces no report, so an idle Mac sends nothing.
+
+**Where:** `HTTPTelemetrySender` posts the report's `encodedForIngest()` bytes to
+`POST /v1/telemetry` on the same API host the account uses, through the same
+`BackendTransport`. It carries the signed-in bearer token when there is one and posts
+anonymously otherwise; a development build, which has no backend configured, gets a
+`RecordingTelemetrySender` and sends nothing anywhere. The server answers `202`; anything
+else is a `TelemetryError`, and the report stays queued for the next flush.
+
+**What feeds it:** the pipeline's stage timings reach the collector through `MetricsFanOut`,
+beside the diagnostics recorder, and `UsageTelemetry.observe` counts each dictation when it
+is inserted or fails, reading only its length, how long it was spoken for and the first
+language in Settings.
 
 ## There is no `String` anywhere in a report
 
@@ -67,8 +91,8 @@ so the four types that enforce them cannot drift apart:
 |---------------|---------------------|-----------------------------------------|
 | `count`       | 0...2 147 483 647   | a non-negative 32-bit integer           |
 | `durationMs`  | 0...604 800 000     | a week; no honest measurement reaches it |
-| `versionPart` | 0...999             | a version's second and third number, and the macOS major version |
-| `versionYear` | 0...9999            | a version's first number, which is a year |
+| `versionPart` | 0...999             | a version's third number (the revision), and the macOS major version |
+| `versionDate` | 0...9999            | a version's first two numbers, a year and a month-and-day |
 
 Percentiles are never allowed below the one under them (p90 is raised to p50, p99 to
 p90), `cancelledCount` is capped at `dictationCount`, and a `Duration` is floored at zero
@@ -79,12 +103,10 @@ whole report.
 
 A version is not a quantity, and rounding one into range does not make it approximately
 right — it makes it another release's version, which a reader has no way to doubt. The app
-is versioned `YEAR.MONTH.DAY` with no leading zeros (`2026.9.14`, and `2026.9.14.1` for a
-second release that day, whose fourth part telemetry does not carry), so the first number
-is a four-digit year: clamped to `0...999` it read `999.9.14`, and every calendar release
-of every year read the same. `versionYear` is that first number's own range, wide enough
-for a four-digit year, and the other two parts stay on `versionPart` because a month and a
-day cannot reach 999 either way.
+is versioned `YY.MMDD.REVISION` (`26.0926.0`, then `26.0926.1` for a second release that
+day), which telemetry carries as the numbers `26`, `926` and `0`. The month-and-day reaches
+`1231`, and the retired `YEAR.MONTH.DAY` scheme put a four-digit year first, so the first
+two numbers share `versionDate`, wide enough for either; the revision stays on `versionPart`.
 
 So a version outside those ranges refuses the whole report rather than arriving as a
 different one. Version is the one field that separates one release's behaviour from
@@ -92,11 +114,8 @@ another's: a report that cannot say which release it came from is worth less tha
 report, because it is counted against a release that did not produce it. The same holds
 for `osVersionMajor`, which rides the same `versionPart` range.
 
-**The backend has to agree, and it is a separate repository.** Its `app_version_major`
-column checks `between 0 and 999`, as does the ingest validator, so until both are widened
-to four digits a calendar version is a 400 rather than a wrong row. Nothing sends telemetry
-yet, so there is no window where reports are lost; wiring the collector up waits on that
-change.
+**The backend has to agree, and it is a separate repository.** Its `app_version_major` and
+`app_version_minor` columns and its ingest validator allow `0...9999`, matching these ranges.
 
 A report is refused outright (the initialiser returns `nil`) otherwise only when the window
 did not advance or nothing happened in it: the table requires
@@ -138,7 +157,7 @@ The percentile index is `count * fraction`, which at `0.5` is `count / 2`, the s
 zero: a stage nothing timed is not a stage that was instant, and the server's column is
 nullable so the difference survives.
 
-## Opting out would forget everything
+## Opting out forgets everything
 
 Switching collection off discards everything gathered so far in the same call, and
 `TelemetryService.setEnabled` empties the outbox too. Reports waiting for a connection
@@ -159,10 +178,9 @@ overflows the earliest report is dropped, because a report describes a window th
 already closed: the recent ones say what Uttrflow is like now.
 
 The ledger of sent reports holds 64 entries, and each entry is the very value that was
-encoded and posted, not a description written separately. It is there so that whatever
-screen eventually shows a user their reports can show the same bytes that were posted;
-nothing reads `sentReports` today except `TelemetryServiceTests`, and there is no such
-screen. `TelemetryReport.encodedForIngest()` exists so that page and the sender would look
+encoded and posted, not a description written separately. It is there so that a
+screen showing a user their reports can show the same bytes that were posted; nothing reads
+`sentReports` today except the tests, and there is no such screen yet. `TelemetryReport.encodedForIngest()` exists so that page and the sender would look
 at the same bytes rather than at two descriptions of them.
 
 `flush` cannot throw and cannot report a problem. No caller should do anything differently

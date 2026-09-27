@@ -103,6 +103,10 @@ struct SecretDetectionTests {
             "  \"privateKey\": \"MIIEvQIBADANBg\",",
             "password: contraseñasecreta",
             "password: ⱡⱡⱡⱡⱡⱡⱡⱡⱡⱡⱡⱡ",
+            "SECRET_KEY = \"django-insecure-abcdefghijklmnop\"",
+            "secret_key: \"abcd1234efgh5678\"",
+            "secret-keys = abcd1234efgh5678",
+            "SECRETKEY=abcd1234efgh5678",
         ])
     func namedSecrets(_ text: String) {
         #expect(ClipKindDetector.kind(of: text) == .secret)

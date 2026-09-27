@@ -70,7 +70,7 @@ enum PromptBuilder {
     ) -> String {
         var located = "application \(situation.application)"
         if let title = situation.windowTitle {
-            located += ", window \"\(Self.head(title, within: locatorCap))\""
+            located += ", window \"\(Self.unquoted(Self.head(title, within: locatorCap)))\""
         }
         if let field = situation.field { located += ", field \(Self.head(field, within: locatorCap))" }
         if let document = situation.document {
@@ -89,7 +89,7 @@ enum PromptBuilder {
             case .one:
                 "\(Self.instruction(for: register)):\n\(typed)"
             case .others(let leader):
-                "Give up to three other ways to finish this \(register.kind), each different from \"\(leader)\", "
+                "Give up to three other ways to finish this \(register.kind), each different from \"\(Self.unquoted(leader))\", "
                     + "one per line:\n\(typed)"
             }
 
@@ -179,6 +179,11 @@ enum PromptBuilder {
         case .nonspacingMark, .spacingMark, .enclosingMark: true
         default: false
         }
+    }
+
+    /// The text with double quotes made single, so quoted words cannot forge a prompt line.
+    static func unquoted(_ text: String) -> String {
+        text.replacingOccurrences(of: "\"", with: "'")
     }
 
     /// The start of the text, which is where a title or a name says what it is, cut to the allowance in characters.

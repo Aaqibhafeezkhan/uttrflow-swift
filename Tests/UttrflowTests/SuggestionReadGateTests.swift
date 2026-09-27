@@ -31,7 +31,7 @@ struct SuggestionReadGateTests {
     func offByDefaultIsNotRead() {
         #expect(
             !SuggestionCoordinator.shouldRead(
-                front: "com.apple.dt.Xcode", own: "com.example.self", preferences: Self.on, at: Self.now))
+                front: "com.microsoft.VSCode", own: "com.example.self", preferences: Self.on, at: Self.now))
     }
 
     @Test("nothing is read while suggestions are paused")
@@ -49,5 +49,28 @@ struct SuggestionReadGateTests {
         #expect(
             !SuggestionCoordinator.shouldRead(
                 front: "com.example.self", own: "com.example.self", preferences: Self.on, at: Self.now))
+    }
+
+    @Test(
+        "every Uttrflow build is never read, the dev build from the release and the release from the dev build"
+    )
+    func everyUttrflowBuildIsNotRead() {
+        for (front, own) in [
+            ("com.uttrflow.Uttrflow.dev", "com.uttrflow.Uttrflow"),
+            ("com.uttrflow.Uttrflow", "com.uttrflow.Uttrflow.dev"),
+            ("com.uttrflow.Uttrflow", nil),
+        ] {
+            #expect(
+                !SuggestionCoordinator.shouldRead(
+                    front: front, own: own, preferences: Self.on, at: Self.now), "\(front) was read")
+        }
+    }
+
+    @Test("an application whose identifier only starts like Uttrflow's is still read")
+    func lookalikeIsRead() {
+        #expect(
+            SuggestionCoordinator.shouldRead(
+                front: "com.uttrflower.notes", own: "com.uttrflow.Uttrflow", preferences: Self.on,
+                at: Self.now))
     }
 }

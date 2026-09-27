@@ -60,6 +60,8 @@ struct MeaningPreservationGuardTests {
         accepted("i have three things to raise", "I have three things to raise.")
         accepted("i've sent the quote already", "I've sent the quote already.")
         rejected("three things to raise", "I have three things to raise.")
+        accepted("sure i can do that", "Sure, I can do that.")
+        rejected("i can do that", "Sure, I can do that.")
     }
 
     /// A dictated question answered instead of typed. Observed with a real model.

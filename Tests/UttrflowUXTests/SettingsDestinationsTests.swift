@@ -80,7 +80,7 @@ struct SettingsDestinationsTests {
     func nothingYet() throws {
         let group = try #require(places(.default, lastApp: nil))
         #expect(group.rows.count == 1)
-        #expect(group.rows.first?.control == .text("Nothing yet"))
+        #expect(group.rows.first?.control == .placeholder("Nothing yet"))
     }
 
     @Test("the app last dictated into is offered every kind of place, and working it out")

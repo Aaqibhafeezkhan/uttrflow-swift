@@ -122,6 +122,49 @@ struct SettingsRequestWiringTests {
         #expect(!model.session.recorder.isRecording)
     }
 
+    @Test("selecting another tab mid-recording restores the live shortcut once")
+    func selectingAnotherTabRestoresOnce() {
+        var callbacks: [Bool] = []
+        let model = model(RecordingStore(), onShortcutRecording: { callbacks.append($0) })
+
+        model.beginRecordingShortcut(.dictate)
+        model.select(.privacy)
+        model.select(.dictation)
+
+        #expect(callbacks == [true, false])
+        #expect(!model.session.recorder.isRecording)
+        #expect(model.session.tab == .dictation)
+    }
+
+    @Test("selecting the tab already shown leaves a recording running")
+    func selectingSameTabKeepsRecording() {
+        var callbacks: [Bool] = []
+        let model = model(RecordingStore(), onShortcutRecording: { callbacks.append($0) })
+
+        model.beginRecordingShortcut(.dictate)
+        model.select(model.session.tab)
+
+        #expect(callbacks == [true])
+        #expect(model.session.recorder.isRecording)
+    }
+
+    @Test("the app routing Settings to another tab mid-recording restores the live shortcut")
+    func externalTabRouteRestoresOnce() throws {
+        var callbacks: [Bool] = []
+        let controller = SettingsPageController(
+            store: RecordingStore(), personalisation: EmptyPersonalisation(), capabilities: .everything,
+            onShortcutRecording: { callbacks.append($0) })
+        let model = controller.model
+
+        controller.route(to: .general)
+        model.beginRecordingShortcut(.dictate)
+        controller.route(to: .privacy)
+
+        #expect(callbacks == [true, false])
+        #expect(!model.session.recorder.isRecording)
+        #expect(model.session.tab == .privacy)
+    }
+
     @Test("a command candidate is recorded and consumed before the menu sees it")
     func commandCandidateIsConsumed() throws {
         let event = try #require(
@@ -200,11 +243,12 @@ private func name(of change: SettingsChange) -> String {
     case .pauseSuggestions: "pauseSuggestions"
     case .checkForUpdatesNow: "checkForUpdatesNow"
     case .chooseApplicationToTurnOffSuggestions: "chooseApplicationToTurnOffSuggestions"
+    case .openPage: "openPage"
     }
 }
 
 /// How many cases ``SettingsChange`` has, bumped deliberately when one is added.
-private let settingsChangeCaseCount = 17
+private let settingsChangeCaseCount = 18
 
 /// Applies a change, or answers the settings unchanged when the editor refused it.
 private func applying(_ change: SettingsChange, to settings: Settings) -> Settings {
@@ -274,6 +318,7 @@ private let samples: [Sample] = [
     Sample(.pauseSuggestions(isOn: true), from: suggesting),
     Sample(.checkForUpdatesNow),
     Sample(.chooseApplicationToTurnOffSuggestions, from: suggesting),
+    Sample(.openPage(.corrections)),
 ]
 
 /// Settings that start from whatever a sample needs, so a change is applied to ground it alters.
@@ -330,5 +375,50 @@ struct SettingsChangeWiringTests {
                 #expect(asked == nil, "\(name(of: sample.change)) was asked as well as saved")
             }
         }
+    }
+}
+
+/// Holds each capability probe until the test answers it, so answers can arrive out of order.
+private actor ProbeGate {
+    private var waiting: [CheckedContinuation<SettingsCapabilities, Never>] = []
+
+    func wait() async -> SettingsCapabilities {
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func pending() -> Int { waiting.count }
+
+    func answer(_ index: Int, with capabilities: SettingsCapabilities) {
+        waiting[index].resume(returning: capabilities)
+    }
+}
+
+@Suite("Overlapping capability probes")
+@MainActor
+struct SettingsCapabilityProbeTests {
+    @Test("the newest probe's answer stands even when an older probe answers after it")
+    func newestProbeWins() async throws {
+        let gate = ProbeGate()
+        let controller = SettingsPageController(
+            store: RecordingStore(), personalisation: EmptyPersonalisation(), capabilities: .everything,
+            probe: { _ in await gate.wait() })
+        let model = controller.model
+        var stale = SettingsCapabilities.everything
+        stale.readyTransformers = [.rules]
+        var fresh = SettingsCapabilities.everything
+        fresh.readyTransformers = [.rules, .foundationModels]
+
+        controller.refreshCapabilities()
+        let first = try #require(controller.capabilityRefresh)
+        controller.refreshCapabilities()
+        let second = try #require(controller.capabilityRefresh)
+        while await gate.pending() < 2 { await Task.yield() }
+
+        await gate.answer(1, with: fresh)
+        await second.value
+        await gate.answer(0, with: stale)
+        await first.value
+
+        #expect(model.session.capabilities.readyTransformers == [.rules, .foundationModels])
     }
 }

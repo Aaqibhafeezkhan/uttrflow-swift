@@ -167,18 +167,20 @@ struct SpeechWindowingTests {
 
     @Test("windowing a finished recording does not slow down quadratically with its length")
     func windowsScalesLinearly() {
-        func elapsed(_ seconds: Double) -> Duration {
+        /// The CPU time this thread spends windowing `seconds` of speech, least of three, so waiting for a core is not counted.
+        func cost(_ seconds: Double) -> UInt64 {
             let audio = Take.speech(seconds, level: 0.3)
-            let clock = ContinuousClock()
-            let start = clock.now
-            _ = windowing.windows(in: audio, sampleRate: Take.rate)
-            return clock.now - start
+            let runs = (0..<3).map { _ in
+                let start = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+                _ = windowing.windows(in: audio, sampleRate: Take.rate)
+                return clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - start
+            }
+            return runs.min() ?? 0
         }
-        _ = elapsed(60)  // warm up allocation/caches before timing.
-        let short = elapsed(60)
-        let long = elapsed(240)
-        // Quadratic work would make the 4x-longer recording take roughly 16x as long.
-        #expect(long < short * 10)
+        let short = cost(30)
+        let long = cost(240)
+        // Eight times the audio costs about ten times the work when linear, and over thirty times when quadratic.
+        #expect(long < short * 20, "30 s took \(short) ns of CPU, 240 s took \(long) ns")
     }
 
     @Test("carries the lengths it was given")
