@@ -169,7 +169,7 @@ struct SettingsTests {
 
     @Test("defaults every field for an empty object, with the dictation shortcut an earlier install had")
     func emptyPayload() throws {
-        #expect(try decode("{}") == .earlierInstall)
+        #expect(try decode("{}") == Settings(shortcuts: .earlierDefault))
     }
 
     /// One unreadable value must not cost the user the ten choices either side of it.
@@ -315,11 +315,13 @@ struct SettingsTests {
         #expect(try decode(#"{"shortcuts": {}}"#).hotkey == .optionSpace)
     }
 
-    @Test("keeps the rest of the defaults for an earlier install, and only ⌥Space apart")
-    func earlierInstallDiffersOnlyInDictation() {
+    @Test("keeps the rest of the defaults for an earlier install, with only ⌥Space and a week apart")
+    func earlierInstallDiffersOnlyInDictationAndRetention() {
         var earlier = Settings.earlierInstall
         #expect(earlier.hotkey == .optionSpace)
+        #expect(earlier.transcriptRetentionDays == Settings.defaultRetentionDays)
         earlier.hotkey = .controlOptionHold
+        earlier.transcriptRetentionDays = Settings.defaultTranscriptRetentionDays
         #expect(earlier == .default)
     }
 
@@ -608,6 +610,36 @@ struct UserDefaultsSettingsStoreTests {
         store.pinDefaults(onboarded: true)
 
         #expect(store.load() == .earlierInstall)
+    }
+
+    @Test("keeps ⌥Space and a week of transcripts for an onboarded install that never saved a setting")
+    func onboardedInstallWithNoBlobKeepsAWeek() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().hotkey == .optionSpace)
+        #expect(store.load().transcriptRetentionDays == 7)
+    }
+
+    @Test(
+        "gives an onboarded install whose blob cannot be read the earlier defaults",
+        arguments: ["not json", "[1, 2, 3]"])
+    func onboardedInstallWithCorruptBlobKeepsOptionSpace(blob: String) {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore(json: blob))
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load() == .earlierInstall)
+    }
+
+    @Test("gives a new install whose blob cannot be read the current defaults")
+    func newInstallWithCorruptBlobGetsTheDefault() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore(json: "not json"))
+
+        store.pinDefaults(onboarded: false)
+
+        #expect(store.load() == .default)
     }
 
     @Test("leaves a saved shortcut alone, whether or not onboarding finished")

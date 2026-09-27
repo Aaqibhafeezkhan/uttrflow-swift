@@ -34,9 +34,13 @@ public struct UserDefaultsSettingsStore: SettingsStore {
         return settings
     }
 
-    /// Saves the first settings an install keeps, so a later change of default never moves an onboarded user.
+    /// Pins the install's first settings over a missing or unreadable blob, so a later default moves nobody.
     public func pinDefaults(onboarded: Bool) {
-        guard store.data(forKey: key) == nil else { return }
+        if let data = store.data(forKey: key),
+            (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
+        {
+            return
+        }
         save(onboarded ? .earlierInstall : .default)
     }
 

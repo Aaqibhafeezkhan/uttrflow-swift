@@ -53,7 +53,7 @@ copy of 2026.9.14 is offered this release like any other.
   Settings is left as it is (#1986).
 - **New, softer start and stop sounds**, shaped from the Mac's own system sounds (#1978).
 - **Transcripts are now kept until you delete them, by default.** A period you already chose is
-  kept (#1977).
+  kept, and installs that finished onboarding on an earlier build keep a week (#1977).
 - **AI suggestions now start on in Xcode and Zed**, like any other app. A choice you already made is
   kept (#1977).
 - **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
