@@ -748,7 +748,7 @@ INJECTIONS = (
     ),
     (
         "Sources/Uttrflow/Dock/DockView.swift",
-        "paused: !motion.workingDotsMove", "paused: false", "motion",
+        "paused: !motion.workingBarsMove", "paused: false", "motion",
     ),
     (
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",

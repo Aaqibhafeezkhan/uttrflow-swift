@@ -214,12 +214,15 @@ struct DockView: View {
         }
     }
 
-    /// Working: three dots walking left to right, for as long as there is work left to do.
+    /// Working: a glass orb whose three bars keep settling for as long as there is work left to do.
     private func working() -> some View {
-        compact { _ in WorkingDots() }
+        SettlingBars()
+            .frame(width: DockMetrics.workingOrbSize, height: DockMetrics.workingOrbSize)
+            .glass(cornerRadius: DockMetrics.workingOrbSize / 2)
+            .padding(DockMetrics.gripHitPadding)
     }
 
-    /// The pill listening and working share: the mark on the anchored edge, `centre` beside it.
+    /// The listening pill: the mark on the anchored edge, `centre` beside it.
     private func compact(
         @ViewBuilder _ centre: (_ towardsLeading: Bool) -> some View
     ) -> some View {
@@ -427,10 +430,10 @@ enum DockMetrics {
     /// How wide the hint grows to say why the shortcut cannot be heard, which wraps over a few lines.
     static let unheardWidth: CGFloat = 240
     static let orbSize: CGFloat = 30
-    /// Listening and working share this, so the panel cannot change shape when the key is released.
     static let compactHeight: CGFloat = 32
     static let weightSize: CGFloat = 22
     static let weightMarkHeight: CGFloat = 10
+    static let workingOrbSize: CGFloat = 40
     /// The disc an insertion is drawn in.
     static let badgeSize: CGFloat = 26
     static let clipboardHeight: CGFloat = 28
@@ -480,47 +483,28 @@ private struct LevelMeterView: View {
     }
 }
 
-/// Working: three dots keep walking while work remains.
-private struct WorkingDots: View {
-    /// When the row appeared, so every dot walks off one clock.
+/// Working: three bars rise and settle in turn while work remains.
+private struct SettlingBars: View {
+    /// When the bars appeared, so every bar moves off one clock.
     @State private var began = Date.now
 
     var body: some View {
         let motion = MotionBudgetObserver.shared.budget
         TimelineView(
-            .animation(minimumInterval: motion.dockFrameInterval, paused: !motion.workingDotsMove)
+            .animation(minimumInterval: motion.dockFrameInterval, paused: !motion.workingBarsMove)
         ) { timeline in
             let elapsed = timeline.date.timeIntervalSince(began)
-            HStack(spacing: DockMetrics.dotSpacing) {
-                ForEach(0..<DockMetrics.dotCount, id: \.self) { index in
-                    let lift = motion.workingDotsMove ? Self.lift(elapsed, index) : Self.stillLift
-                    Circle()
-                        .fill(Color.dockActive)
-                        .frame(width: DockMetrics.dotSize, height: DockMetrics.dotSize)
-                        .scaleEffect(0.72 + 0.28 * lift)
-                        .opacity(0.34 + 0.66 * lift)
+            HStack(spacing: DockMetrics.workingBarSpacing) {
+                ForEach(Array(DockMetrics.workingBarHeights.enumerated()), id: \.offset) { index, height in
+                    Capsule()
+                        .fill(.primary)
+                        .frame(width: DockMetrics.workingBarWidth, height: height)
+                        .scaleEffect(
+                            x: 1, y: motion.workingBarsMove ? DockMetrics.workingStretch(elapsed, index) : 1)
                 }
             }
         }
-        .frame(width: DockMetrics.meterWidth, height: DockMetrics.meterHeight)
     }
-
-    /// How lit this dot is, 0 at rest and 1 at its brightest, each one a little behind the last.
-    static func lift(_ elapsed: TimeInterval, _ index: Int) -> Double {
-        var phase = ((elapsed - Double(index) * Self.stagger) / Self.cycle)
-            .truncatingRemainder(dividingBy: 1)
-        if phase < 0 { phase += 1 }
-        return sin(phase * .pi)
-    }
-
-    /// How lit every dot is while Reduce Motion holds them still: fully, so the row still reads as working.
-    static let stillLift = 1.0
-
-    /// How long one walk across the three dots takes.
-    private static let cycle = 1.05
-
-    /// How far behind each dot follows the one to its left, which is what makes the walk read leftwards.
-    private static let stagger = 0.16
 }
 
 /// A tick, drawn on the mark's own grid so its weight sits with everything around it.
@@ -618,10 +602,25 @@ extension DockMetrics {
     static let meterQuietOpacity: CGFloat = 0.62
     static let markTickHeight: CGFloat = 14
 
-    /// The working dots: three, because that is the shape everybody already reads as "still going".
-    static let dotCount = 3
-    static let dotSize: CGFloat = 5
-    static let dotSpacing: CGFloat = 6
+    /// The working bars at full height, the same three the idle orb wears.
+    static let workingBarHeights: [CGFloat] = [8, 14, 10]
+    static let workingBarWidth: CGFloat = 3
+    static let workingBarSpacing: CGFloat = 3
+    /// How long one bar takes to rise and settle.
+    static let workingCycle: TimeInterval = 1
+    /// How far behind each bar moves the one to its left.
+    static let workingStagger: TimeInterval = 0.15
+    /// The share of its height a bar settles to.
+    static let workingRest: CGFloat = 0.4
+
+    /// How tall this bar stands as a share of its height: `workingRest` settled, 1 at the top of its rise.
+    static func workingStretch(_ elapsed: TimeInterval, _ index: Int) -> CGFloat {
+        var phase = ((elapsed - Double(index) * workingStagger) / workingCycle)
+            .truncatingRemainder(dividingBy: 1)
+        if phase < 0 { phase += 1 }
+        let rise = (1 - cos(phase * 2 * .pi)) / 2
+        return workingRest + (1 - workingRest) * CGFloat(rise)
+    }
 
     /// Draws the live microphone meter as a scrolling row of capsules.
     static func drawBars(

@@ -9,7 +9,8 @@ the two things that are not obvious from the code.
 | --- | --- | --- |
 | Resting grip | 9 × 34 | Three dots drawn straight on the desktop; no slab, because a slab around nine points reads as a box somebody forgot to delete. Six points of invisible hoverable padding all round. |
 | Hovered | orb 30 + hint 30 high | The orb keeps the grip's side so it stays under the pointer |
-| Listening / working | 32 high | Identical footprint, so the panel cannot change shape at the moment the key is released |
+| Listening | 32 high | The mark on the anchored edge and the live meter |
+| Working | 40-point orb | Three bars rising and settling in turn, for as long as there is work left |
 | Inserted | 26-point disc | A success needs no words: the text is already in the document |
 | Nothing heard, too short | 28 high, words up to 200 wide | The struck level with its sentence, readable at rest; a too-short hold says to hold longer |
 | Copied, not typed | 28 high | ⌘V and "Copied, not typed" at rest, kept up as long as a failure; the reason and the Fix button under the pointer |
@@ -42,11 +43,11 @@ fails when one would need a fourth line, and the whole notice is on the pointer 
   `MotionBudget`; see `Docs/performance.md`.
 - Meter width is fixed at 56 points; how many bars fit is a consequence of the width.
 - `meterAmplitude` 0.9 keeps a loud syllable from touching the glass.
-- Working is three dots walking left to right, in the meter's own 56 points so the pill keeps
-  its width. It runs for as long as there is work left, which includes the wait for the
-  application to take the words: transcribing, tidying and inserting are one wait to the
-  person waiting, so they are one animation and one sentence. Under Reduce Motion the three
-  dots hold still and fully lit, per `MotionBudget`.
+- Working is a 40-point glass orb whose three bars rise to full height and settle to 40% in
+  turn, each 0.15 s behind the one to its left, over one second. It runs for as long as there
+  is work left, which includes the wait for the application to take the words: transcribing,
+  tidying and inserting are one wait to the person waiting, so they are one animation and one
+  sentence. Under Reduce Motion the bars hold still at full height, per `MotionBudget`.
 - It used to resolve instead — 0.34 s settling the row the voice left behind, then a 0.3 s
   spring folding the bars into a tick — on the reasoning that a loop is the animation of a
   wait with no end. The wait does have an end, but the animation reached it first: the tick
