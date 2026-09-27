@@ -108,6 +108,24 @@ relies on. `Docs/bakeoff.md` compares the engines; `Docs/offline.md` states the 
   12.3% to 18.4%. With both, none of those, every run gives identical text, and overall WER is
   11.8%. English transcripts are unchanged byte for byte.
 
+## A short piece the recogniser wrote twice
+
+- In noise, a short clip can come back as its sentence written twice, often with each copy in
+  quotes. For example, a 2.76 s clip of a 7-word Hinglish sentence came back as 14 words. A
+  sentence said twice does not compress anywhere near 2.4, so the compression check above cannot
+  catch this.
+- `RecognitionLoop.undone`, run on every piece `BackedSpeechEngine` transcribes, keeps one copy
+  only when all of these hold: the piece is an even run of at least six words; its two halves
+  differ by no more than 20% word error rate; and the words come faster than 4.5 a second of
+  speech. A piece that fails any one of these is left exactly as the recogniser wrote it. So a
+  sentence really said twice, in a piece long enough to hold both copies, keeps both.
+- 4.5 words a second is set above the corpus recorder's own "this take was cut off" line (a
+  passage read faster than 2.5 / 0.6, about 4.2 words a second) and below the 5.1 of the looped
+  clip. It is not yet measured against recorded speech. Measure it with the eval corpus before
+  lowering it.
+- Double quotes that open the first word and close the last are taken off when there are no
+  other quotes in the piece. The recogniser writes these; the speaker did not say them.
+
 ## What Devanagari costs, and why Hindi is still decoded in it
 
 Hindi is decoded in Devanagari and romanised afterwards (`Docs/latin-output.md`), so the decoder
