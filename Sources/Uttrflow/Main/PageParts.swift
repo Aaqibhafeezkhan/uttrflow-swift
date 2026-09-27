@@ -254,8 +254,10 @@ struct PageEditorField<Field: View>: View {
                 Text(label)
                     .font(.system(size: 12))
                     .foregroundStyle(PagePalette.text.opacity(0.6))
+                    .accessibilityHidden(true)
             }
             field()
+                .accessibilityLabel(label)
                 .font(.system(size: 13.5))
                 .foregroundStyle(PagePalette.text)
                 .padding(.horizontal, 12)
@@ -270,9 +272,11 @@ struct PageEditorField<Field: View>: View {
     }
 }
 
-/// A quiet icon button at the end of a table row.
+/// A quiet icon button at the end of a table row, which stays reachable by VoiceOver while its glyph is hidden.
 struct PageRowIconButton: View {
     let action: MainAction
+    /// Whether the glyph is drawn; the button itself is never hidden, since SwiftUI drops a transparent view from VoiceOver.
+    var isShown = true
     var onIntent: (MainIntent) -> Void
 
     var body: some View {
@@ -282,6 +286,7 @@ struct PageRowIconButton: View {
             Image(systemName: action.symbolName ?? "questionmark")
                 .font(.system(size: 12))
                 .foregroundStyle(action.isDestructive ? Color.criticalInk : PagePalette.text.opacity(0.5))
+                .opacity(isShown ? 1 : 0)
                 .frame(width: 22, height: 22)
                 .contentShape(.rect)
         }

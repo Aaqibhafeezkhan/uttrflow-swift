@@ -78,24 +78,30 @@ struct SnippetRowView: View {
         .background(isHovered ? PagePalette.text.opacity(0.03) : .clear)
         .contentShape(.rect)
         .onHover { isHovered = $0 }
+        .accessibilityElement(children: .contain)
         .rowActions(row.actions, onIntent: onIntent)
     }
 
-    /// Hidden rather than removed, so VoiceOver can reach Delete and the row keeps its width.
+    /// Delete's glyph waits for the pointer or the keyboard, left of Edit so Edit keeps the row's end.
     private var controls: some View {
         HStack(spacing: 2) {
             Spacer(minLength: 0)
-            ForEach(row.actions) { action in
-                if action.isDestructive {
-                    PageRowIconButton(action: action, onIntent: onIntent)
-                        .revealedInRow(action.id, isHovered: isHovered, focusedControl: $focusedControl)
-                } else {
-                    PageRowIconButton(action: action, onIntent: onIntent)
-                        .focused($focusedControl, equals: action.id)
-                }
+            ForEach(trailingOrder) { action in
+                PageRowIconButton(
+                    action: action,
+                    isShown: !action.isDestructive
+                        || RowReveal.isDrawn(isHovered: isHovered, focusedControl: focusedControl),
+                    onIntent: onIntent
+                )
+                .focused($focusedControl, equals: action.id)
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    /// Delete first, so the always-drawn Edit ends the row where the design puts it.
+    private var trailingOrder: [MainAction] {
+        row.actions.filter(\.isDestructive) + row.actions.filter { !$0.isDestructive }
     }
 }
 

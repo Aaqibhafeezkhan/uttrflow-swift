@@ -107,8 +107,8 @@ struct DictionaryRowView: View {
         .background(isHovered ? PagePalette.text.opacity(0.03) : .clear)
         .contentShape(.rect)
         .onHover { isHovered = $0 }
-        .rowActions(row.actions, onIntent: onIntent)
         .accessibilityElement(children: .contain)
+        .rowActions(row.actions, onIntent: onIntent)
     }
 
     /// Amber once undone, red when the undos are what is retiring it, quiet otherwise.
@@ -117,14 +117,18 @@ struct DictionaryRowView: View {
         return row.hasBeenUndone ? PagePalette.clipboardInk : PagePalette.faint
     }
 
-    /// Restore is drawn at rest on a retired word; Delete waits for the pointer but is always built.
+    /// Restore is drawn at rest on a retired word; Delete's glyph waits for the pointer or the keyboard.
     private var controls: some View {
         HStack(spacing: 4) {
             Spacer(minLength: 0)
             ForEach(row.actions) { action in
                 if action.isDestructive {
-                    PageRowIconButton(action: action, onIntent: onIntent)
-                        .revealedInRow(action.id, isHovered: isHovered, focusedControl: $focusedControl)
+                    PageRowIconButton(
+                        action: action,
+                        isShown: RowReveal.isDrawn(isHovered: isHovered, focusedControl: focusedControl),
+                        onIntent: onIntent
+                    )
+                    .focused($focusedControl, equals: action.id)
                 } else {
                     Button(action.title) { onIntent(action.intent) }
                         .buttonStyle(.plain)
