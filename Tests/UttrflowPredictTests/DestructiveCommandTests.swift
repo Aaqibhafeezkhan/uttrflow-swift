@@ -266,4 +266,27 @@ struct DestructiveCommandTests {
     func wrappedOrdinaryCommands(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A destroying command after a shell reserved word is recognised, in a loop, a condition or a negation.",
+        arguments: [
+            #"for f in *.log; do rm -rf "$f"; done"#, "if true; then rm -rf build; fi",
+            "if [ -d x ]; then ls; else rm -rf build; fi", "if false; then ls; elif true; then rm -rf x; fi",
+            "! rm -rf dist", "if rm -rf build; then echo gone; fi", "while true; do rm x; done",
+            "until false; do rm x; done", "while sudo rm -rf x; do sleep 1; done",
+            "for b in a b; do git branch -D $b; done",
+        ])
+    func destroyersAfterReservedWords(_ line: String) {
+        #expect(DestructiveCommand.matches(line), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A loop or a condition whose commands destroy nothing is ordinary.",
+        arguments: [
+            "for f in a b; do echo $f; done", "if true; then ls; fi", "! grep -q x notes.txt",
+            "while true; do date; done",
+        ])
+    func ordinaryCompoundCommands(_ line: String) {
+        #expect(!DestructiveCommand.matches(line), "\(line) should be ordinary")
+    }
 }

@@ -57,6 +57,9 @@ public enum DestructiveCommand {
         "chroot": Wrapper(valued: ["-u", "-g", "-G"], operands: 1), "pkexec": Wrapper(valued: ["--user"]),
     ]
 
+    /// Shell reserved words that stand in front of the command a clause runs, as a loop's `do` and an `if`'s `then` do.
+    private static let reservedWords: Set<String> = ["do", "then", "else", "elif", "if", "while", "until", "!"]
+
     /// Programs that destroy whatever they are pointed at.
     private static let destroyers: Set<String> = [
         "rm", "rmdir", "shred", "srm", "unlink", "dd", "mkfs", "fdisk", "parted", "shutdown", "reboot",
@@ -70,13 +73,13 @@ public enum DestructiveCommand {
         case named(String, [String])
     }
 
-    /// The program a parsed clause runs, read past assignments and every wrapper.
+    /// The program a parsed clause runs, read past assignments, reserved words and every wrapper.
     private static func command(in tokens: [ShellWord]) -> Command {
         var rest = tokens[...]
         while let first = rest.first {
             guard !first.isUnresolved else { return .unresolved }
             let name = programName(first.text)
-            if TerminalLineCheck.isAssignment(first.text), rest.count > 1 {
+            if TerminalLineCheck.isAssignment(first.text) || reservedWords.contains(name), rest.count > 1 {
                 rest.removeFirst()
                 continue
             }
