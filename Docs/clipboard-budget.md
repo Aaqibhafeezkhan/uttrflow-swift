@@ -52,12 +52,45 @@ headlessly on a 5120 × 2880 PNG of 0.3 MB: the TIFF in between was 56 MB and pe
 about 233 MB for each picture copied, whether or not the panel was ever opened. Reading the same
 bytes as they are and the size from the header raises it by about 3 MB.
 
-There is no size cap on a picture, and this is deliberate. `largestClip` bounds text because a
-long clip is rewritten into the history file on every copy; a picture is a file of its own,
-written once and never rewritten, and its pool is bounded on disk by `disk`, which evicts the
-least recently used pictures. With the uncompressed copy gone, what a large picture costs is its
-own compressed size, and declining to remember a screenshot because it is big would be a
-surprise nobody could explain.
+## The largest picture
+
+A picture is judged by its header before a pixel of it is decoded. ImageIO reads the width and
+height from the file's properties, and two numbers in `ClipboardBudget` decide what happens next:
+
+| Bound | Standard | What it does |
+| --- | --- | --- |
+| `largestPicture` | 150 megapixels | A header claiming more is refused: nothing is decoded and no clip is made. |
+| `pictureEdge` | 4096 pixels | A picture that has to be converted is decoded no longer than this on its longest side. |
+
+A refusal is like `largestClip`'s: the picture is still on the system clipboard, and the log says
+`a copied picture of W×H is over the bound; it is not kept`. Zero turns either bound off.
+
+A picture over the edge is downsampled while it is decoded, with
+`CGImageSourceCreateThumbnailAtIndex`, so its full-size bitmap never exists. PNG bytes within
+`largestPicture` are still kept as they are, whatever their size, because keeping them decodes
+nothing; the panel's thumbnail is drawn from them at 68 pixels by the same ImageIO call.
+
+The flavours are asked for compressed first — PNG, HEIC, JPEG — and TIFF last. Asking the
+pasteboard for TIFF when the writer offered only JPEG or HEIC makes macOS translate the picture
+into an uncompressed TIFF inside Uttrflow's own process, before any of this code sees a byte.
+
+**Measured**, headlessly on this Mac, for a 12000 × 12000 picture, peak memory above the bytes
+read from the clipboard:
+
+| Copied as | Before | After |
+| --- | --- | --- |
+| JPEG, 4.3 MB, through a pasteboard | 1,464 MB, 28.9 s | 359 MB, 2.5 s, stored 4096 × 4096 |
+| HEIC, 0.3 MB, through a pasteboard | 1,782 MB, 10.2 s | 148 MB, 1.0 s, stored 4096 × 4096 |
+| TIFF, 576 MB, its bytes | 584 MB, 5.4 s | 283 MB, 3.5 s, stored 4096 × 4096 |
+| PNG, 2.6 MB | 1 MB, kept as it is | 1 MB, kept as it is |
+
+The ceiling sits just above the picture measured here, so the largest picture that is decoded at
+all is one of this size. The edge keeps a 4032 × 3024 photograph and a 4K screen at full size. A
+smaller edge costs less — about 90 MB at 2048 for the same pictures — and keeps less of the
+picture that is pasted back.
+
+The work runs on the watcher's read queue, never the main thread. `readLimit` stops the watcher
+waiting for it; these bounds are what stop the work itself.
 
 ## Kept
 

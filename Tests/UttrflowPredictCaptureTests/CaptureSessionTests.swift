@@ -159,6 +159,35 @@ struct CaptureSessionTests {
         #expect(await recorder.texts == ["git"])
     }
 
+    @Test("A dictation followed by one typed key and Return writes nothing at a typed line's weight.")
+    func aDictatedLineIsNotWritten() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let chat = FieldReading(bundleIdentifier: "com.example.chat", role: "AXTextArea")
+        let session = try await session(scratch, recorder, allowing: ["com.example.chat"])
+        let line = "can we move the review to thursday afternoon?"
+        for event in CaptureEvent.marking([.keystroke(line, at: start)], insertedAt: start) {
+            #expect(try await session.handle(event, in: chat) == .nothing)
+        }
+        #expect(try await session.handle(.returnPressed(at: start), in: chat) == .nothing)
+        #expect(await recorder.texts.isEmpty)
+    }
+
+    @Test("A paste followed by Return writes nothing, and the next line typed by hand is written.")
+    func aPastedLineIsNotWritten() async throws {
+        let scratch = Scratch()
+        let recorder = Recorder()
+        let chat = FieldReading(bundleIdentifier: "com.example.chat", role: "AXTextArea")
+        let session = try await session(scratch, recorder, allowing: ["com.example.chat"])
+        let pasted = ReturnCatchUp.events(read: "https://example.com/some/long/link", handed: "", at: start)
+        for event in CaptureEvent.marking(pasted, insertedAt: start) {
+            _ = try await session.handle(event, in: chat)
+        }
+        #expect(await recorder.texts.isEmpty)
+        _ = try await session.handle(.keystroke("thanks", at: start), in: chat)
+        #expect(try await session.handle(.returnPressed(at: start), in: chat) == .recorded("thanks"))
+    }
+
     @Test("A password field is refused, so what is typed into it is never written.")
     func secureFieldsAreRefused() async throws {
         let scratch = Scratch()

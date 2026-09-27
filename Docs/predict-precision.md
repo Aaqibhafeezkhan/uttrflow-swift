@@ -92,6 +92,19 @@ is now the worst category, and no list can vouch for a sentence. The scorer alre
 drawn today without ever being scored. Scoring it and drawing only what clears a floor turns
 precision into a dial rather than an argument. Measured last, because it costs a second pass.
 
+**P7 — A generated line keeps to this person's shape. Done, not yet measured.** Both models'
+lines pass through `CompletionText.finished`, so the rules hold on either path. Prose — a reply
+or a document's line — ends at its first sentence end, since the tail of a run-on line is where
+a clause goes wrong; a stop inside a number, an address, an abbreviation or an ellipsis is read
+past. Prose that repeats five or more screen words in a row that this person has not written
+here is refused: the other person's last message is the likeliest thing for a small model to
+echo, and it is never the reply. Commands are exempt, because they reuse the paths and names on
+screen. Every continuation is held to three times this person's typical line here (never under
+16 characters), and with no history to the register's own limit: 80 for a reply, 120 for a
+command, 160 for a document. A reply's token budget follows the typical line too, so a terse
+person is not given a paragraph's room. The `chat/echo` fixtures cover a reply that opens as the
+last message does.
+
 ## What this trades away
 
 Coverage falls, and some of it will feel like a loss: the address bar goes quiet unless the person

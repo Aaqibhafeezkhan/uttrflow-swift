@@ -24,6 +24,9 @@ moment the person returns, because it shares their keyboard.
 
 | Found by | Symptom | Root cause | Fix |
 |---|---|---|---|
+| Live test, Chrome | no suggestion in any Chrome input or textarea: value and selection read, `caret=nil`, no placement | Chrome answers every caret bound with a zero-size rectangle until its full Accessibility tree is on, and it ignores `AXManualAccessibility` | a text field read with no caret turns the tree on once per process — `AXManualAccessibility` first, `AXEnhancedUserInterface` for Chromium browsers only, since elsewhere it slows window animations — and stopping suggestions turns off only what was turned on here (`FullTreeSwitch`); Chrome answers the write as not implemented and applies it, so the value read back decides; the caret appeared about two seconds after the switch |
+| Live test, Chrome | a browser SQL editor with a query typed: empty 2×1 textarea focused, no line, no caret | the editor renders its own text and keeps an empty input at the caret, so the field holds nothing to complete | an empty text field no wider than a caret has its line read off the rendered row it sits on, the row chosen by height and by reaching the caret so a gutter number is never taken for it, split at the input's position, and walked within 400 elements and 40 ms (`HiddenInputLine`) |
+| Static review | a field that refuses `AXSelectedTextRange` never gets a caret, so the text-marker fallback never runs | the caret was computed only when the range answered | the selection is measured in text markers from the field's start where the range is refused, and the caret falls back to the marker bounds and the one-pixel field even with no range (`CaretLocator`) |
 | Grounding the older terminal scenarios | `git ` → nothing, 15 times: the pass chose `checkout` and ran on into `-m HEAD -- Sources/Login/Session.swift`, and the sieve denied `HEAD` as a branch; `cd ~` and `cat ~` quiet as `notOnThisMachine`; `cd .` quiet | a branch verb's argument was held to the branch list, which never holds `HEAD`, `HEAD~1`, a tag, a hash or `origin/main`; a lone `~` was looked up as a directory name; a lone `.` after `cd` was offered only hidden names, though `..` is what it usually begins | a ref form is git's to accept, not the list's to deny (`isRef`); the reader lists tags and remote branches beside the local ones; `~` alone is free; `.` after a directory command is open |
 | Grounding the older terminal scenarios | `npm r` → `run start`, three times, `start` a script the project does not declare — denied, so nothing drawn | the pass was held to the verb and then free to invent the script | where a runner's scripts are listed, each `run script` is offered whole and bare `run` is not, so the choice covers both words; the model chose `run build` and `run dev` after |
 | `terminal/cwd` run 1 | 43 of 54 grounded fixtures drawn nothing, every one counted as invented, while the raw pass read ` Sources`, ` verify`, ` checkout main` — all right | the sieve added after the model (A4) took the lines it was handed as suffixes and attested the words of `typed + line`, so `cd S` + `cd Sources` was judged as `cd Scd Sources`; the app hands it whole lines, so since A4 shipped it had been denying by accident and letting through by accident | `Verifier.standing` takes whole lines and `Verification.words(of:addedAfter:)` reads the words past the typing; the grounded fixtures are the test that would have caught it, which is why A5 exists |
@@ -65,10 +68,11 @@ moment the person returns, because it shares their keyboard.
   the tap already sees, assembled into the current line when the field says nothing — and a place
   to draw that does not need a caret rectangle. Both are design work, recorded here rather than
   attempted in passing.
-- **Browser code editors.** Fixed 2026-09-05 for the two ways they hide: a zero-size caret rectangle
-  (the hidden textarea parked at the caret is taken for the caret) and a system-wide focused element
-  that is the word under the caret while typing (the application's focused element is asked). Live
-  confirmation in Chrome is pending.
+- **Browser code editors.** Fixed for the three ways they hide: a zero-size caret rectangle
+  (the hidden textarea parked at the caret is taken for the caret), a system-wide focused element
+  that is the word under the caret while typing (the application's focused element is asked), and
+  an empty input with no line of its own (the line is read off the rendered row). Confirmed live in
+  Chrome on a SQL-mode editor; accepting a completion into such an editor is not yet measured.
 - **Idle drafts in a chat composer.** Fixed: `CommitPolicy.whereReturnSends` (used by the
   coordinator, see `Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift:118-123`) rejects
   idle, focus-loss and deactivation commits for messaging apps, so an abandoned or half-typed

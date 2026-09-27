@@ -2,7 +2,7 @@ import UttrflowEval
 import UttrflowPredict
 
 extension FixtureCatalogue {
-    /// Six conversations on screen, each with how this person replies in it; a reply may be anything in register.
+    /// Seven conversations on screen, each with how this person replies in it; a reply may be anything in register.
     static let chat: [Scenario] = [
         chat(
             "friend", title: "Priya",
@@ -129,6 +129,21 @@ extension FixtureCatalogue {
                 "can you resend the confirmation email",
                 "the package arrived damaged", "yes that works, thanks", "what is the courier's number",
                 "please escalate this", "no thanks, that's all",
+            ]),
+        // The last message opens as the replies do, so a reply that repeats it is wrong however plausible.
+        chat(
+            "echo", title: "Sam",
+            thread: """
+                Sam: morning, quick one
+                Me: hey, what's up
+                Sam: the client call moved to 3
+                Sam: Can you send the deck by Friday?
+                """,
+            own: ["hey, what's up", "on it", "sounds good", "will do", "can you give me till monday"],
+            lines: [
+                "Can you give me till Monday?", "Can you share the old version first?",
+                "Can I send it Thursday instead?", "Can we push the call to 4?",
+                Line("sure, sending it tonight", determinacy: .prose),
             ]),
     ]
 
