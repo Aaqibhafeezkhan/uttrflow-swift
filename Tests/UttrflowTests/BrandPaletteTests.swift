@@ -136,3 +136,65 @@ struct SemanticInkContrastTests {
         #expect(blend(0xFF_FFFF, over: 0x00_0000, share: 0.5) == 0x80_8080)
     }
 }
+
+/// The redesign's tokens are read against the grounds they will sit on.
+@Suite("The redesign tokens")
+struct RedesignTokenTests {
+    typealias R = BrandPalette.Redesign
+
+    /// A layer composited over a ground, per appearance.
+    static func composite(_ layer: BrandLayer, over ground: BrandTone) -> BrandTone {
+        BrandTone(
+            dark: blend(layer.tone.dark, over: ground.dark, share: layer.darkOpacity),
+            light: blend(layer.tone.light, over: ground.light, share: layer.lightOpacity))
+    }
+
+    /// The page and a card on it, in both appearances.
+    static let grounds: [(String, BrandTone)] = [
+        ("page", R.pageGround),
+        ("window", R.windowGround),
+        ("card", composite(R.cardFill, over: R.windowGround)),
+    ]
+
+    @Test("holds the page and window grounds and the aurora stops")
+    func keyValues() {
+        #expect(R.pageGround == BrandTone(dark: 0x0B_0C10, light: 0xF2_F1EC))
+        #expect(R.windowGround.dark == 0x0C_0D14)
+        #expect(R.auroraStops == [0x7A_3FD1, 0x4B_3FC0, 0x1F_8FB0, 0x2F_E0CF])
+        #expect(R.cardFill.lightOpacity == 1)
+        #expect(R.sidebarIsland.tone.light == 0x12_101E)
+    }
+
+    @Test("every text tone clears 4.5:1 on the page, the window and a card, in both appearances")
+    func textClearsAA() {
+        let texts: [(String, BrandTone)] = [
+            ("strong", R.textStrong),
+            ("soft", Self.composite(R.textSoft, over: R.windowGround)),
+            ("quiet", Self.composite(R.textQuiet, over: R.windowGround)),
+        ]
+        for (name, text) in texts {
+            for (surface, ground) in Self.grounds {
+                let dark = contrastRatio(text.dark, ground.dark)
+                let light = contrastRatio(text.light, ground.light)
+                #expect(dark >= 4.5, "\(name) on dark \(surface) is \(dark)")
+                #expect(light >= 4.5, "\(name) on light \(surface) is \(light)")
+            }
+        }
+    }
+
+    @Test("every role accent clears the 3:1 a mark needs on the page and a card")
+    func accentsClearMarks() {
+        for accent in [R.dictationAccent, R.suggestionAccent, R.clipboardAccent, R.infoAccent] {
+            for (surface, ground) in Self.grounds {
+                #expect(contrastRatio(accent.dark, ground.dark) >= 3, "dark \(surface)")
+                #expect(contrastRatio(accent.light, ground.light) >= 3, "light \(surface)")
+            }
+        }
+    }
+
+    @Test("the sidebar island stays dark in the light appearance")
+    func islandStaysDark() {
+        #expect(relativeLuminance(R.sidebarIsland.tone.light) < 0.02)
+        #expect(contrastRatio(R.textStrong.dark, R.sidebarIsland.tone.light) >= 4.5)
+    }
+}
