@@ -354,24 +354,7 @@ struct SidebarAccountCard: View {
     @ViewBuilder private func avatar(size: CGFloat) -> some View {
         switch account {
         case .signedIn(let initials, _, _):
-            if let picture, let image = NSImage(data: picture) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: size, height: size)
-                    .clipShape(.circle)
-            } else {
-                Text(initials)
-                    .font(BrandFont.display(size: size * 0.39, weight: .semibold))
-                    .foregroundStyle(IslandPalette.avatarInk)
-                    .frame(width: size, height: size)
-                    .background(
-                        LinearGradient(
-                            colors: IslandPalette.avatar, startPoint: .topLeading,
-                            endPoint: .bottomTrailing),
-                        in: .circle)
-            }
+            SidebarAvatar(initials: initials, picture: picture, size: size)
         case .signedOut:
             Image(systemName: "person.crop.circle")
                 .font(.system(size: size * 0.6, weight: .regular))

@@ -1,6 +1,7 @@
 // Tests for what home's views decide: the waveform's bars, the loading bar, the tile columns and the mood pictures.
 
 import AppKit
+import ImageIO
 import Testing
 import UttrflowUX
 
@@ -40,14 +41,32 @@ struct HomeHeroViewTests {
         #expect(HomeStatTileView.columns(forWidth: four - 1) == 2)
     }
 
-    @Test("every mood's picture ships in the bundle")
-    func moodPictures() {
+    @Test("every mood's picture ships, decoded no larger than it is drawn, and only the latest is kept")
+    func moodPictures() async {
         for mood in HomeMood.allCases {
-            let image = MoodPictures.image(for: mood)
-            #expect(image != nil, "\(mood.imageName) is missing")
-            #expect((image?.size.width ?? 0) > 0)
-            #expect(MoodPictures.image(for: mood) === image)
+            let picture = await MoodPictures.picture(for: mood)
+            #expect(picture != nil, "\(mood.imageName) is missing")
+            let image = picture?.image
+            #expect(max(image?.width ?? 0, image?.height ?? 0) <= MoodPictures.pixels)
+            #expect(Double(image?.width ?? 0) >= HomeMoodPicture.widest * 2 - 1)
+            #expect(MoodPictures.cached(for: mood)?.image === image)
         }
+        #expect(MoodPictures.cached(for: .morning) == nil)
+    }
+
+    @Test("an account picture is decoded to avatar size and kept for the same bytes")
+    func accountPicture() async throws {
+        let image = try #require(await MoodPictures.picture(for: .evening)?.image)
+        let data = NSMutableData()
+        let destination = try #require(
+            CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, nil)
+        #expect(CGImageDestinationFinalize(destination))
+        let bytes = data as Data
+        let avatar = try #require(await AccountPictures.image(for: bytes))
+        #expect(max(avatar.width, avatar.height) <= AccountPictures.pixels)
+        #expect(AccountPictures.cached(for: bytes) === avatar)
+        #expect(AccountPictures.cached(for: Data([1, 2, 3])) == nil)
     }
 
     @Test("each stat tile has its own icon")
