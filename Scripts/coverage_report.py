@@ -150,6 +150,7 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/MainWindowView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/MainPieces.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HistoryPageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/HistoryRailRow.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/RecordingPlayback.swift": "plays a sound out of the speakers",
     "Uttrflow/Main/DiagnosticsPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Dock/DockPanelController.swift": "owns an on-screen floating window",

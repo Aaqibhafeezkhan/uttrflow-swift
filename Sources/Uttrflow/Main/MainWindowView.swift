@@ -47,8 +47,8 @@ struct MainWindowView: View {
 
     private var pane: some View {
         VStack(spacing: 0) {
-            // The band under the title bar, which the traffic lights and the window's drag own; Home draws its own.
-            if model.page != .home {
+            // The band under the title bar, which the traffic lights and the window's drag own; Home and History draw their own.
+            if !drawsOwnHeader {
                 Color.clear.frame(height: MainMetrics.toolbarHeight)
                 OrbitPageHeader(
                     chrome: model.chrome, query: $model.searchQuery,
@@ -61,16 +61,21 @@ struct MainWindowView: View {
                     .padding(.top, 12)
             }
             page
-                // Home sets its own margins; every other page is a document and wants these.
-                .padding(.horizontal, model.page == .home ? 0 : MainMetrics.contentPadding)
-                .padding(.top, model.page == .home ? 0 : 18)
-                .padding(.bottom, model.page == .home ? 0 : 14)
+                // Home and History set their own margins; every other page is a document and wants these.
+                .padding(.horizontal, drawsOwnHeader ? 0 : MainMetrics.contentPadding)
+                .padding(.top, drawsOwnHeader ? 0 : 18)
+                .padding(.bottom, drawsOwnHeader ? 0 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         // The field holds what is being typed, so it is only put back in step when the page changes.
         .onChange(of: model.page) { _, _ in
             model.searchQuery = model.chrome.search?.query ?? ""
         }
+    }
+
+    /// Whether the page draws its own header over the window's top edge, as the redesigned pages do.
+    private var drawsOwnHeader: Bool {
+        model.page == .home || model.page == .history
     }
 
     @ViewBuilder private var page: some View {
@@ -80,10 +85,9 @@ struct MainWindowView: View {
         case .dictation:
             DictationPageView(presentation: model.content.dictation, onIntent: onIntent)
         case .history:
-            ScrollView {
-                HistoryPageView(presentation: model.content.history, onIntent: onIntent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            HistoryPageView(
+                presentation: model.content.history, chrome: model.chrome, query: $model.searchQuery,
+                searchFocusRequest: model.searchFocusRequest, onIntent: onIntent, onSearch: onSearch)
         case .dictionary:
             DictionaryPageView(
                 presentation: model.content.dictionary, draft: reporting($model.wordDraft),
