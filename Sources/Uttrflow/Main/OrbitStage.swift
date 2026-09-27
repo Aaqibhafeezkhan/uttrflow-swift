@@ -178,7 +178,7 @@ struct ClipboardRail: View {
                 Spacer(minLength: 6)
                 ForEach(Array(demonstration.keys.enumerated()), id: \.offset) { _, key in
                     Text(key)
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(.system(size: 10, weight: .medium))
                         .padding(.horizontal, 5)
                         .frame(minWidth: 17, minHeight: 17)
                         .cardSurface(.primary.opacity(0.06), cornerRadius: 4)
@@ -215,7 +215,7 @@ struct ClipboardRail: View {
             // The chosen row wears the key that would paste it; the masked one says why it is dots.
             if row.isMasked {
                 Text("hidden")
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 10))
                     .foregroundStyle(Color.mainDim)
             } else if isChosen {
                 Text("⏎")

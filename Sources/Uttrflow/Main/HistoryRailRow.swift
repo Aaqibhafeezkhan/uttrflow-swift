@@ -145,7 +145,7 @@ struct HistoryRailRow: View {
                 if row.isFlagged {
                     Label("Flagged", systemImage: "flag")
                         .labelStyle(HistoryTagLabelStyle())
-                        .foregroundStyle(PagePalette.clipboard)
+                        .foregroundStyle(PagePalette.clipboardInk)
                 }
             }
             .font(.system(size: 11.5))
@@ -187,7 +187,7 @@ struct HistoryRecordingLine: View {
             pill
             Text(recording.message)
                 .font(.system(size: 12.5))
-                .foregroundStyle(PagePalette.clipboard)
+                .foregroundStyle(PagePalette.clipboardInk)
                 .lineLimit(1)
             Spacer(minLength: 8)
             if let retry = recording.retry {
@@ -230,7 +230,7 @@ struct HistoryRecordingLine: View {
                 .frame(width: 26 * 4, height: 18)
             Text(recording.duration)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(PagePalette.clipboard)
+                .foregroundStyle(PagePalette.clipboardInk)
                 .fixedSize()
         }
         .fixedSize()

@@ -131,6 +131,8 @@ enum BrandPalette {
         /// The sidebar island, which stays dark in the light appearance.
         static let sidebarIsland = BrandLayer(
             tone: BrandTone(dark: 0x10_0F1C, light: 0x12_101E), darkOpacity: 0.92, lightOpacity: 1)
+        /// The island's headings and quiet words, white at the opacity that clears 4.5:1 on it.
+        static let islandQuiet = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.55, lightOpacity: 0.55)
         /// Headline and body text.
         static let textStrong = BrandTone(dark: 0xFF_FFFF, light: 0x10_1316)
         /// Secondary text.
@@ -139,12 +141,16 @@ enum BrandPalette {
         /// The quietest text.
         static let textQuiet = BrandLayer(
             tone: BrandTone(dark: 0xFF_FFFF, light: 0x5C_6866), darkOpacity: 0.55, lightOpacity: 1)
+        /// Captions, headings and hints in the page's ink, clearing 4.5:1 on the page, a card and their films.
+        static let textFaint = BrandLayer(tone: textStrong, darkOpacity: 0.55, lightOpacity: 0.66)
         /// Dictation's accent.
         static let dictationAccent = BrandTone(dark: 0x5F_E0D3, light: 0x12_8077)
         /// The accent for AI suggestions.
         static let suggestionAccent = BrandTone(dark: 0xC4_9BF5, light: 0x7A_4FC4)
         /// The clipboard's accent.
         static let clipboardAccent = BrandTone(dark: 0xFF_B05C, light: 0xB5_650F)
+        /// The clipboard's amber as words, deepened in the light to clear 4.5:1 on the page and a card.
+        static let clipboardInk = BrandTone(dark: clipboardAccent.dark, light: Semantic.warningInk.light)
         /// The accent for information.
         static let infoAccent = BrandTone(dark: 0x6B_B4F5, light: 0x1E_6FC4)
         /// The aurora gradient's stops, first to last, in both appearances.
@@ -170,8 +176,10 @@ enum BrandPalette {
         static let avatarRing = BrandLayer(tone: textStrong, darkOpacity: 0.08, lightOpacity: 0.072)
         /// The profile banner's ground under its aurora, dark in both appearances.
         static let bannerGround = BrandTone(0x10_101A)
+        /// The name on the profile banner, white in both appearances because the banner stays dark.
+        static let bannerInk = BrandTone(0xFF_FFFF)
         /// The address under the name on the profile banner.
-        static let bannerSoft = BrandLayer(tone: textStrong, darkOpacity: 0.75, lightOpacity: 0.675)
+        static let bannerSoft = BrandLayer(tone: bannerInk, darkOpacity: 0.75, lightOpacity: 0.75)
         /// A glass panel's white film, which all but vanishes on the light page.
         static let glassFill = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.05, lightOpacity: 0.05)
         /// The white hairline round a glass panel, which all but vanishes on the light page.
@@ -340,11 +348,11 @@ extension BrandPalette.Redesign {
         static let buttonLabel = BrandLayer(
             tone: BrandTone(dark: 0xFF_FFFF, light: 0x5C_6866), darkOpacity: 0.7, lightOpacity: 1)
         /// The line under a status title.
-        static let detail = BrandLayer(tone: R.textStrong, darkOpacity: 0.55, lightOpacity: 0.495)
+        static let detail = BrandLayer(tone: R.textStrong, darkOpacity: 0.55, lightOpacity: 0.66)
         /// A row's words.
         static let row = BrandLayer(tone: R.textStrong, darkOpacity: 0.85, lightOpacity: 0.765)
         /// A section label and a row's glyph.
-        static let quiet = BrandLayer(tone: R.textStrong, darkOpacity: 0.45, lightOpacity: 0.405)
+        static let quiet = BrandLayer(tone: R.textStrong, darkOpacity: 0.5, lightOpacity: 0.62)
         /// The progress track and the tile's edge.
         static let track = BrandLayer(tone: R.textStrong, darkOpacity: 0.12, lightOpacity: 0.108)
         /// The rule between sections.

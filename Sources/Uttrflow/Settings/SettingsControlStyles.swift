@@ -31,7 +31,9 @@ struct SettingsSwitchStyle: ToggleStyle {
                     color: configuration.isOn ? PagePalette.dictation.opacity(0.6) : .clear,
                     radius: 6
                 )
-                .animation(.snappy(duration: 0.18), value: configuration.isOn)
+                .animation(
+                    MotionBudget.current().allowing(.snappy(duration: 0.18)), value: configuration.isOn
+                )
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -109,8 +111,8 @@ struct SettingsMenu: View {
                     .font(.system(size: 12.5))
                     .foregroundStyle(PagePalette.text)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(SettingsPalette.ink(0.5))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(PagePalette.faint)
             }
             .padding(.horizontal, 10)
             .frame(height: 28)
@@ -234,8 +236,8 @@ struct SettingsChipView: View {
             if let onRemove {
                 Button(action: onRemove) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(SettingsPalette.ink(0.5))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(PagePalette.faint)
                         .frame(width: 14, height: 14)
                         .contentShape(.rect)
                 }
@@ -314,7 +316,7 @@ struct SettingsApplicationIcon: View {
                 .overlay(
                     Image(systemName: "app")
                         .font(.system(size: 13))
-                        .foregroundStyle(SettingsPalette.ink(0.5)))
+                        .foregroundStyle(PagePalette.faint))
         }
     }
 }

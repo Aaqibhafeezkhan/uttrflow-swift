@@ -72,7 +72,7 @@ struct SettingsSearchField: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13))
-                .foregroundStyle(SettingsPalette.ink(0.45))
+                .foregroundStyle(PagePalette.faint)
             TextField(SettingsPresenter.searchPlaceholder, text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
@@ -80,7 +80,7 @@ struct SettingsSearchField: View {
             if query.isEmpty {
                 Text("⌘F")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(SettingsPalette.ink(0.45))
+                    .foregroundStyle(PagePalette.faint)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(SettingsPalette.ink(0.08), in: .rect(cornerRadius: 5))
@@ -91,7 +91,7 @@ struct SettingsSearchField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(SettingsPalette.ink(0.4))
+                        .foregroundStyle(PagePalette.faint)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear the search")

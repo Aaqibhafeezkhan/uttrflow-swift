@@ -37,7 +37,7 @@ struct MainWindowView: View {
             pane
         }
         // The one animation in the window: the sidebar's width moves the page beside it.
-        .animation(.snappy(duration: 0.22), value: model.isSidebarExpanded)
+        .animation(MotionBudget.current().allowing(.snappy(duration: 0.22)), value: model.isSidebarExpanded)
         .background(Color.redesignWindow)
         .foregroundStyle(Color.mainText, Color.mainMuted, Color.mainDim)
         // One tint at the root, so a control added later cannot arrive in the stock blue.
@@ -57,7 +57,10 @@ struct MainWindowView: View {
                     MainNoticeBar(notice: notice, onIntent: onIntent)
                         .padding(.top, 20)
                         .padding(.trailing, 20)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        // Fades in place under Reduce Motion rather than sliding from the top.
+                        .transition(
+                            MotionBudget.current().reducesMotion
+                                ? .opacity : .move(edge: .top).combined(with: .opacity))
                 }
             }
             .animation(.easeOut(duration: 0.2), value: model.content.notice)

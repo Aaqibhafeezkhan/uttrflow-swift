@@ -64,7 +64,7 @@ struct CorrectionRowView: View {
             Text("“\(row.heard)”")
                 .foregroundStyle(.secondary)
             Image(systemName: "arrow.right")
-                .font(.system(size: 9))
+                .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
             // Struck through once put back, because the word on screen is the one that was heard.
             Text(row.wrote)

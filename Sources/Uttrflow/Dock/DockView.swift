@@ -79,7 +79,7 @@ struct DockView: View {
             .fixedSize()
             .foregroundStyle(Color.dockInk)
             .scaleEffect(model.isPressed ? 0.96 : 1)
-            .animation(.spring(duration: 0.22), value: model.isPressed)
+            .animation(MotionBudget.current().allowing(.spring(duration: 0.22)), value: model.isPressed)
             .contentShape(.rect)
             // At the root: the form is replaced when recording starts and would miss the mouse-up.
             .gesture(pressGesture, including: model.presentation.action == nil ? .all : .subviews)
@@ -307,7 +307,7 @@ struct DockView: View {
         .padding(.horizontal, 9)
         .frame(height: DockMetrics.clipboardHeight)
         .glass(cornerRadius: DockMetrics.clipboardHeight / 2)
-        .animation(.spring(duration: 0.26), value: model.isHovering)
+        .animation(MotionBudget.current().allowing(.spring(duration: 0.26)), value: model.isHovering)
         .padding(DockMetrics.gripHitPadding)
     }
 
@@ -551,7 +551,7 @@ private struct MarkTick: View {
                 height: DockMetrics.markTickHeight
             )
             .task {
-                withAnimation(.easeOut(duration: 0.26)) { drawn = true }
+                withAnimation(MotionBudget.current().allowing(.easeOut(duration: 0.26))) { drawn = true }
             }
     }
 }

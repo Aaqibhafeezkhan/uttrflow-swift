@@ -32,6 +32,18 @@ struct ProfileTokenTests {
         #expect(contrastRatio(R.textStrong.dark, R.bannerGround.dark) >= 4.5)
     }
 
+    @Test("the banner's name and address clear 4.5:1 on its ground and its violet, in both appearances")
+    func bannerWordsAreLegible() {
+        let violet = BrandTone(blend(R.auroraStops[0], over: R.bannerGround.dark, share: 0.75))
+        for ground in [R.bannerGround, violet] {
+            let soft = RedesignTokenTests.composite(R.bannerSoft, over: ground)
+            #expect(contrastRatio(R.bannerInk.dark, ground.dark) >= 4.5)
+            #expect(contrastRatio(R.bannerInk.light, ground.light) >= 4.5)
+            #expect(contrastRatio(soft.dark, ground.dark) >= 4.5)
+            #expect(contrastRatio(soft.light, ground.light) >= 4.5)
+        }
+    }
+
     @Test("the glass list is a film, dark when dark and light when light")
     func glassIsAFilm() {
         let glass = RedesignTokenTests.composite(R.glassFill, over: R.windowGround)

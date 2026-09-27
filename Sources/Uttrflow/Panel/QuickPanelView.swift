@@ -371,7 +371,7 @@ struct QuickPanelView: View {
 
     private func groupHeading(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
+            .font(.system(size: 10, weight: .semibold))
             .kerning(0.6)
             .foregroundStyle(Color.panelLabelDim)
             .padding(.horizontal, 10)
@@ -547,7 +547,7 @@ struct QuickPanelView: View {
             // Only state that belongs to this clip: a pin. Time and actions live in the ⋯ menu.
             if row.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10))
                     .foregroundStyle(Color.panelAccentBright)
             }
             Button {

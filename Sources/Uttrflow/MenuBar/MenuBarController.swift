@@ -3,10 +3,17 @@ import SwiftUI
 
 import UttrflowUX
 
-/// A borderless panel that never becomes key, so a click in it leaves the caret in the app being typed into.
+/// A borderless, non-activating panel that takes the keyboard while open, so the popover works without a pointer.
 final class MenuBarPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
+    /// Called when Escape reaches the panel.
+    var onCancel: (() -> Void)?
+
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
+    }
 }
 
 /// The popover's hosting view, taking the first click because another app is always frontmost.
@@ -146,6 +153,7 @@ final class MenuBarController: NSObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.contentView = hostingView
         panel.setAccessibilityLabel("Uttrflow")
+        panel.onCancel = { [weak self] in self?.closePopover() }
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
@@ -170,6 +178,8 @@ final class MenuBarController: NSObject {
         hostPresentation()
         placePanel()
         panel.orderFrontRegardless()
+        // Key without activating, so the keyboard and VoiceOver reach the popover and the app underneath stays frontmost.
+        panel.makeKey()
         statusItem.button?.highlight(true)
         watchForDismissal()
     }

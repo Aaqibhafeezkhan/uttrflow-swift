@@ -39,6 +39,12 @@ extension View {
             .compositingGroup()
             .shadow(color: MenuBarColour.shadow, radius: 20, y: 12)
     }
+
+    /// The ring round a popover control the keyboard is on.
+    func menuBarFocusRing(_ shape: some InsettableShape, isShown: Bool) -> some View {
+        overlay(
+            shape.strokeBorder(MenuBarColour.dictation, lineWidth: 2).padding(-3).opacity(isShown ? 1 : 0))
+    }
 }
 
 // MARK: - Colours
@@ -66,7 +72,7 @@ enum MenuBarColour {
     static let keycap = Color(nsColor: .orbit(M.keycap))
     static let hover = Color(nsColor: .orbit(M.hover))
     static let dictation = Color(nsColor: .orbit(R.dictationAccent))
-    static let amber = Color(nsColor: .orbit(R.clipboardAccent))
+    static let amber = Color(nsColor: .orbit(R.clipboardInk))
     static let live = Color(rgb: BrandPalette.Semantic.recording)
     /// The progress fill, aurora blue into dictation teal.
     static let progress = LinearGradient(

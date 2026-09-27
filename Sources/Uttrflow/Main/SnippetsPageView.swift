@@ -77,7 +77,7 @@ struct SnippetRowView: View {
                 .foregroundStyle(PagePalette.text.opacity(0.6))
             Text(row.lastUsed)
                 .font(.system(size: 12))
-                .foregroundStyle(PagePalette.text.opacity(0.5))
+                .foregroundStyle(PagePalette.faint)
                 .lineLimit(1)
             controls
         }
@@ -211,7 +211,7 @@ struct SnippetExampleCard: View {
                 HStack(spacing: 8) {
                     MainPillView(pill: example.trigger)
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                     Text(example.text)
                         .font(.system(size: MainMetrics.calloutSize))

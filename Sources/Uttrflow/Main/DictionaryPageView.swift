@@ -114,7 +114,7 @@ struct DictionaryRowView: View {
     /// Amber once undone, red when the undos are what is retiring it, quiet otherwise.
     private var undoneColor: Color {
         if row.undoneIsConcerning { return .criticalInk }
-        return row.hasBeenUndone ? PagePalette.clipboard : PagePalette.text.opacity(0.35)
+        return row.hasBeenUndone ? PagePalette.clipboardInk : PagePalette.faint
     }
 
     /// Restore is drawn at rest on a retired word; Delete waits for the pointer but is always built.
@@ -129,7 +129,7 @@ struct DictionaryRowView: View {
                     Button(action.title) { onIntent(action.intent) }
                         .buttonStyle(.plain)
                         .font(.system(size: 11.5))
-                        .foregroundStyle(PagePalette.clipboard)
+                        .foregroundStyle(PagePalette.clipboardInk)
                         .focused($focusedControl, equals: action.id)
                 }
             }
@@ -181,7 +181,7 @@ struct DictionaryFixCard: View {
             HStack {
                 Text(fix.when)
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(PagePalette.text.opacity(0.4))
+                    .foregroundStyle(PagePalette.faint)
                 Spacer(minLength: 6)
                 if let undo = fix.undo {
                     Button {
@@ -201,7 +201,7 @@ struct DictionaryFixCard: View {
             HStack(spacing: 5) {
                 Text(fix.heard)
                     .strikethrough()
-                    .foregroundStyle(PagePalette.text.opacity(0.45))
+                    .foregroundStyle(PagePalette.faint)
                 Image(systemName: "arrow.right")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(PagePalette.dictation)
@@ -251,7 +251,7 @@ struct DictionaryEditorView: View {
                 }
                 Text(editor.pronunciationHint)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(PagePalette.text.opacity(0.5))
+                    .foregroundStyle(PagePalette.faint)
             }
             PageEditorFooter(
                 problem: editor.problem, cancel: editor.cancel, save: save,
