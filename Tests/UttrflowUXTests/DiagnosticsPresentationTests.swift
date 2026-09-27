@@ -257,7 +257,7 @@ struct DiagnosticsEngineTests {
         let page = DiagnosticsFixture.page(model: missing)
 
         #expect(page.engines.first?.state == .attention)
-        #expect(page.engines.first?.detail == "Downloaded speech model, not downloaded yet")
+        #expect(page.engines.first?.detail == "Speech model to download")
         #expect(page.storage.first?.detail == "Not downloaded")
 
         let installed = DiagnosticsFixture.page(

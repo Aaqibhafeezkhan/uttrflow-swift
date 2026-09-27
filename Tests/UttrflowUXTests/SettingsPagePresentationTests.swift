@@ -125,8 +125,21 @@ struct SettingsGeneralDesignTests {
         #expect(row("handsFree", in: pane(.general, settings)) == nil)
         #expect(
             row("shortcut.dictate", in: pane(.general, settings))?.explanation
-                == "Press to start talking, and again to stop")
-        #expect(row("shortcut.dictate", in: pane(.general))?.explanation == "Hold to talk, anywhere")
+                == "Press ⌥Space to start talking, and again to stop")
+        #expect(row("shortcut.dictate", in: pane(.general))?.explanation == "Hold ⌥Space to talk, anywhere")
+    }
+
+    @Test("a held chord of modifiers names its own keys, and only Fn gets the Fn advice")
+    func dictateNamesTheUsersKeys() {
+        var settings = Settings.default
+        settings.hotkey = HotkeyBinding(keyCode: 58, modifiers: [.control, .option])
+        let chord = row("shortcut.dictate", in: pane(.general, settings))?.explanation
+        #expect(chord == "Hold ⌃⌥ to talk, anywhere")
+        #expect(chord?.contains("fn") == false)
+
+        settings.hotkey = .functionHold
+        let function = row("shortcut.dictate", in: pane(.general, settings))?.explanation
+        #expect(function?.contains("fn") == true)
     }
 
     @Test("every shortcut row has a tile, and holding is offered both ways")
@@ -182,12 +195,15 @@ struct DiagnosticsModelCardTests {
                     isInstalled: false, bytesOnDisk: nil, isMultilingual: true)))
         #expect(missing.models[0].status == "Not downloaded")
         #expect(missing.models[0].state == .attention)
+        #expect(missing.models[0].name == "Speech model to download")
+        #expect(!missing.models[0].name.hasPrefix("Downloaded"))
 
         let present = page(
             DiagnosticsSnapshot(
                 speechModel: DiagnosticsModelPresence(
                     isInstalled: true, bytesOnDisk: 632_000_000, isMultilingual: true)))
         #expect(present.models[0].status == "In use")
+        #expect(present.models[0].name == "Downloaded speech model")
         #expect(present.models[0].chips.contains("Every language"))
         #expect(present.models[1].status == "Ready")
     }

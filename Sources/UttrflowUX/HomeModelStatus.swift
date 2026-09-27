@@ -76,15 +76,22 @@ public struct HomeModelStatus: Sendable, Equatable {
                 action: MainAction(title: "Try again", intent: .recover(.retry)), actionTone: .warning,
                 accessibilityLabel: "\(load.status). Nothing was lost. Try loading it again.")
         case .missing:
-            return HomeModelStatus(
-                title: "Speech model not installed", subtitle: "Dictation needs it · works offline after",
-                tone: .warning, progress: nil,
-                action: MainAction(
-                    title: "Download speech model", intent: .recover(.downloadSpeechModel)),
-                accessibilityLabel:
-                    "Speech model not installed. Dictation needs it, and works offline once it is downloaded."
-            )
+            return missing(bytes: nil)
         }
+    }
+
+    /// No model on disk, with the download's size when it is known and without one when it is not.
+    public static func missing(bytes: Int64?) -> HomeModelStatus {
+        let size = bytes.map { MenuBarPresenter.size(of: $0) }
+        return HomeModelStatus(
+            title: "Speech model not installed",
+            subtitle: ["Dictation needs it", size, "works offline after"].compactMap(\.self)
+                .joined(separator: " · "),
+            tone: .warning, progress: nil,
+            action: MainAction(title: "Download speech model", intent: .recover(.downloadSpeechModel)),
+            accessibilityLabel:
+                "Speech model not installed. Dictation needs it\(size.map { ", a \($0) download," } ?? ""), "
+                + "and works offline once it is downloaded.")
     }
 }
 

@@ -77,11 +77,14 @@ struct HomePageContent: View {
 /// The search field in the top bar: a button that looks like a field and opens History's search, also on ⌘K.
 struct HomeSearchField: View {
     let action: MainAction
-    /// False while History is empty and has no search field to open; the field is then dimmed and inert.
+    /// False while History is empty and has no search field to open; the words are then quieter and the field inert.
     var isEnabled = true
     var onIntent: (MainIntent) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
+        let isLight = colorScheme == .light
         Button {
             onIntent(action.intent)
         } label: {
@@ -99,20 +102,24 @@ struct HomeSearchField: View {
                     .padding(.vertical, 2)
                     .background(PagePalette.text.opacity(0.1), in: .rect(cornerRadius: 6))
             }
-            .foregroundStyle(PagePalette.text.opacity(0.5))
+            .foregroundStyle(PagePalette.text.opacity(isEnabled ? 0.5 : 0.4))
             .padding(.horizontal, 14)
             .frame(width: 300, height: 40)
-            .background(PagePalette.text.opacity(0.05), in: .rect(cornerRadius: 12, style: .continuous))
+            // A white field on the light page, as a card is, since a faint ink film vanishes against it.
+            .background(
+                isLight ? PagePalette.card : PagePalette.text.opacity(0.05),
+                in: .rect(cornerRadius: 12, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(PagePalette.text.opacity(0.12), lineWidth: 1)
+                    .strokeBorder(
+                        isLight ? PagePalette.controlEdge : PagePalette.text.opacity(0.12), lineWidth: 1)
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .keyboardShortcut("k", modifiers: .command)
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.5)
         .help(isEnabled ? "" : Self.nothingToSearch)
         .accessibilityLabel(action.title)
     }

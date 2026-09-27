@@ -131,8 +131,14 @@ struct SettingsTabStrip: View {
                     HStack(spacing: 6) {
                         Image(systemName: item.symbolName)
                             .font(.system(size: 11))
+                        // Sized by the bold title, so selecting a tab never widens it or moves the others.
                         Text(item.title)
-                            .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .hidden()
+                            .overlay {
+                                Text(item.title)
+                                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                            }
                             .lineLimit(1)
                             .fixedSize()
                     }

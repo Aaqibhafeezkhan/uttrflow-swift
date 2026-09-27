@@ -92,7 +92,8 @@ struct MainFootnote: View {
     var body: some View {
         Text(text)
             .font(.system(size: MainMetrics.footnoteSize))
-            .foregroundStyle(.tertiary)
+            // The quiet text token, which clears 4.5:1 on the page in both appearances.
+            .foregroundStyle(PagePalette.quiet)
             .multilineTextAlignment(isCentred ? .center : .leading)
             .frame(maxWidth: .infinity, alignment: isCentred ? .center : .leading)
             .padding(.top, 12)
