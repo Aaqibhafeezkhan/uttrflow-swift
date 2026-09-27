@@ -435,7 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             try? await Task.sleep(for: SpeechModelLoad.estimateAfter)
             while !Task.isCancelled {
                 guard let self, speechReadiness == .loading else { return }
-                refreshSpeechModelSurfaces()
+                refreshSpeechModelEstimate()
                 try? await Task.sleep(for: SpeechModelLoadEstimate.redrawInterval)
             }
         }
@@ -468,10 +468,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Redraws everywhere a person might try to dictate, from the load as it stands.
     private func refreshSpeechModelSurfaces() {
-        refreshMenuBar()
-        dock.update(with: dockPresentation(for: lastDictationState))
+        refreshSpeechModelEstimate()
         // Guarded here, since the redraw also wakes the updater, which launch starts last on purpose.
         if mainWindow != nil { redrawMainWindow() }
+    }
+
+    /// Moves the estimate on in the menu bar and the floating button; home's hero moves its own.
+    private func refreshSpeechModelEstimate() {
+        refreshMenuBar()
+        dock.update(with: dockPresentation(for: lastDictationState))
     }
 
     /// The floating button for a state, with the speech model's load drawn in.

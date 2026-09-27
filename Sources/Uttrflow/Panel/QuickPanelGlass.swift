@@ -16,20 +16,43 @@ struct QuickPanelBackdrop: View {
         .accessibilityHidden(true)
     }
 
-    /// A blurred conic sweep of the aurora stops, wider than the panel and mostly above it.
-    private func aurora(width: CGFloat) -> some View {
-        let stops = BrandPalette.Redesign.auroraStops.map { Color(rgb: $0) }
-        return AngularGradient(
-            colors: stops + stops.prefix(1), center: .center,
-            startAngle: .degrees(120), endAngle: .degrees(480)
-        )
-        .frame(width: width * 1.4, height: QuickPanelMetrics.auroraHeight)
-        // Room for the blur to spread into, or it stops at the band's edge.
-        .padding(Self.spread)
-        .blur(radius: Self.spread / 2)
-        .opacity(BrandPalette.Redesign.Panel.auroraOpacity)
-        .offset(x: -width * 0.2 - Self.spread, y: -QuickPanelMetrics.auroraRise - Self.spread)
+    /// A blurred conic sweep of the aurora stops, wider than the panel and mostly above it, drawn from a picture blurred once.
+    @ViewBuilder private func aurora(width: CGFloat) -> some View {
+        if let picture = Self.picture(width: width) {
+            Image(nsImage: picture)
+                .resizable()
+                .frame(
+                    width: width * 1.4 + Self.spread * 2,
+                    height: QuickPanelMetrics.auroraHeight + Self.spread * 2
+                )
+                .opacity(BrandPalette.Redesign.Panel.auroraOpacity)
+                .offset(x: -width * 0.2 - Self.spread, y: -QuickPanelMetrics.auroraRise - Self.spread)
+        }
     }
+
+    /// The aurora for a panel `width` wide, blurred the first time it is asked for, so scrolling the list never re-blurs it.
+    @MainActor private static func picture(width: CGFloat) -> NSImage? {
+        guard width > 0 else { return nil }
+        if let known = blurred, known.width == width { return known.image }
+        let stops = BrandPalette.Redesign.auroraStops.map { Color(rgb: $0) }
+        let renderer = ImageRenderer(
+            content: AngularGradient(
+                colors: stops + stops.prefix(1), center: .center,
+                startAngle: .degrees(120), endAngle: .degrees(480)
+            )
+            .frame(width: width * 1.4, height: QuickPanelMetrics.auroraHeight)
+            // Room for the blur to spread into, or it stops at the band's edge.
+            .padding(spread)
+            .blur(radius: spread / 2))
+        // A blur has no edges for a Retina pixel to sharpen.
+        renderer.scale = 1
+        guard let image = renderer.nsImage else { return nil }
+        blurred = (width, image)
+        return image
+    }
+
+    /// The last picture blurred and the width it was blurred for.
+    @MainActor private static var blurred: (width: CGFloat, image: NSImage)?
 
     /// The blur's reach beyond the band.
     private static let spread: CGFloat = 120

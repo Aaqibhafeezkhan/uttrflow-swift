@@ -130,9 +130,13 @@ guess paced to a typical cold load, from `SpeechModelLoadEstimate`
 | Floating button | A ring filled to the estimate, **Getting ready**, and *~1 min*. Holding: **Almost ready**. |
 | Menu bar popover | The same heading as home over a bar filled to the estimate. |
 
-The app redraws these surfaces once a second while the load runs, from `AppDelegate`'s ticker,
-which starts at `estimateAfter` and ends with the load; nothing ticks once the model is ready.
-The bars ease between ticks, and under Reduce Motion they step instead.
+The floating button and the menu bar redraw once a second while the load runs, from
+`AppDelegate`'s ticker, which starts at `estimateAfter` and ends with the load; nothing ticks once
+the model is ready. The home hero is not redrawn by that ticker, because redrawing the main window
+rebuilds every page from the whole history. Its status block (`HomeModelStatusView`) carries the
+load's start and runs its own `TimelineView`, so only that block redraws: once a second while its
+window is in use, and every 15 seconds while it is not. The bars ease between ticks, and under
+Reduce Motion they step instead.
 
 The refusal lives in `DictationPipeline.startRecording`, which declines while its own `prepare()`
 is running. A pipeline nobody prepared still records and loads on demand, as before. When the
