@@ -154,9 +154,13 @@ on as usual; the release pass then does every unfinished span in its own place, 
 failure still gets reported and still costs only that piece's words rather than the whole
 recording's wait.
 
-If that release pass still gets no words for audio `VoiceActivity` judges speech-bearing,
-the dictation fails instead of inserting only the other pieces. A kept recording can be
-retried; a window holding genuine silence is still skipped.
+A window `VoiceActivity` judges speech-bearing that decodes to no words is decoded once more,
+without the vocabulary bias, since a short piece set off by pauses (a greeting, a sign-off)
+decodes blank now and then (issue 2099). If the second decode is blank too, the release pass
+leaves that piece out, inserts every other piece, and counts the gap in the outcome's
+`missedPieces`. Only when no piece has words, or the whole recording was one window, does the
+dictation fail as untranscribed; a kept recording can then be retried. A window holding
+genuine silence is still skipped.
 
 The pieces are then joined with a space. Corrections keep their word ranges by being
 shifted past the words of the pieces before them. If any piece fell back to the rules,

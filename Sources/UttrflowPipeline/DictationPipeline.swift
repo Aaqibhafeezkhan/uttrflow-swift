@@ -88,6 +88,8 @@ public actor DictationPipeline {
     private var dictationWords: [String]?
     /// Detected by the first piece that reports one, and hinted to later pieces as the profile's listening says. See `Docs/early-transcription.md`.
     private var dictationLanguage: LanguageCode?
+    /// Pieces of this dictation that held speech and decoded to no words twice, left out of what is inserted.
+    private var missedPieces = 0
 
     /// What the clean-up steps did to each piece of the dictation under way, reported as one when it ends.
     private var cleaningRecords: [CleaningRecord] = []
@@ -374,6 +376,7 @@ public actor DictationPipeline {
     private func forgetTheLastAttempt() {
         dictationWords = nil
         dictationLanguage = nil
+        missedPieces = 0
     }
 
     /// Abandons the dictation at any stage: nothing is transcribed and nothing is inserted.
@@ -450,7 +453,7 @@ public actor DictationPipeline {
             do {
                 heard = try await transcribe(
                     audio, lead..<cut, biasedTowards: await vocabulary(seeing: seeing),
-                    recording: NoOpMetricsRecorder())
+                    recording: NoOpMetricsRecorder(), skippingAMiss: false)
             } catch {
                 guard generation == mine, !wasCancelled(mine) else { return }
                 // A failed piece is left for the end, where it is reported; the rest still work ahead.
@@ -589,7 +592,7 @@ public actor DictationPipeline {
                     heard = try await transcribe(
                         audio, window,
                         biasedTowards: await vocabulary(seeing: earlyContext ?? AppContext()),
-                        recording: tally)
+                        recording: tally, skippingAMiss: true)
                 } catch {
                     failure = DictationFailure(error)
                     tidying.cancelAll()
@@ -627,7 +630,8 @@ public actor DictationPipeline {
 
         // Silence is not a fault, but returning quietly to idle would look like a broken app.
         guard !pieces.isEmpty else {
-            await fail(DictationFailure(SpeechEngineError.nothingHeard))
+            await fail(
+                DictationFailure(missedPieces > 0 ? Self.untranscribed : SpeechEngineError.nothingHeard))
             return
         }
         // Every piece is done while recording, and the screen it is read against still applies.
@@ -693,32 +697,59 @@ public actor DictationPipeline {
         }
     }
 
-    /// Recognises one window of the audio, answering `nil` when nothing was said in it.
+    /// Recognises one window of the audio, answering `nil` when nothing was said in it; speech with no words is decoded twice.
     private func transcribe(
         _ audio: AudioSamples, _ window: Range<Int>, biasedTowards words: [String],
-        recording metrics: any MetricsRecording
+        recording metrics: any MetricsRecording, skippingAMiss skips: Bool
     ) async throws -> Transcription? {
         let slice =
             AudioSamples(samples: Array(audio.samples[window]), sampleRate: audio.sampleRate) ?? .empty
+        let whole = window == audio.samples.indices
+        var heard = try await decode(slice, whole: whole, biasedTowards: words, recording: metrics)
+        // The second decode goes without the vocabulary, which is the one input a retry can change.
+        if case .missed = heard {
+            heard = try await decode(slice, whole: whole, biasedTowards: [], recording: metrics)
+        }
+        switch heard {
+        case .words(let transcription):
+            // Kept beside the timing, since a re-decode is most of what a long transcription time is.
+            await metrics.recordDecoding(transcription.effort)
+            if dictationLanguage == nil { dictationLanguage = transcription.detectedLanguage?.code }
+            return transcription
+        case .nothing:
+            return nil
+        case .missed:
+            // Alone, or while recording where the end decodes it again, a miss fails; otherwise the rest still go in.
+            guard skips, !whole else { throw Self.untranscribed }
+            missedPieces += 1
+            return nil
+        }
+    }
+
+    /// One decode of a slice, telling words, silence and speech that produced no words apart.
+    private func decode(
+        _ slice: AudioSamples, whole: Bool, biasedTowards words: [String],
+        recording metrics: any MetricsRecording
+    ) async throws -> Heard {
         // A profile that speaks Hindi switches language between pieces, so only it detects every piece. See `Docs/speech-engines.md`.
         let language = ListeningLanguages(profile: runningProfile).hint(afterFirstPiece: dictationLanguage)
+        let speaks = VoiceActivity.speechRange(in: slice.samples, sampleRate: slice.sampleRate) != nil
         let heard = try await metrics.measuringInTime(.transcription, clock: clock) {
             try await withStageTimeout(StageTimeout.transcription, clock: clock) {
                 [speech] () async throws -> Heard in
                 do {
-                    return Heard.words(
-                        try await speech.transcribe(
-                            slice,
-                            options: TranscriptionOptions(languageHint: language, vocabulary: words)))
+                    let transcription = try await speech.transcribe(
+                        slice, options: TranscriptionOptions(languageHint: language, vocabulary: words))
+                    guard transcription.isBlank else { return Heard.words(transcription) }
+                    return speaks ? Heard.missed : Heard.nothing
                 } catch SpeechEngineError.audioTooShort {
                     // Alone, a hold too brief to transcribe says so, since the fix is to hold longer.
-                    guard window != audio.samples.indices else { throw SpeechEngineError.audioTooShort }
-                    if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
-                    return Heard.nothing
+                    guard !whole else { throw SpeechEngineError.audioTooShort }
+                    return speaks ? Heard.missed : Heard.nothing
                 } catch SpeechEngineError.nothingHeard {
-                    if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
+                    if speaks { return Heard.missed }
                     // Only when there is nothing else: alone, silence is refused below.
-                    guard window != audio.samples.indices else { throw SpeechEngineError.nothingHeard }
+                    guard !whole else { throw SpeechEngineError.nothingHeard }
                     return Heard.nothing
                 }
             }
@@ -727,29 +758,18 @@ public actor DictationPipeline {
         guard let heard else {
             throw SpeechEngineError.transcriptionFailed(description: "the recogniser did not answer")
         }
-        guard case .words(let transcription) = heard else { return nil }
-        guard !transcription.isBlank else {
-            if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
-            return nil
-        }
-        // Kept beside the timing, since a re-decode is most of what a long transcription time is.
-        await metrics.recordDecoding(transcription.effort)
-        if dictationLanguage == nil { dictationLanguage = transcription.detectedLanguage?.code }
-        return transcription
+        return heard
     }
 
-    /// A recogniser that produced no words for audible speech must not let a partial dictation reach the screen.
-    private static func untranscribedSpeech(in audio: AudioSamples) -> SpeechEngineError? {
-        guard VoiceActivity.speechRange(in: audio.samples, sampleRate: audio.sampleRate) != nil else {
-            return nil
-        }
-        return .transcriptionFailed(description: "speech in a recording piece produced no words")
-    }
+    /// Speech the recogniser produced no words for, which must not pass for silence.
+    private static let untranscribed = SpeechEngineError.transcriptionFailed(
+        description: "speech in a recording piece produced no words")
 
     /// What the recogniser made of one window.
     private enum Heard: Sendable {
         case words(Transcription)
         case nothing
+        case missed
     }
 
     /// Runs the dictionary and the tidier over one recognised piece.
@@ -878,7 +898,7 @@ public actor DictationPipeline {
                             ?? insertedIntoIdentifier,
                         spokenFor: spokenFor, changes: changes,
                         fromRecording: delivery == .copy, arrival: attempt.arrival,
-                        intoSecureField: destinationIsSecure)))
+                        intoSecureField: destinationIsSecure, missedPieces: missedPieces)))
             return attempt.arrival
         } catch {
             guard !wasCancelled(mine) else { return nil }
