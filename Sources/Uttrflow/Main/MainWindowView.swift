@@ -49,8 +49,22 @@ struct MainWindowView: View {
 
     // MARK: - Pane
 
+    /// The shown pane with the notice floating in its corner, over Settings as well as the pages.
+    private var pane: some View {
+        shownPane
+            .overlay(alignment: .topTrailing) {
+                if let notice = model.content.notice {
+                    MainNoticeBar(notice: notice, onIntent: onIntent)
+                        .padding(.top, 20)
+                        .padding(.trailing, 20)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: model.content.notice)
+    }
+
     /// Settings when it is showing, which draws its own title and search, or the selected page.
-    @ViewBuilder private var pane: some View {
+    @ViewBuilder private var shownPane: some View {
         if model.showsSettings, let settings = model.settings {
             SettingsPageView(
                 model: settings, diagnostics: model.content.diagnostics,
@@ -84,16 +98,6 @@ struct MainWindowView: View {
                 .padding(.bottom, drawsOwnHeader ? 0 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        // The notice floats in the corner over the page rather than pushing the page down.
-        .overlay(alignment: .topTrailing) {
-            if let notice = model.content.notice {
-                MainNoticeBar(notice: notice, onIntent: onIntent)
-                    .padding(.top, 20)
-                    .padding(.trailing, 20)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: model.content.notice)
         .environment(\.dictationKeycaps, model.content.shortcutKeycaps)
         // The field holds what is being typed, so it is only put back in step when the page changes.
         .onChange(of: model.page) { _, _ in
