@@ -135,18 +135,15 @@ struct VerifierTests {
         // On a clock the scorer itself pushes past the budget, so the deadline needs no real time to win the race.
         let budgetClock = ManualClock()
         let index = EnvironmentIndex(reader: StubEnvironment([:]))
-        let scoring = NoncooperativeScoring(
-            liked, holdingThreadForMilliseconds: 8_000, advancing: budgetClock)
+        let holding = ThreadHold()
+        let scoring = NoncooperativeScoring(liked, holding: holding, advancing: budgetClock)
         let verifier = Verifier(index: index, scoring: scoring, budgetInMilliseconds: 200, clock: budgetClock)
-        let wall = ContinuousClock()
-        let start = wall.now
         let verdict = await verifier.verdict(
             for: Candidate(text: "git zqxjw", source: .personal), in: terminal, typed: "git z", now: moment)
-        let elapsed = start.duration(to: wall.now)
+        let scorerStillHeld = !holding.hasEnded
+        holding.release()
         #expect(verdict == .rejected)
-        #expect(
-            elapsed < .seconds(4),
-            "the verdict must return once the deadline wins, not wait out an 8-second noncooperative scorer")
+        #expect(scorerStillHeld, "the verdict must return while the scorer still holds its thread")
     }
 
     @Test("A cancelled turn stops `verified` between candidates, not just after the whole loop.")

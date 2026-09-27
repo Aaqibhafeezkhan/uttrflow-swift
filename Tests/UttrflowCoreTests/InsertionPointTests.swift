@@ -150,7 +150,7 @@ struct InsertionPointTests {
         #expect(point.paddedBoundary(for: "Hello") == "Hello ")
     }
 
-    /// Mid-word, both rules fire, so the dictated word gets a space at each edge.
+    /// Mid-word, both rules fire and the dictated word gets a space at each edge.
     @Test("a mid-word caret adds a space at each edge, by definition of the rules")
     func midWordCaretAddsBothSpaces() {
         let point = InsertionPoint(precedingText: "Hello wo", followingText: "rld")

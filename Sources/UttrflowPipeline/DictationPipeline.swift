@@ -629,7 +629,7 @@ public actor DictationPipeline {
         let expanded = await expand(written)
         guard !wasCancelled(mine) else { return }
 
-        // Pads with a space where the field's surrounding text would glue the words on (#1908).
+        // Pads the words with a space where the field's surrounding text would otherwise join them.
         let insertionPoint = appContext?.insertionPoint ?? .unknown
         let toWrite = insertionPoint.paddedBoundary(for: expanded.text)
 

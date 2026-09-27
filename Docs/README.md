@@ -90,6 +90,7 @@ place to start; if you want to change it, [CONTRIBUTING](../CONTRIBUTING.md) and
 | [startup.md](startup.md) | Launching, and the minute before the app can dictate |
 | [app-main-window.md](app-main-window.md) | Main window: sizing and the clipboard demonstration |
 | [app-dock.md](app-dock.md) | Dock button: measurements and traps |
+| [redesign-tokens.md](redesign-tokens.md) | Redesign colours and the bundled typeface |
 | [app-onboarding.md](app-onboarding.md) | Onboarding window: sizes and the provider marks |
 | [ux-onboarding.md](ux-onboarding.md) | Onboarding: the rules the flow is built on |
 | [ux-figures.md](ux-figures.md) | The figures on Dictation and Insights |
