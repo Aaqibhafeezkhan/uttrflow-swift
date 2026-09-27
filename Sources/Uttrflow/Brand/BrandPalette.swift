@@ -239,6 +239,13 @@ enum BrandPalette {
             /// The aurora rising from the panel's top edge, drawn at this opacity in both appearances.
             static let auroraOpacity = 0.22
         }
+        /// The grey a quiet source chip wears, such as a word that shipped with the app.
+        static let neutralAccent = BrandTone(dark: 0xA7_ACB8, light: 0x5E_6470)
+        /// The pale teal ink of a small "New" badge on its teal wash.
+        static let badgeInk = BrandTone(dark: 0xAF_F3EC, light: 0x0E_645D)
+        /// The well an editor's text field is sunk into.
+        static let fieldWell = BrandLayer(
+            tone: BrandTone(dark: 0x00_0000, light: 0x10_1316), darkOpacity: 0.25, lightOpacity: 0.045)
 
         /// The day number on a busy Insights calendar tile, deep teal on the bright teal in both appearances.
         static let calendarDeepInk: UInt32 = 0x04_332F

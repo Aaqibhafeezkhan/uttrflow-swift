@@ -35,6 +35,9 @@ translucent card film, hairline, sidebar island and secondary text of the dark a
 | `controlEdge` | white at 14% | `#101316` at 14% |
 | `ringTrack` | white at 10% | `#101316` at 10% |
 | `cardEdge` | white at 8% | none |
+| `neutralAccent` | `#A7ACB8` | `#5E6470` |
+| `badgeInk` | `#AFF3EC` | `#0E645D` |
+| `fieldWell` | black at 25% | `#101316` at 4.5% |
 | `primaryFill` | `#FFFFFF` | `#101316` |
 | `primaryInk` | `#0B0C10` | `#FEFEFE` |
 | `destructiveInk` | `#FF8A8C` | `#B0161A` |
