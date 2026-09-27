@@ -134,3 +134,48 @@ struct SecureFieldRuleTests {
                 value: { nil }))
     }
 }
+
+@Suite("Reading a value only from a field that does not hide it")
+struct SecureFieldReadableValueTests {
+    @Test("A field declared secure by its subrole is never asked for its value.")
+    func declaredSecureValueIsNeverFetched() {
+        var asked = false
+        let value = SecureField.readableValue(
+            role: "AXTextField", subrole: "AXSecureTextField", identifier: nil, placeholder: nil,
+            description: nil,
+            value: {
+                asked = true; return "correct-horse-battery"
+            })
+        #expect(value == nil)
+        #expect(!asked)
+    }
+
+    @Test("A field named for a password is never asked for its value.")
+    func namedSecureValueIsNeverFetched() {
+        var asked = false
+        let value = SecureField.readableValue(
+            role: "AXTextField", subrole: nil, identifier: nil, placeholder: "Password",
+            description: nil,
+            value: {
+                asked = true; return "correct-horse-battery"
+            })
+        #expect(value == nil)
+        #expect(!asked)
+    }
+
+    @Test("A value of mask characters alone is dropped once read.")
+    func maskedValueIsDropped() {
+        let value = SecureField.readableValue(
+            role: "AXTextField", subrole: nil, identifier: nil, placeholder: nil, description: nil,
+            value: { "••••••••" })
+        #expect(value == nil)
+    }
+
+    @Test("An ordinary field's value comes back as it is.")
+    func plainValueIsKept() {
+        let value = SecureField.readableValue(
+            role: "AXTextArea", subrole: nil, identifier: nil, placeholder: nil, description: nil,
+            value: { "see you at six" })
+        #expect(value == "see you at six")
+    }
+}

@@ -50,7 +50,30 @@ struct PanelEffectTests {
 
         #expect(
             PanelOutcome.insert(secret).effect
-                == .closeAndInsert("sk-live-abcdef123456", used: secret.id))
+                == .closeAndInsertConcealed("sk-live-abcdef123456", used: secret.id))
+    }
+
+    /// Another clipboard history records whatever arrives unmarked, so a secret never leaves unmarked.
+    @Test("every way a secret leaves the panel is marked concealed")
+    func secretLeavesConcealed() {
+        let secret = PanelFixture.clip("sk-live-abcdef123456", kind: .secret)
+        let why = PanelInsertionObstacle.nothingFocused
+
+        #expect(PanelOutcome.insert(secret).effect == .closeAndInsertConcealed(secret.text, used: secret.id))
+        #expect(
+            PanelOutcome.insertPlain(secret).effect == .closeAndInsertConcealed(secret.text, used: secret.id))
+        #expect(PanelOutcome.copy(secret).effect == .closeAndCopyConcealed(secret.text, used: secret.id))
+        #expect(
+            PanelOutcome.copyOnly(secret, why).effect
+                == .copyConcealedAndSay(secret.text, why.notice, used: secret.id))
+    }
+
+    @Test("an ordinary clip leaves unmarked")
+    func ordinaryLeavesUnmarked() {
+        let clip = PanelFixture.clip("hello")
+
+        #expect(PanelOutcome.copy(clip).effect == .closeAndCopy("hello", richText: nil, used: clip.id))
+        #expect(PanelOutcome.insertPlain(clip).effect == .closeAndInsert("hello", used: clip.id))
     }
 
     /// Whitespace is content: indentation is the whole value of copying a block of code.
@@ -86,6 +109,9 @@ struct PanelUseReportingTests {
         case .closeAndInsertFormatted(_, _, let used): used
         case .copyAndSay(_, _, let used): used
         case .closeAndCopy(_, _, let used): used
+        case .closeAndInsertConcealed(_, let used), .copyConcealedAndSay(_, _, let used),
+            .closeAndCopyConcealed(_, let used):
+            used
         case .closeAndInsertImage(let clip), .copyImageAndSay(let clip, _), .closeAndCopyImage(let clip):
             clip.id
         case .redraw, .close, .applyAndRedraw, .say: nil

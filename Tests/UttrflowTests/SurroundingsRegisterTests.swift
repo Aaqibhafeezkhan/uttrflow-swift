@@ -20,6 +20,7 @@ private struct Item: Equatable {
 private struct FlatTree: ElementTree {
     let root: Item
     func role(of element: Item) -> String? { element.role }
+    func isSecure(_ element: Item) -> Bool { false }
     func text(of element: Item) -> String? { element.text }
     func children(of element: Item) -> [Item] { element.children }
     func frame(of element: Item) -> CGRect? { nil }

@@ -26,12 +26,14 @@ public final class SystemKeyboard: KeyboardEventSource {
     }
 
     public func stop() {
-        running.withLock { current in
-            current?.stop()
-            current = nil
+        TeardownGuard.once(for: self) {
+            running.withLock { current in
+                current?.stop()
+                current = nil
+            }
+            delivery.set(nil)
+            delivery.forgetDisables()
         }
-        delivery.set(nil)
-        delivery.forgetDisables()
     }
 
     deinit { stop() }
