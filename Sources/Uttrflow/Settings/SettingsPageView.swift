@@ -86,10 +86,13 @@ struct SettingsSearchField: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13))
                 .foregroundStyle(PagePalette.faint)
-            TextField(SettingsPresenter.searchPlaceholder, text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .focused($isFocused)
+            TextField(
+                SettingsPresenter.searchPlaceholder, text: $query,
+                prompt: Text(SettingsPresenter.searchPlaceholder).foregroundStyle(PagePalette.faint)
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .focused($isFocused)
             if query.isEmpty {
                 Text("⌘F")
                     .font(.system(size: 11, weight: .medium))
