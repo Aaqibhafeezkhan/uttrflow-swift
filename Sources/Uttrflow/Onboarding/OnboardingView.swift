@@ -36,6 +36,11 @@ final class OnboardingModel {
         Task { await flow.perform(intent) }
     }
 
+    /// Returns to sign-in, since a sign-out leaves nothing past it to show.
+    func signedOut() {
+        Task { await flow.signedOut() }
+    }
+
     /// Tells the last page how the first try is going.
     func tried(_ trial: OnboardingTrial) {
         Task { await flow.tried(trial) }
@@ -90,11 +95,12 @@ struct OnboardingCard: View {
                 .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
             VStack(spacing: 22) {
                 title
-                Spacer(minLength: 0)
+                // Pushed to the foot with one gap above it, so a page with a hint and the terms still fits the card.
                 VStack(spacing: 0) {
                     buttons
                     footnotes
                 }
+                .frame(maxHeight: .infinity, alignment: .bottom)
                 OnboardingDots(position: page.position, count: page.stepCount)
             }
             .padding(.top, 26)
@@ -115,7 +121,12 @@ struct OnboardingCard: View {
                         endPoint: .bottom),
                     lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.65), radius: 30, y: 30)
+        // Cast by a still shape behind the opaque card, so the moving aurora inside never re-renders the shadow.
+        .background {
+            RoundedRectangle(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous)
+                .fill(.black)
+                .shadow(color: .black.opacity(0.65), radius: 30, y: 30)
+        }
         .animation(.smooth(duration: 0.26), value: page.title)
         .help(page.explanation ?? "")
     }

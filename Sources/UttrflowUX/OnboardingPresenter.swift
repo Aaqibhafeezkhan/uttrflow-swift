@@ -315,7 +315,7 @@ private struct PermissionWording {
     /// The Accessibility page's words.
     private static let accessibility = PermissionWording(
         kind: .accessibility,
-        symbolName: "figure.arms.open",
+        symbolName: "accessibility",
         askTitle: "Let me type for you.",
         grantedTitle: "Ready to type.",
         refusedTitle: "Typing is off.",

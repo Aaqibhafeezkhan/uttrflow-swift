@@ -120,6 +120,11 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window = nil
     }
 
+    /// Puts the flow back on its sign-in page, whichever page a sign-out found it on.
+    func signedOut() {
+        model.signedOut()
+    }
+
     /// Shows a dictation on the last page, where the first try fills the page's own field.
     func dictationChanged(to state: DictationState) {
         guard let trial = Self.trial(for: state) else { return }

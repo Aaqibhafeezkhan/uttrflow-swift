@@ -342,13 +342,14 @@ public enum DiagnosticsPresenter {
         case .notInstalled:
             return card(notYetDownloaded, [], "Not downloaded", missing)
         case .incomplete:
-            return card(notYetDownloaded, [], "Incomplete", missing)
+            return card(notYetDownloaded, [], damaged, missing)
         case .downloading:
             return card(notYetDownloaded, [], "Downloading", .unknown)
         case .loading:
             return card(downloaded, facts(snapshot.speechModel, locale: locale), "Loading", .unknown)
-        case .failed:
-            return card(downloaded, facts(snapshot.speechModel, locale: locale), "Failed to load", .attention)
+        case .failed(let fix):
+            let status = fix == .downloadSpeechModel ? damaged : "Failed to load"
+            return card(downloaded, facts(snapshot.speechModel, locale: locale), status, .attention)
         case .ready:
             return card(
                 downloaded, facts(snapshot.speechModel, locale: locale), inUse ? "In use" : "Ready", .good)
@@ -384,6 +385,12 @@ public enum DiagnosticsPresenter {
         guard let model = snapshot.speechModel else { return .unchecked }
         return model.isInstalled ? .ready : .notInstalled
     }
+
+    /// The one word every surface uses for a model only a fresh download repairs.
+    static let damaged = "Damaged"
+
+    /// The storage row's form of it, with the fix.
+    static let damagedDetail = "Damaged, download it again"
 
     /// The downloadable recogniser's name while its files are missing, so it never claims to be downloaded.
     static let notYetDownloaded = "Speech model to download"
@@ -746,13 +753,14 @@ public enum DiagnosticsPresenter {
         case .notInstalled:
             return row("Not downloaded", needed ? .attention : .good, .downloadSpeechModel)
         case .incomplete:
-            return row("Incomplete, download it again", needed ? .attention : .good, .downloadSpeechModel)
+            return row(damagedDetail, needed ? .attention : .good, .downloadSpeechModel)
         case .downloading:
             return row("Downloading", .unknown, nil)
         case .loading:
             return row([onDisk, "loading"].compactMap(\.self).joined(separator: ", "), .unknown, nil)
         case .failed(let fix):
-            return row("On this Mac, but it failed to load", .attention, fix)
+            let detail = fix == .downloadSpeechModel ? damagedDetail : "On this Mac, but it failed to load"
+            return row(detail, .attention, fix)
         case .ready:
             return row(onDisk ?? "On this Mac", .good, nil)
         }
