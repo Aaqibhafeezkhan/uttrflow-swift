@@ -163,7 +163,7 @@ public enum DestructiveCommand {
         "trino", "presto", "spark-sql", "hive", "beeline", "cqlsh", "impala-shell", "vsql", "redshift",
     ]
 
-    /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash or discarded changes.
+    /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, or changes discarded by a checkout, switch or restore.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
         let head = subcommandIndex(arguments)
         // The flags of the clause's own subcommand, so the same word as a message or path is not one.
@@ -199,12 +199,30 @@ public enum DestructiveCommand {
         if let flags = flags(after: "stash"), flags.first == "drop" || flags.first == "clear" { return true }
         if let flags = flags(after: "checkout"),
             flags.contains("--") || flags.contains(".") || flags.contains("--force")
-                || flags.contains(where: { $0.hasPrefix("-") && !$0.hasPrefix("--") && $0.contains("f") })
+                || flags.contains(where: { shortFlags($0, include: "f", valuesAfter: ["b", "B"]) })
+        {
+            return true
+        }
+        if let flags = flags(after: "switch"),
+            flags.contains("--force") || flags.contains("--discard-changes")
+                || flags.contains(where: { shortFlags($0, include: "f", valuesAfter: ["c", "C"]) })
         {
             return true
         }
         if let flags = flags(after: "restore"), !flags.contains("--staged") || flags.contains("--worktree") {
             return true
+        }
+        return false
+    }
+
+    /// Whether a cluster of short flags holds this one, read only up to the first flag whose value runs on in the same word.
+    private static func shortFlags(
+        _ word: String, include flag: Character, valuesAfter valued: Set<Character>
+    ) -> Bool {
+        guard word.hasPrefix("-"), !word.hasPrefix("--") else { return false }
+        for letter in word.dropFirst() {
+            if letter == flag { return true }
+            if valued.contains(letter) { return false }
         }
         return false
     }

@@ -179,4 +179,27 @@ struct DestructiveCommandTests {
         #expect(!DestructiveCommand.matches("kubectl -n delete get pods"))
         #expect(!DestructiveCommand.matches("kubectl get pod delete"))
     }
+
+    @Test(
+        "A switch that throws away uncommitted changes is destructive, however its flags are written.",
+        arguments: [
+            "git switch -f main", "git switch --force main", "git switch --discard-changes main",
+            "git switch -fc topic", "git switch -qf main", "git -C repo switch -f main",
+            "git -c core.x=y switch --discard-changes main", "sudo git switch --force main",
+        ])
+    func forcedSwitchIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A switch that keeps the working tree is ordinary, even where a branch name holds an f.",
+        arguments: [
+            "git switch main", "git switch -c new", "git switch -c fix-login", "git switch -cfix-login",
+            "git switch -C feature", "git switch --detach v1.0", "git switch -", "git checkout -bfeature",
+            "git commit -m 'switch -f later'",
+        ])
+    func ordinarySwitchIsLeftAlone(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
