@@ -14,7 +14,7 @@ struct DictionaryPageView: View {
 
     /// The artboard's columns: word, sound, source, used, undone, and the row's controls.
     static let widths: [PageColumnWidth] = [
-        .share(1.1), .share(1.1), .share(1), .fixed(55), .fixed(60), .fixed(64),
+        .share(1.1), .share(1.1), .share(1), .fixed(55), .fixed(60), .fixed(76),
     ]
 
     var body: some View {
@@ -95,9 +95,13 @@ struct DictionaryRowView: View {
             Text("\(row.timesUsed)×")
                 .monospacedDigit()
                 .foregroundStyle(PagePalette.text.opacity(0.6))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text("\(row.timesUndone)×")
                 .monospacedDigit()
                 .foregroundStyle(undoneColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             controls
         }
         .font(.system(size: 13))
@@ -134,11 +138,14 @@ struct DictionaryRowView: View {
                         .buttonStyle(.plain)
                         .font(.system(size: 11.5))
                         .foregroundStyle(PagePalette.clipboardInk)
+                        .lineLimit(1)
+                        .fixedSize()
                         .focused($focusedControl, equals: action.id)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        // The row's height comes from its text, as in the design; the 22-point hit area overhangs it.
+        .frame(maxWidth: .infinity, maxHeight: 19, alignment: .trailing)
     }
 }
 

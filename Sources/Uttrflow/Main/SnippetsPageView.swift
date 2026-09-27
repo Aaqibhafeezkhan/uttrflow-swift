@@ -116,7 +116,7 @@ struct SnippetTriggerPill: View {
                 .font(.system(size: 10))
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
-            Text(text).lineLimit(1)
+            Text(text).lineLimit(1).truncationMode(.tail)
         }
         .font(.system(size: 12.5, weight: .medium))
         .foregroundStyle(PagePalette.text)
@@ -124,7 +124,8 @@ struct SnippetTriggerPill: View {
         .padding(.vertical, 4)
         .background(tint.opacity(0.16), in: Capsule())
         .overlay { Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1) }
-        .fixedSize()
+        .fixedSize(horizontal: false, vertical: true)
+        .help(text)
     }
 }
 
@@ -163,7 +164,7 @@ struct SnippetEditorView: View {
                     .scrollContentBackground(.hidden)
                     .scrollIndicators(.never)
                     .lineSpacing(3)
-                    .frame(minHeight: 64)
+                    .frame(minHeight: 44)
                     .padding(.horizontal, -5)
             }
             PageEditorFooter(
