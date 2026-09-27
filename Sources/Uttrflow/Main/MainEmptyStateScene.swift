@@ -139,13 +139,13 @@ struct MainEmptyDayBars: View {
     }
 }
 
-/// How far off the page is, as one segment per step, with the two lines that explain it.
+/// How far off the page is, as one segment per step; the sentence above already says it, so VoiceOver alone hears the rest.
 struct MainEmptyStateSteps: View {
     let progress: MainProgress
     let color: Color
 
     var body: some View {
-        VStack(spacing: 8) {
+        Group {
             if let steps = progress.steps {
                 HStack(spacing: 6) {
                     ForEach(0..<steps, id: \.self) { step in
@@ -157,12 +157,10 @@ struct MainEmptyStateSteps: View {
             } else {
                 MainBar(fraction: progress.fraction, fill: color, height: 6).frame(width: 220)
             }
-            Text("\(progress.leading) · \(progress.trailing)")
-                .font(.system(size: MainMetrics.footnoteSize))
-                .foregroundStyle(PagePalette.quiet)
         }
         .padding(.top, 2)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(progress.leading) · \(progress.trailing)")
     }
 }
 

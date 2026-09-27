@@ -587,6 +587,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindow?.close()
         mainWindow = nil
         refreshMenuBar()
+        // An open flow may be past sign-in, on a page only a session may see.
+        onboarding?.signedOut()
         show(.onboarding)
     }
 
@@ -1975,12 +1977,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         window.onSearch = { [weak self] query in
             guard let self, let page = mainWindow?.page else { return }
             queries[page] = query
-            redrawMainWindow()
+            redrawPages([page])
         }
         window.onScope = { [weak self] scope in
             guard let self, let page = mainWindow?.page else { return }
             scopes[page] = scope
-            redrawMainWindow()
+            redrawPages([page])
         }
         window.onBecameVisible = { [weak self] in self?.catchUpMainWindow() }
         window.onVisibilityChange = { [weak self] in self?.homeClock.setVisible($0) }
@@ -1990,7 +1992,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // A refusal describes one attempt, and describes nothing once the typing changes.
             wordRefusal = nil
             snippetRefusal = nil
-            redrawMainWindow()
+            redrawPages([.dictionary, .snippets])
         }
         return window
     }
@@ -2013,6 +2015,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         mainWindowIsBehind = false
         mainWindow.update(mainContent(measurements: lastMeasurements))
+    }
+
+    /// Re-presents only the editor pages when they are all a keystroke changed, and the whole window otherwise.
+    private func redrawPages(_ pages: Set<MainTab>) {
+        guard pages.isSubset(of: [.dictionary, .snippets]), !mainWindowIsBehind,
+            let mainWindow, mainWindow.isOnScreen
+        else { return redrawMainWindow() }
+        var content = mainWindow.content
+        let now = Date()
+        if pages.contains(.dictionary) {
+            content.dictionary = dictionaryPage(at: now, corrections: CorrectionHistory(of: kept).corrections)
+        }
+        if pages.contains(.snippets) { content.snippets = snippetsPage(at: now) }
+        mainWindow.update(content)
     }
 
     /// Builds the pages skipped while the window was out of sight, from the last reading.
@@ -2114,11 +2130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     keepsRecordings: true, recordings: knownRecordings,
                     retrying: retryingRecording, playing: playback.playing, now: now,
                     hasReadHistory: hasReadHistory)),
-            dictionary: DictionaryPresenter.page(
-                for: DictionarySnapshot(
-                    entries: knownWords, draft: wordDraft, refusal: wordRefusal,
-                    query: query(for: .dictionary), filter: scope(for: .dictionary),
-                    corrections: corrections, now: now)),
+            dictionary: dictionaryPage(at: now, corrections: corrections),
             corrections: CorrectionsPresenter.page(
                 for: CorrectionsSnapshot(
                     corrections: corrections, dictations: entries,
@@ -2131,10 +2143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     entries: entries, settings: settings,
                     range: InsightsRange(rawValue: scope(for: .insights)), now: now,
                     hasReadHistory: hasReadHistory)),
-            snippets: SnippetsPresenter.page(
-                for: SnippetsSnapshot(
-                    snippets: knownSnippets, draft: snippetDraft, refusal: snippetRefusal,
-                    query: query(for: .snippets), now: now)),
+            snippets: snippetsPage(at: now),
             diagnostics: DiagnosticsPresenter.page(
                 for: DiagnosticsSnapshot(
                     engines: settings.engines, speechInUse: speechInUse,
@@ -2146,6 +2155,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     machine: MachineDescription.current)),
             account: accountPage(at: now),
             shortcutKeycaps: SettingsShortcut.keycaps(for: settings.hotkey))
+    }
+
+    /// The Dictionary page as the last reading of the words draws it.
+    private func dictionaryPage(at now: Date, corrections: [Correction]) -> DictionaryPresentation {
+        DictionaryPresenter.page(
+            for: DictionarySnapshot(
+                entries: knownWords, draft: wordDraft, refusal: wordRefusal,
+                query: query(for: .dictionary), filter: scope(for: .dictionary),
+                corrections: corrections, now: now))
+    }
+
+    /// The Snippets page as the last reading of the snippets draws it.
+    private func snippetsPage(at now: Date) -> SnippetsPresentation {
+        SnippetsPresenter.page(
+            for: SnippetsSnapshot(
+                snippets: knownSnippets, draft: snippetDraft, refusal: snippetRefusal,
+                query: query(for: .snippets), now: now))
     }
 
     /// Reads the account the pages draw from.

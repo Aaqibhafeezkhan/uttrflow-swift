@@ -117,7 +117,7 @@ struct SpeechModelDockTests {
 
         #expect(dock.symbolName == "hourglass", "the quiet disc would drop the sentence")
         #expect(dock.primaryLine == "Speech model still loading…")
-        #expect(dock.secondaryLine == "First load after restart: about 2–3 min")
+        #expect(dock.secondaryLine == "About 2 min left")
         #expect(dock.accessibilityLabel.hasPrefix("Loading the speech model, about 2 minutes left."))
     }
 

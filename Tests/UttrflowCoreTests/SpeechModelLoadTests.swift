@@ -18,14 +18,20 @@ struct SpeechModelLoadTests {
     }
 
     @Test(
-        "a load that runs on gives the estimate, and says it is the first load after a restart",
-        arguments: [Duration.seconds(5), .seconds(154)])
-    func slowLoadGivesTheEstimate(elapsed: Duration) {
+        "a load that runs on says the estimate's own time left, and that it is the first load after a restart",
+        arguments: [
+            (Duration.seconds(5), "About 2 min left"), (.seconds(90), "About 1 min left"),
+            (.seconds(120), "Less than a minute left"), (.seconds(154), "Almost ready"),
+        ])
+    func slowLoadGivesTheEstimate(elapsed: Duration, timeLeft: String) throws {
         let load = SpeechModelLoad.loading(elapsed: elapsed)
+        let estimate = try #require(load.estimate)
 
         #expect(load.showsEstimate)
-        #expect(load.message.contains("first load after a restart can take about 2–3 minutes"))
-        #expect(load.detail == "First load after restart: about 2–3 min")
+        #expect(load.detail == timeLeft)
+        #expect(load.detail.lowercased() == estimate.timeLeft)
+        #expect(load.message.hasPrefix("\(timeLeft). The first load after a restart takes a while."))
+        #expect(!load.message.contains("2–3") && !load.detail.contains("2–3"))
     }
 
     @Test("says the speech model is loading, with nothing to press")

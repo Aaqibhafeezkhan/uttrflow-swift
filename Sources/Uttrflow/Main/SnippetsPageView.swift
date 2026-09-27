@@ -78,24 +78,30 @@ struct SnippetRowView: View {
         .background(isHovered ? PagePalette.text.opacity(0.03) : .clear)
         .contentShape(.rect)
         .onHover { isHovered = $0 }
+        .accessibilityElement(children: .contain)
         .rowActions(row.actions, onIntent: onIntent)
     }
 
-    /// Hidden rather than removed, so VoiceOver can reach Delete and the row keeps its width.
+    /// Delete's glyph waits for the pointer or the keyboard, left of Edit so Edit keeps the row's end.
     private var controls: some View {
         HStack(spacing: 2) {
             Spacer(minLength: 0)
-            ForEach(row.actions) { action in
-                if action.isDestructive {
-                    PageRowIconButton(action: action, onIntent: onIntent)
-                        .revealedInRow(action.id, isHovered: isHovered, focusedControl: $focusedControl)
-                } else {
-                    PageRowIconButton(action: action, onIntent: onIntent)
-                        .focused($focusedControl, equals: action.id)
-                }
+            ForEach(trailingOrder) { action in
+                PageRowIconButton(
+                    action: action,
+                    isShown: !action.isDestructive
+                        || RowReveal.isDrawn(isHovered: isHovered, focusedControl: focusedControl),
+                    onIntent: onIntent
+                )
+                .focused($focusedControl, equals: action.id)
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    /// Delete first, so the always-drawn Edit ends the row where the design puts it.
+    private var trailingOrder: [MainAction] {
+        row.actions.filter(\.isDestructive) + row.actions.filter { !$0.isDestructive }
     }
 }
 
@@ -110,7 +116,7 @@ struct SnippetTriggerPill: View {
                 .font(.system(size: 10))
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
-            Text(text).lineLimit(1)
+            Text(text).lineLimit(1).truncationMode(.tail)
         }
         .font(.system(size: 12.5, weight: .medium))
         .foregroundStyle(PagePalette.text)
@@ -118,7 +124,8 @@ struct SnippetTriggerPill: View {
         .padding(.vertical, 4)
         .background(tint.opacity(0.16), in: Capsule())
         .overlay { Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1) }
-        .fixedSize()
+        .fixedSize(horizontal: false, vertical: true)
+        .help(text)
     }
 }
 
@@ -140,6 +147,12 @@ struct SnippetEditorView: View {
     @Binding var draft: SnippetDraft
     var onIntent: (MainIntent) -> Void
 
+    /// Which field has the caret; the trigger for a new snippet, the text for one being edited.
+    @FocusState private var focused: Field?
+
+    /// The card's two fields.
+    enum Field { case trigger, text }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -151,13 +164,16 @@ struct SnippetEditorView: View {
             }
             PageEditorField(label: editor.triggerLabel, symbolName: "mic", tint: PagePalette.dictation) {
                 TextField("", text: trigger).textFieldStyle(.plain)
+                    .focused($focused, equals: .trigger)
+                    .onSubmit { focused = .text }
             }
             PageEditorField(label: editor.textLabel, symbolName: "keyboard", tint: PagePalette.suggestion) {
                 TextEditor(text: text)
+                    .focused($focused, equals: .text)
                     .scrollContentBackground(.hidden)
                     .scrollIndicators(.never)
                     .lineSpacing(3)
-                    .frame(minHeight: 64)
+                    .frame(minHeight: 44, maxHeight: 180)
                     .padding(.horizontal, -5)
             }
             PageEditorFooter(
@@ -167,6 +183,8 @@ struct SnippetEditorView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageCard(edge: PagePalette.dictation.opacity(0.35))
+        .onAppear { focused = editor.editing == nil ? .trigger : .text }
+        .onExitCommand { onIntent(editor.cancel.intent) }
     }
 
     /// Rebuilt from what is in the fields now, not from the presentation drawn a keystroke ago.

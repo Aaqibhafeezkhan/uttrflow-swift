@@ -129,6 +129,7 @@ guess paced to a typical cold load, from `SpeechModelLoadEstimate`
 | Home hero | **Getting ready · about 1 min left**, under it *Only after a restart. Everything else already works.*, and the bar filled to the estimate. Holding: **Almost ready…** |
 | Floating button | A ring filled to the estimate, **Getting ready**, and *~1 min*. Holding: **Almost ready**. |
 | Menu bar popover | The same heading as home over a bar filled to the estimate. |
+| A dictation refused during the load | **Speech model still loading…**, and under it the same time left: *About 1 min left*. Holding: *Almost ready*. |
 
 The floating button and the menu bar redraw once a second while the load runs, from
 `AppDelegate`'s ticker, which starts at `estimateAfter` and ends with the load; nothing ticks once

@@ -87,9 +87,11 @@ struct SnippetsPageTests {
         #expect(HistoryFixture.snippets([HistoryFixture.snippet()]).chrome.search != nil)
     }
 
-    @Test("a new snippet can always be started")
+    @Test("a new snippet can always be started, from the empty page's own button when there are none")
     func add() {
-        #expect(HistoryFixture.snippets().chrome.addAction?.intent == .addSnippet)
+        #expect(HistoryFixture.snippets().chrome.addAction == nil)
+        #expect(HistoryFixture.snippets().emptyState?.action?.intent == .addSnippet)
+        #expect(HistoryFixture.snippets([HistoryFixture.snippet()]).chrome.addAction?.intent == .addSnippet)
     }
 
     @Test("the footnote explains how a trigger is matched")
@@ -234,9 +236,11 @@ struct SnippetTintTests {
         #expect(HistoryFixture.snippets(snippets, query: "trigger 2").rows.map(\.tint) == [2])
     }
 
-    @Test("an empty page has no count in its caption")
+    @Test("an empty page is its title alone, and an open editor brings the caption back without a count")
     func emptyCaption() {
-        #expect(
-            HistoryFixture.snippets().chrome.caption == "Say a short phrase; Uttrflow types the whole thing.")
+        #expect(HistoryFixture.snippets().chrome.caption == nil)
+        let editing = SnippetsPresenter.page(for: SnippetsSnapshot(draft: SnippetDraft(), now: .now))
+        #expect(editing.chrome.caption == "Say a short phrase; Uttrflow types the whole thing.")
+        #expect(editing.chrome.addAction?.intent == .addSnippet)
     }
 }
