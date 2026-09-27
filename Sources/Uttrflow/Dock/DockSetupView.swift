@@ -88,25 +88,22 @@ struct DockSetupView: View {
     }
 }
 
-/// The ring filled clockwise from the top to the share done, easing between ticks unless motion is held still.
+/// The arc filled clockwise from the top to the share done, with no track, easing between ticks unless motion is held still.
 private struct DockSetupRing: View {
     let fraction: Double
 
     var body: some View {
         let motion = MotionBudgetObserver.shared.budget
-        ZStack {
-            Circle().stroke(Color.dockSetupTrack, lineWidth: DockSetupMetrics.ringLine)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(
-                    Color.dockSetupAccent,
-                    style: StrokeStyle(lineWidth: DockSetupMetrics.ringLine, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .animation(motion.workingBarsMove ? .linear(duration: 1) : nil, value: fraction)
-        }
-        .frame(width: DockSetupMetrics.ringDiameter, height: DockSetupMetrics.ringDiameter)
-        .frame(width: DockSetupMetrics.ringBox, height: DockSetupMetrics.ringBox)
+        Circle()
+            .trim(from: 0, to: fraction)
+            .stroke(
+                Color.dockSetupAccent,
+                style: StrokeStyle(lineWidth: DockSetupMetrics.ringLine, lineCap: .round)
+            )
+            .rotationEffect(.degrees(-90))
+            .animation(motion.workingBarsMove ? .linear(duration: 1) : nil, value: fraction)
+            .frame(width: DockSetupMetrics.ringDiameter, height: DockSetupMetrics.ringDiameter)
+            .frame(width: DockSetupMetrics.ringBox, height: DockSetupMetrics.ringBox)
     }
 }
 
@@ -159,8 +156,6 @@ extension Color {
     static let dockSetupAccent = Color(nsColor: .orbit(BrandPalette.Redesign.dictationAccent))
     /// The amber of a load that needs a hand, deepened on a light desktop.
     static let dockSetupWarning = Color(nsColor: .orbit(BrandPalette.Redesign.clipboardAccent))
-    /// The download ring's unfilled track.
-    static let dockSetupTrack = Color(nsColor: .orbit(BrandPalette.Redesign.dockRingTrack))
     /// Words on a button filled with an accent.
     static let dockOnAccent = Color(nsColor: .orbit(BrandPalette.Redesign.onAccentInk))
 }

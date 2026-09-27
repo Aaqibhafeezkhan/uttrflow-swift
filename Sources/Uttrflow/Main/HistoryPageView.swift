@@ -17,6 +17,24 @@ struct HistoryPageView: View {
     @State private var tilesWidth: CGFloat = 0
 
     var body: some View {
+        // Only with no search field, so typing a query that matches nothing never rebuilds the field.
+        if let empty = presentation.emptyState, !presentation.showsSearch {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                MainEmptyStateView(state: empty, onIntent: onIntent)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 34)
+            .padding(.bottom, 22)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(alignment: .top) { aurora }
+        } else {
+            list
+        }
+    }
+
+    /// The days on the rail, scrolled, with the retention sentence under the last.
+    private var list: some View {
         ScrollView {
             // Lazy, because a search rebuilds a thousand rows per keystroke.
             LazyVStack(alignment: .leading, spacing: 0) {

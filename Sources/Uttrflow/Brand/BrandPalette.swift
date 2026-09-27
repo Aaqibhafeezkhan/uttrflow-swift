@@ -208,8 +208,6 @@ enum BrandPalette {
         static let cardEdge = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.08, lightOpacity: 0)
         /// Words on a button filled with an accent, near-black in both appearances.
         static let onAccentInk = BrandTone(dark: 0x0B_0C10, light: 0x10_1316)
-        /// The unfilled track of the floating button's download ring.
-        static let dockRingTrack = BrandLayer(tone: textStrong, darkOpacity: 0.18, lightOpacity: 0.16)
         /// A primary button's fill: white when dark, ink when light.
         static let primaryFill = BrandTone(dark: 0xFF_FFFF, light: 0x10_1316)
         /// The words on a primary button.
@@ -359,6 +357,9 @@ extension BrandPalette.Redesign {
         static let rule = BrandLayer(tone: R.textStrong, darkOpacity: 0.1, lightOpacity: 0.09)
         /// A quiet round button's disc.
         static let buttonFill = BrandLayer(tone: R.textStrong, darkOpacity: 0.1, lightOpacity: 0.06)
+        /// Talk's disc while it cannot listen: a fixed mid-grey under a white mic when light, faded white when dark.
+        static let talkOff = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x8B_90A0), darkOpacity: 0.35, lightOpacity: 1)
         /// A round button's edge.
         static let buttonEdge = BrandLayer(tone: R.textStrong, darkOpacity: 0.14, lightOpacity: 0.1)
         /// The keycap behind the shortcut.

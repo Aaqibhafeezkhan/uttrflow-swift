@@ -487,8 +487,9 @@ public enum HistoryPresenter {
         if snapshot.entries.isEmpty {
             return MainEmptyState(
                 symbolName: "clock",
-                title: "Nothing yet",
-                message: "What you dictate shows up here, and never leaves this Mac.")
+                title: "Nothing dictated yet",
+                message: "Every dictation lands here, kept on this Mac.",
+                action: .tryIt)
         }
         // Everything handed over fell outside retention: the promise was kept, not "never dictated".
         return MainEmptyState(

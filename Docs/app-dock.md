@@ -11,9 +11,10 @@ the two things that are not obvious from the code.
 | Hovered | orb 30 + hint 30 high | The orb keeps the grip's side so it stays under the pointer |
 | Listening | 32 high | The meter and a running clock on tinted glass, the clock on the anchored edge; no mark |
 | Working | 40-point orb | Three bars rising and settling in turn, for as long as there is work left |
-| Inserted | 26-point disc | A success needs no words: the text is already in the document |
+| Inserted | 26-point disc | A teal return arrow inside the ring; a success needs no words, the text is already in the document |
 | Nothing heard, too short | 28 high, words up to 200 wide | The struck level with its sentence, readable at rest; a too-short hold says to hold longer |
 | Copied, not typed | 28 high | ⌘V and "Copied, not typed" at rest, kept up as long as a failure; the reason and the Fix button under the pointer |
+| Microphone off | 28 high | The warning disc, "Microphone is off" and a trailing Fix; the full sentence under the pointer |
 | Blocked | 300 wide, at least 40 high | The only wide form, so after a run of discs it is unmistakably asking for something |
 | Speech model loading | 300 wide, at least 40 high | The blocked form with an hourglass, in place of the resting grip for as long as the load runs. See `Docs/startup.md` |
 
@@ -69,18 +70,17 @@ the light. Quiet bars are drawn at `meterQuietOpacity` 0.62 and loud ones at ful
 earlier pair of teals could not carry the threshold by hue, collapsing to 1.05:1 on a dark
 desktop, and opacity works on both grounds because it depends on neither.
 
-## The tick is a tick
+## Inserted is a return arrow
 
-`Tick` is one round-capped stroke through three points on the mark's own 100-unit grid —
-(20, 54), (42, 76), (82, 26) — drawn on over 0.26 s. The grid is what it keeps from the
-identity: the stroke weight comes from `UttrflowMark.lineWidth(forHeight:)`, so it sits at
-the same weight as everything around it.
+`InsertedMark` is `ReturnArrow` — a 13-point return key on a 24-unit grid, a stroke down the
+right side turning left into an arrowhead — drawn on over 0.26 s in dictation teal
+`dictationAccent` inside the 26-point disc. It names the key that puts words in, which is the
+thing that just happened.
 
-It used to be the mark opening into a check: one stroke whose turn widened from radius 24 to
-6 and whose arms splayed to 44° and −32°, on the reasoning that the `u` and a check differ
-only by how far they open. Drawn at 14 points in a 26-point disc it did not read as a check.
-The turn stays a turn at that size, so what arrives is a bowl — an upside-down `u` — and a
-confirmation nobody reads as confirmation is not one. The tick's job is to be unmistakable.
+It used to be a tick, `MarkTick`: one round-capped stroke on the mark's 100-unit grid in
+`successInk` green. The design draws the return arrow, and a green tick was the one place the
+dock spoke in a colour the rest of the redesign does not use. Before that it was the mark
+opening into a check, which at 14 points in a 26-point disc read as an upside-down `u`.
 
 ## Colours
 
@@ -95,7 +95,7 @@ confirmation nobody reads as confirmation is not one. The tick's job is to be un
   | Failure disc | `dockWarningFill` `#C25E00` | its white glyph | 4.29:1 | 3:1 |
   | Failure disc | `#C25E00` | light / dark glass | 3.70:1 / 3.53:1 | 3:1 |
   | Copied keycap text | `dockWarningInk` `#943C00` light, `#FFB05C` dark | keycap `#CDCDCD` / `#444444` (14% over light / dark glass) | 4.55:1 / 5.39:1 | 4.5:1 |
-  | Inserted tick | `dockSuccessInk` `#176A2F` light, `#5CD97E` dark | light / dark glass | 5.77:1 / 8.42:1 | 3:1 |
+  | Inserted arrow | `dictationAccent` `#128077` light, `#5FE0D3` dark | light / dark glass | 4.13:1 / 9.43:1 | 3:1 |
 
   The bright `dockWarning` `#FF8D28` and `dockSuccess` `#34C759` measure 2.31:1 under white
   and about 2:1 on light glass, so the dock never draws with them.

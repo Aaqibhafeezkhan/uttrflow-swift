@@ -3,14 +3,18 @@
 import UttrflowUX
 import SwiftUI
 
-/// The page the window opens on: top bar, hero, four stat tiles, then the last few dictations.
+/// The page the window opens on: top bar, hero, four stat tiles, then the last few dictations; before any, one centred invitation.
 struct HomePageView: View {
     let presentation: HomePresentation
     var onIntent: (MainIntent) -> Void = { _ in }
 
     var body: some View {
-        ScrollView {
+        if presentation.emptyState != nil {
             HomePageContent(presentation: presentation, onIntent: onIntent)
+        } else {
+            ScrollView {
+                HomePageContent(presentation: presentation, onIntent: onIntent)
+            }
         }
     }
 }
@@ -26,19 +30,25 @@ struct HomePageContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             topBar
-            HomeHeroCard(hero: presentation.hero, mood: presentation.mood, onIntent: onIntent)
-            if let step = presentation.nextStep {
-                MainCard { MainEmptyStateView(state: step, onIntent: onIntent) }
+            if let empty = presentation.emptyState {
+                MainEmptyStateView(state: empty, onIntent: onIntent)
+            } else {
+                HomeHeroCard(hero: presentation.hero, mood: presentation.mood, onIntent: onIntent)
+                if let step = presentation.nextStep {
+                    MainCard { MainEmptyStateView(state: step, onIntent: onIntent) }
+                }
+                if !presentation.tiles.isEmpty {
+                    tiles
+                }
+                HomeActivityCard(presentation: presentation, onIntent: onIntent)
             }
-            if !presentation.tiles.isEmpty {
-                tiles
-            }
-            HomeActivityCard(presentation: presentation, onIntent: onIntent)
         }
         .padding(.horizontal, 28)
         .padding(.top, 34)
         .padding(.bottom, 22)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(
+            maxWidth: .infinity, maxHeight: presentation.emptyState == nil ? nil : .infinity,
+            alignment: .topLeading)
     }
 
     /// The date, and the greeting for the time of day.
@@ -81,10 +91,7 @@ struct HomeSearchField: View {
     var isEnabled = true
     var onIntent: (MainIntent) -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        let isLight = colorScheme == .light
         Button {
             onIntent(action.intent)
         } label: {
@@ -105,15 +112,10 @@ struct HomeSearchField: View {
             .foregroundStyle(PagePalette.text.opacity(isEnabled ? 0.5 : 0.4))
             .padding(.horizontal, 14)
             .frame(width: 300, height: 40)
-            // A white field on the light page, as a card is, since a faint ink film vanishes against it.
-            .background(
-                isLight ? PagePalette.card : PagePalette.text.opacity(0.05),
-                in: .rect(cornerRadius: 12, style: .continuous)
-            )
+            .background(PagePalette.text.opacity(0.05), in: .rect(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(
-                        isLight ? PagePalette.controlEdge : PagePalette.text.opacity(0.12), lineWidth: 1)
+                    .strokeBorder(PagePalette.text.opacity(0.12), lineWidth: 1)
             }
             .contentShape(.rect)
         }
