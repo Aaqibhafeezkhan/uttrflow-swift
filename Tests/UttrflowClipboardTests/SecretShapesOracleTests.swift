@@ -23,7 +23,7 @@ struct SecretShapesOracleTests {
         "Qv7RkT2mXeL9pAz4", "\u{0}", "\u{FEFF}", "😀", "🇺🇸", "\u{200D}", "'s", "x.", "rgb(", "(", ")",
         "func ", "import ", "//", "select ", "  ", "#", "?", "{", "}", "return", "if(",
         "AAAAAAAAAAAAAAAAAAAAAAAA", "user", "pass", ":x@", "a1", "-----BEGIN", "\\", "$", "*", "-- ",
-        "# ", "* ", "/*", "from ", "else", "oklab(", "OKLCH(", "o\u{212A}lab(", "Https://",
+        "# ", "* ", "/*", "[", "]", ", k: ", "from ", "else", "oklab(", "OKLCH(", "o\u{212A}lab(", "Https://",
         "DB_", "db", "Pass", "PASS", "_pass", "Token", "SMTP_", "max_", "_count", "less", "izer",
     ]
 
@@ -245,8 +245,12 @@ enum BacktrackingPatterns {
             | pass | credentials? | private[_\-]?key | access[_\-]?key | auth[_\-]?token
             | client[_\-]?secret )
         \b["']? \s* [:=] \s*
-        (?<value> "(?:[^"\\\n]|\\.)+" | '(?:[^'\\\n]|\\.)+' | [^\s"'\n]+ )
-        \s*[,;]?\s*$
+        (?:
+            (?<quoted> "(?:[^"\\\n]|\\.)+" | '(?:[^'\\\n]|\\.)+' )
+            \s* (?: [,;]?\s*$ | [,;]?\s*(?:\#|//) | [}\]]
+                | ,\s*["']?(?-i:[A-Za-z_$][A-Za-z0-9_$\-]*)["']?\s*[:=] )
+          | (?<bare> [^\s"'\n]+ ) (?: \s*[,;]?\s*$ | \s+[,;]?\s*(?:\#|//) )
+        )
         /#
         .anchorsMatchLineEndings()
 
@@ -286,7 +290,7 @@ enum BacktrackingPatterns {
 
     static func hasNamedSecret(_ text: String) -> Bool {
         text.matches(of: namedSecret).contains { match in
-            let raw = String(match.value)
+            let raw = String(match.quoted ?? match.bare ?? "")
             let isQuoted = raw.count >= 2 && (raw.hasPrefix("\"") || raw.hasPrefix("'"))
             let value = isQuoted ? String(raw.dropFirst().dropLast()) : raw
             let hasDigit = value.contains { $0.isASCII && $0.isNumber }

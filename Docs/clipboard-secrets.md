@@ -32,6 +32,11 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
    still needs a word boundary, so `passwordless`, `tokenizer` and `token_count` are not names.
    The cost, paid knowingly: `max_tokens: 4096` is masked, because a digit under a name that
    ends in a keyword is exactly what a short password or PIN looks like.
+   The value ends its line, or is followed by a `#` or `//` comment (after a space, for an
+   unquoted value, since `#` can stand inside one). A quoted value may also be followed by `}`,
+   `]`, or `, name:`, so a one-line JSON or JavaScript object (`{"apiKey":"…"}`,
+   `{ apiKey: "…", region: "us" }`) counts; `"token: " + t` does not, because what follows the
+   quote is more of an expression.
    A long bare value that only points at a secret is not one: an identifier path or an
    empty call (`request.token`, `process.env.API_KEY;`, `getpass.getpass()`), made of letters,
    `_` and `$` with no digit and no part of 32 or more hex letters, is code that loads a
@@ -44,7 +49,7 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
 
 A credential inside a one-line command is not a named secret: `curl -u user:pass https://…`,
 `mysql -u root -ppass` and `PGPASSWORD=pass psql -h …`. The rule needs the value to end its
-line, which is what keeps prose such as `password: now is the time` out, and in a command the
+line or run into a comment, which is what keeps prose such as `password: now is the time` out, and in a command the
 value is followed by more of the command. `-u user:pass` has the same shape as `user:group` and
 `host:port`, `-p` is a port, a path or a profile flag in most other tools, and `PGPASSWORD`
 fuses the keyword into one uppercase word with no boundary before it. Catching any of these

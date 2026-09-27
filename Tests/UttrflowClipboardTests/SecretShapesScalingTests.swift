@@ -19,6 +19,8 @@ extension HeavyClipScans {
             "headers and stops": "eyJa.",
             "schemes": "ab+c",
             "scheme separators": "a://b:",
+            "quoted values and comments": "pwd=\"a\" x,",
+            "quoted values and key lists": "pwd='a', k x",
             "keyword assignments": "pwd=",
             "keywords in one word": "apikey" + "tokenpassword",
             "keyword and spaces": "password  ",

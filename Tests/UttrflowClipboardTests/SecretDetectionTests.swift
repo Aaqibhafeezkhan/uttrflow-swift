@@ -124,6 +124,36 @@ struct SecretDetectionTests {
         #expect(ClipKindDetector.kind(of: text) == .secret)
     }
 
+    @Test(
+        "masks a named secret followed by a comment, or inside a one-line object",
+        arguments: [
+            "password = \"Zx9kLmQ2rT7p\"  # rotate monthly",
+            "export API_KEY=\"abc123def456\" # dev",
+            "API_KEY=abc123def456 // staging",
+            "token: 'Zx9kLmQ2rT7p', // old one",
+            "{\"apiKey\":\"Zx9kLmQ2rT7p\"}",
+            "{\"user\": \"deploy\", \"password\": \"Zx9kLmQ2rT7p\"}",
+            "const config = { apiKey: \"Zx9kLmQ2rT7p\", region: \"us\" };",
+            "[{'secret': 'Zx9kLmQ2rT7p'}]",
+        ])
+    func commentsAndObjects(_ text: String) {
+        #expect(SecretShapes.hasNamedSecret(text))
+        #expect(ClipKindDetector.kind(of: text) == .secret)
+    }
+
+    /// A quoted value followed by more of an expression, or a bare value run into a `#`, is not a value that ended.
+    @Test(
+        "does not mask a quoted string that only starts an expression",
+        arguments: [
+            "log(\"token: \" + t + \" done\")",
+            "print(\"password: \", pw)",
+            "password = \"a\" + suffix",
+            "token=abc#def more",
+        ])
+    func quotedExpressions(_ text: String) {
+        #expect(SecretShapes.hasNamedSecret(text) == false)
+    }
+
     @Test("masks quoted named secrets whose value contains an escaped quote")
     func escapedQuotesInNamedSecrets() {
         let dotenv = #"password="abc123\"def456""#
