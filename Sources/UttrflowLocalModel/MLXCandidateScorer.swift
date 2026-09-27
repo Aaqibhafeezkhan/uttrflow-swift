@@ -80,7 +80,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let step = Task { try await self.fill(downloader: downloader, onProgress: onProgress) }
         loadInFlight = step
         defer { if loadInFlight == step { loadInFlight = nil } }
-        try await step.value
+        // The caller that started the load stopping it stops the load, so a release never waits out the read.
+        try await withTaskCancellationHandler(
+            operation: { try await step.value }, onCancel: { step.cancel() })
     }
 
     /// Reads the weights in, fetching them through `downloader` only where one is given.
@@ -93,7 +95,10 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         defer { bufferCache.clear() }
         let directory = try await model.weightsDirectory(
             cache: cache, downloader: downloader, onProgress: onProgress)
+        // A load stopped during the fetch reads no weights, and one stopped during the read keeps none for the warm-up.
+        try Task.checkCancellation()
         guard let loaded = try await weights.load(from: directory) else { return }
+        try Task.checkCancellation()
         container = loaded
         // Lines judged with no model loaded are empty, so they are dropped once there is one.
         judgementCache.forgetEverything()
@@ -114,6 +119,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     /// Empties the weights once every pass using them has ended, and hands the freed GPU buffers back to the system.
     public func release() async {
         container = nil
+        loadInFlight?.cancel()
         loadInFlight = nil
         forgetReadings()
         await passesEnded()

@@ -244,8 +244,10 @@ reclaims on its own.
 
 The suggestion model is what the budget is about. On an 8 GB Mac its 3 GB is close to half of
 all memory, which is why nothing loads it for somebody who never asked, and why turning the
-feature off gives it back. `AppDelegate` releases it when the switch goes off, after any load
-still running has landed, and `MLXCandidateScorer.release()` swaps out the weights (keeping the modules
+feature off gives it back. `AppDelegate` releases it when the switch goes off or memory is pressed. A
+load still running is stopped first rather than waited out: the download is cancelled, and the
+weights are not read (or, when the read had begun, not kept for the warm-up), so neither a fetch nor
+a 2.5 GB read runs on after the release. Then `MLXCandidateScorer.release()` swaps out the weights (keeping the modules
 and tokenizer, see "Reloads no longer quantise" below), drops the warmed instructions and the
 vocabulary, and empties MLX's cache. Measured with
 `uttrflow-bakeoff gpu-memory --release`:

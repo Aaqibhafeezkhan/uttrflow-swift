@@ -780,7 +780,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         suggestionModel = .failed
     }
 
-    /// Lets the weights go once the feature is off, after any load still in flight. See `Docs/performance.md`.
+    /// Lets the weights go once the feature is off, stopping any load still in flight. See `Docs/performance.md`.
     private func releaseTheModel() {
         guard isModelPreparing || suggestionModel == .failed else { return }
         isModelPreparing = false
@@ -788,6 +788,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         suggestionModel = .notAsked
         let previous = modelPreparation
         let releaseModel = releaseModel
+        // A load still in flight is stopped rather than waited out, so no download or read runs on after the release.
+        previous?.cancel()
         modelPreparation = Task {
             await previous?.value
             await releaseModel?()
