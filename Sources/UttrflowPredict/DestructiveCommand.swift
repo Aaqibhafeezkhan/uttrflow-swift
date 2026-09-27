@@ -17,8 +17,20 @@ public enum DestructiveCommand {
             {
                 return true
             }
+            if clause.overwrites.contains(where: { !harmlessOutputs.contains($0.text) }) { return true }
             return destroys(clause.words, failClosedOnUnresolved: failClosedOnUnresolved)
         }
+    }
+
+    /// Devices a `>` writes to without emptying any file.
+    private static let harmlessOutputs: Set<String> = [
+        "/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty", "/dev/fd/1", "/dev/fd/2",
+    ]
+
+    /// Flags that make rsync delete files, in the destination or at the source.
+    private static func rsyncDeletes(_ flag: String) -> Bool {
+        flag == "--del" || flag.hasPrefix("--delete") || flag == "--remove-source-files"
+            || flag == "--remove-sent-files"
     }
 
     /// Words that run the command after them, with the flags of theirs that take a value.
@@ -128,6 +140,16 @@ public enum DestructiveCommand {
             }
         case "mv", "cp":
             if lowered.last == "/dev/null" { return true }
+        case "rsync":
+            if lowered.contains(where: rsyncDeletes) { return true }
+        case "tee":
+            // Without `-a` tee empties every file it names, as `>` does.
+            let appends =
+                lowered.contains("--append")
+                || lowered.contains { shortFlags($0, include: "a", valuesAfter: []) }
+            if !appends, lowered.contains(where: { !$0.hasPrefix("-") && !harmlessOutputs.contains($0) }) {
+                return true
+            }
         default:
             break
         }
