@@ -629,8 +629,7 @@ public actor DictationPipeline {
         let expanded = await expand(written)
         guard !wasCancelled(mine) else { return }
 
-        // The boundary that decides what is written: a leading or trailing space when the field's
-        // surrounding text would otherwise glue the dictated words onto it. See #1908.
+        // Pads with a space where the field's surrounding text would glue the words on (#1908).
         let insertionPoint = appContext?.insertionPoint ?? .unknown
         let toWrite = insertionPoint.paddedBoundary(for: expanded.text)
 

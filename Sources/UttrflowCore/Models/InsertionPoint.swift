@@ -64,12 +64,9 @@ public struct InsertionPoint: Sendable, Equatable, Codable {
     /// The marks after which a new sentence begins.
     private static let sentenceEnds: Set<Character> = [".", "!", "?"]
 
-    /// Pads `text` so it sits cleanly at the caret: one leading space when the character
-    /// before the caret is not whitespace and not an opening bracket or quote, and one
-    /// trailing space when the character after the caret is a word character. See issue #1908.
+    /// Adds a leading space after a non-space, non-opener and a trailing one before a word character (#1908).
     public func paddedBoundary(for text: String) -> String {
-        // A field that refused to share its preceding text cannot be reasoned about, so the
-        // dictated text is returned as-is.
+        // A field that hid its preceding text gets the dictated text unchanged.
         guard let preceding = precedingText, !text.isEmpty, !text.allSatisfy(\.isWhitespace) else {
             return text
         }
