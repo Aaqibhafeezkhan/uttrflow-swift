@@ -75,6 +75,8 @@ enum MenuBarColour {
     static let dictation = Color(nsColor: .orbit(R.dictationAccent))
     static let amber = Color(nsColor: .orbit(R.clipboardInk))
     static let live = Color(rgb: BrandPalette.Semantic.recording)
+    /// The progress fill's stops for Core Animation, aurora blue into dictation teal.
+    static let progressStops = [NSColor(rgb: R.auroraStops[2]), NSColor.orbit(R.dictationAccent)]
     /// The progress fill, aurora blue into dictation teal.
     static let progress = LinearGradient(
         colors: [Color(rgb: R.auroraStops[2]), dictation], startPoint: .leading, endPoint: .trailing)
