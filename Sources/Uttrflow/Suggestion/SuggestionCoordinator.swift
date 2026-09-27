@@ -371,9 +371,11 @@ final class SuggestionCoordinator {
         if let text, typedThrough(text) { return }
         // Counted in the session, so a Tab pressed before the next read cannot take an offer for the old line.
         session.keystrokeArrived()
+        let endsLine = Self.endsLine(key, composing: composingAtLastRead)
+        if endsLine { session.lineEnded() }
         // The line just changed, so the ghost at the old caret, a pass about the old prefix and a booked wake are all stale.
         withdraw()
-        wake(Self.endsLine(key, composing: composingAtLastRead) ? .returnPressed : .keystroke)
+        wake(endsLine ? .returnPressed : .keystroke)
     }
 
     /// Whether a key ends the line: a Return does, unless an input method was composing, when it confirms a conversion.
