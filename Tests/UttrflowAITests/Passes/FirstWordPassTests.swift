@@ -17,6 +17,20 @@ struct FirstWordPassTests {
         cleaned(text, by: FirstWordPass(policy: .asSpoken, heard: heard))
     }
 
+    /// An ellipsis is a pause inside the sentence, so the word after it keeps the case it was heard in.
+    @Test(
+        "leaves the word after an ellipsis as it was heard",
+        arguments: [
+            ("we should... move the meeting", "We should... move the meeting"),
+            ("we should\u{2026} move it", "We should\u{2026} move it"),
+            ("wait... What happened", "Wait... What happened"),
+            ("really...? yes", "Really...? Yes"),
+        ]
+    )
+    func leavesTheWordAfterAnEllipsis(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
     @Test(
         "capitalises the start of every sentence",
         arguments: [

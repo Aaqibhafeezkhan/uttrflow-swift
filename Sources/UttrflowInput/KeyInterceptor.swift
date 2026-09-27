@@ -54,15 +54,16 @@ public final class KeyInterceptor: Sendable {
         drain.cancel()
     }
 
-    /// Which keystrokes to take, and the tap is off while none are, so no keystroke waits here.
+    /// Which keystrokes to take; the tap is off while none are and nothing is held, so no keystroke waits here.
     public func arm(_ keys: ArmedKeys) {
-        state.armed.store(keys.rawValue, ordering: .relaxed)
-        if let port = state.port() { CGEvent.tapEnable(tap: port, enable: !keys.isEmpty) }
+        let listening = state.arm(keys)
+        if let port = state.port() { CGEvent.tapEnable(tap: port, enable: listening) }
     }
 
     /// Replays the keys held back since the last swallowed keystroke, once that keystroke has been carried out.
     public func releaseHeldKeys() {
-        state.hold.release()
+        let listening = state.releaseHeldKeys()
+        if let port = state.port() { CGEvent.tapEnable(tap: port, enable: listening) }
     }
 
     /// Creates the tap and gives it a thread with a run loop of its own.
@@ -231,133 +232,6 @@ final class InterceptorTap: @unchecked Sendable {
     }
 }
 
-/// Everything the C callback may touch, held where a raw pointer can reach it.
-final class TapState: @unchecked Sendable {
-    /// How many taken keystrokes may wait for the drain; while it is that far behind, newer ones are dropped.
-    static let capacity = 64
-
-    /// Which slots are being taken, and the only thing the callback loads.
-    let armed = Atomic<UInt32>(0)
-    /// The keys pressed after a taken keystroke, kept back until it has been carried out.
-    let hold = KeyHold()
-
-    /// Written by the tap's thread and read by the drain; a slot is written again only once the drain has read it.
-    private let ring: UnsafeMutablePointer<UInt32>
-    /// Set when the tap gives up, kept out of the ring so a full ring cannot lose it.
-    private let gaveUp = Atomic<Bool>(false)
-    /// How many keystrokes have ever been written into the ring.
-    private let written = Atomic<UInt64>(0)
-    /// How many the drain has ever taken out of it.
-    private let read = Atomic<UInt64>(0)
-    /// How many disables have counted against the tap inside the current window.
-    private let disables = Atomic<Int>(0)
-    /// When the last disable arrived, in uptime nanoseconds.
-    private let lastDisable = Atomic<UInt64>(0)
-    /// The tap port, retained here so the callback can re-enable it without a lock.
-    private let tapPointer = Atomic<UnsafeMutableRawPointer?>(nil)
-    /// Woken on every write, so the drain runs off the tap's own thread.
-    private let signal: any DispatchSourceUserDataAdd
-
-    init(signal: any DispatchSourceUserDataAdd) {
-        self.signal = signal
-        ring = .allocate(capacity: Self.capacity)
-        ring.initialize(repeating: 0, count: Self.capacity)
-    }
-
-    deinit {
-        if let held = tapPointer.load(ordering: .relaxed) { Unmanaged<CFMachPort>.fromOpaque(held).release() }
-        ring.deinitialize(count: Self.capacity)
-        ring.deallocate()
-    }
-
-    /// Keeps a new tap's port for the callback and forgets older disables, so each tap is judged alone.
-    func adopt(_ port: CFMachPort) {
-        lastDisable.store(0, ordering: .relaxed)  // The new tap starts with no disables.
-        if let previous = tapPointer.exchange(Unmanaged.passRetained(port).toOpaque(), ordering: .releasing) {
-            Unmanaged<CFMachPort>.fromOpaque(previous).release()
-        }
-    }
-
-    /// Lets go of the port if it is still the one held, which its tap keeps alive for any callback still reading it.
-    func relinquish(_ port: CFMachPort) {
-        let expected = Unmanaged.passUnretained(port).toOpaque()
-        if tapPointer.compareExchange(expected: expected, desired: nil, ordering: .releasing).exchanged {
-            Unmanaged<CFMachPort>.fromOpaque(expected).release()
-        }
-    }
-
-    /// The port to re-enable, read only on the path where the tap has already been disabled.
-    func port() -> CFMachPort? {
-        guard let held = tapPointer.load(ordering: .acquiring) else { return nil }
-        return Unmanaged<CFMachPort>.fromOpaque(held).takeUnretainedValue()
-    }
-
-    /// Records one taken keystroke, or drops it and returns false when the drain is a whole ring behind.
-    @discardableResult
-    func enqueue(_ slot: UInt32) -> Bool {
-        let next = written.load(ordering: .relaxed)
-        // Acquiring pairs with the drain's releasing store, so a slot is read before it is written again.
-        guard next &- read.load(ordering: .acquiring) < UInt64(Self.capacity) else { return false }
-        ring[Int(next % UInt64(Self.capacity))] = slot
-        written.store(next &+ 1, ordering: .releasing)
-        signal.add(data: 1)
-        return true
-    }
-
-    /// Whether the tap should be turned back on, which it is unless it keeps being disabled within a short window.
-    func shouldReEnable() -> Bool {
-        let now = DispatchTime.now().uptimeNanoseconds
-        let last = lastDisable.exchange(now, ordering: .relaxed)
-        let (count, reEnable) = TapDisableWindow.decide(
-            last: last, now: now, count: disables.load(ordering: .relaxed))
-        disables.store(count, ordering: .relaxed)
-        if !reEnable {
-            gaveUp.store(true, ordering: .releasing)
-            signal.add(data: 1)
-        }
-        return reEnable
-    }
-
-    /// Takes an armed key into the ring, arming Return for a captured arrow; false if unarmed or the ring is full.
-    @discardableResult
-    func takeIfArmed(_ slot: ArmedKeys) -> Bool {
-        guard armed.load(ordering: .relaxed) & slot.rawValue != 0 else { return false }
-        guard enqueue(slot.rawValue) else { return false }
-        // Claims Return only for a captured arrow, so a rejected arrow never blocks a Return the app should see.
-        if slot == .downArrow || slot == .upArrow {
-            armed.bitwiseOr(ArmedKeys.return.rawValue, ordering: .relaxed)
-        }
-        return true
-    }
-
-    /// Takes an armed key, or disarms every slot for a key the application will see, so a later accept cannot take a stale offer.
-    func route(_ slot: ArmedKeys) -> Bool {
-        if !slot.isEmpty, takeIfArmed(slot) { return true }
-        armed.store(0, ordering: .relaxed)
-        return false
-    }
-
-    /// Everything written since the last drain, oldest first, then the tap giving up if it has.
-    func take() -> [InterceptedEvent] {
-        // Read before `written`, so every keystroke taken before the tap gave up is drained with it.
-        let stopped = gaveUp.exchange(false, ordering: .acquiring)
-        let end = written.load(ordering: .acquiring)
-        var cursor = read.load(ordering: .relaxed)
-        var events: [InterceptedEvent] = []
-        while cursor < end {
-            let slot = ring[Int(cursor % UInt64(Self.capacity))]
-            if let stroke = ArmedKeys.stroke(of: ArmedKeys(rawValue: slot)) {
-                events.append(.swallowed(stroke))
-            }
-            cursor &+= 1
-        }
-        // Releasing, so the tap writes these slots again only after they have been read.
-        read.store(cursor, ordering: .releasing)
-        if stopped { events.append(.stopped(.disabledTwice)) }
-        return events
-    }
-}
-
 /// The one function macOS calls per keypress, which loads a single atomic and returns.
 private let keyInterceptorCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo else { return Unmanaged.passUnretained(event) }
@@ -367,34 +241,14 @@ private let keyInterceptorCallback: CGEventTapCallBack = { _, type, event, userI
     case .keyDown:
         // The feature's own inserted keys reach this tap upstream; passing them through stops the loop.
         guard !SyntheticEvent.isOurs(event) else { return Unmanaged.passUnretained(event) }
-        // A key pressed while a taken keystroke is carried out waits for it, so it cannot overtake an insertion.
-        if state.hold.keep(event) { return nil }
-        let stroke = KeyStroke(
-            keyCode: UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)),
-            modifiers: KeyModifiers(event.flags))
-        let slot = ArmedKeys.slot(of: stroke)
-        guard state.route(slot) else { return Unmanaged.passUnretained(event) }
-        state.hold.begin()
-        return nil
+        return state.takes(event) ? nil : Unmanaged.passUnretained(event)
     case .tapDisabledByTimeout, .tapDisabledByUserInput:
         // Not the keystroke path: by the time this runs the system has already stopped delivering.
-        if state.armed.load(ordering: .relaxed) != 0, state.shouldReEnable(), let port = state.port() {
+        if state.isListening, state.shouldReEnable(), let port = state.port() {
             CGEvent.tapEnable(tap: port, enable: true)
         }
         return Unmanaged.passUnretained(event)
     default:
         return Unmanaged.passUnretained(event)
-    }
-}
-
-extension KeyModifiers {
-    /// The window server's flags, narrowed to the four that change what a key means.
-    fileprivate init(_ flags: CGEventFlags) {
-        var modifiers = KeyModifiers()
-        if flags.contains(.maskCommand) { modifiers.insert(.command) }
-        if flags.contains(.maskAlternate) { modifiers.insert(.option) }
-        if flags.contains(.maskControl) { modifiers.insert(.control) }
-        if flags.contains(.maskShift) { modifiers.insert(.shift) }
-        self = modifiers
     }
 }

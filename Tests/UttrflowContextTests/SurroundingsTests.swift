@@ -427,6 +427,28 @@ struct SurroundingsTests {
         #expect(got.contains(longLine), "the long line is not eaten by the substring match: \(got)")
     }
 
+    @Test(
+        "A short message repeated as the newest line stays last, so the tail is still the message being answered."
+    )
+    func aRepeatedNewestLineStaysLast() {
+        let window = Node(
+            id: 0, role: "AXWindow",
+            children: [
+                Node(
+                    id: 60, children: [label(61, "ok"), label(62, "Can you send the file?"), label(63, "ok")]),
+                compose,
+            ])
+        let read = Surroundings.collect(
+            around: compose, in: FakeTree(root: window), windowTitle: nil, deadline: unhurried)
+        #expect(lines(read) == ["Can you send the file?", "ok"])
+    }
+
+    @Test("Of lines read twice, the copy nearest the field is kept in its place")
+    func theNearestCopyIsKept() {
+        #expect(Surroundings.deduplicated(["a", "b", "a", "c"], dropping: nil) == ["b", "a", "c"])
+        #expect(Surroundings.deduplicated(["a", "draft", "b"], dropping: "draft") == ["a", "b"])
+    }
+
     /// #1947: the focused field's value must not be carried into its surroundings when a web view mirrors it.
     @Test("The focused field's own value is not carried into its surroundings.")
     func theFocusedFieldIsNotItsOwnSurroundings() {

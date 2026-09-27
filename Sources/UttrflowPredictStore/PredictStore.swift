@@ -316,7 +316,11 @@ public actor PredictStore: PredictionStore {
                     query: queryMask, candidate: FuzzyMatch.mask(units.prefix(width)), within: budget)
             else { return nil }
             let distance = FuzzyMatch.prefixDistance(needle, units, within: budget)
-            guard distance <= budget else { return nil }
+            // A near miss that would add, drop or change a typed digit writes a different number, never a fixed typo.
+            guard distance <= budget, FuzzyMatch.keepsDigits(of: needle, in: units, atDistance: distance)
+            else {
+                return nil
+            }
             return Candidate(
                 text: text, source: .personal,
                 evidence: Entry(
@@ -577,7 +581,17 @@ public actor PredictStore: PredictionStore {
         ) { Int64($0.integer(0)) }.first
     }
 
-    /// Keeps a surface within its cap, dropping superseded entries first and then the weakest.
+    /// The order entries leave a full surface: fragments a longer line grew out of, then the weakest, and retirements last.
+    static let evictionOrder = """
+        CASE
+          WHEN superseded_by IS NULL THEN 1
+          WHEN length(superseded_by) > length(text)
+            AND substr(lower(superseded_by), 1, length(text_lower)) = text_lower THEN 0
+          ELSE 2
+        END ASC, count ASC, last_used ASC
+        """
+
+    /// Keeps a surface within its cap, never dropping a correction or a refusal while a live entry could go instead.
     private func evictWeakest(surfaceIdentifier id: Int64) throws(PredictStoreError) {
         try evictWeakestSuccessions(surfaceIdentifier: id)
         let held = try database.rows(
@@ -588,7 +602,7 @@ public actor PredictStore: PredictionStore {
             """
             DELETE FROM entry WHERE id IN (
               SELECT id FROM entry WHERE surface_id = ?
-              ORDER BY (superseded_by IS NOT NULL) DESC, count ASC, last_used ASC LIMIT ?
+              ORDER BY \(Self.evictionOrder) LIMIT ?
             )
             """,
             {

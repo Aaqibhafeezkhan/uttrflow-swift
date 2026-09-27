@@ -1591,8 +1591,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         await refreshPanelIfOpen()
     }
 
-    private func recordAsClip(_ text: String, of dictation: DictationRecord.ID) {
-        Task { [clipboard] in
+    /// Keeps a dictation in the clipboard's Uttrflow list while the Clipboard switch is on, and nothing while it is off.
+    @discardableResult
+    func recordAsClip(_ text: String, of dictation: DictationRecord.ID) -> Task<Void, Never>? {
+        guard surfaces.watchesTheClipboard else { return nil }
+        return Task { [clipboard] in
             let classified = await ClipKindDetector.classify(text)
             let clip = Clip(
                 text: text, kind: classified.kind, copiedAt: Date(), source: ClipOrigin.dictationSource,

@@ -38,6 +38,26 @@ public enum FuzzyMatch {
         (unit >= 65 && unit <= 90) ? unit + 32 : unit
     }
 
+    /// Whether taking the candidate leaves every digit typed as it was: the digits after the shared opening match those the candidate puts in their place.
+    public static func keepsDigits(
+        of query: [UInt32], in candidate: [UInt32], atDistance distance: Int
+    ) -> Bool {
+        var shared = 0
+        while shared < query.count, shared < candidate.count,
+            folded(query[shared]) == folded(candidate[shared])
+        {
+            shared += 1
+        }
+        let replaced = query[shared...].filter(isDigit)
+        let inPlace = candidate[shared..<min(candidate.count, query.count + distance)].filter(isDigit)
+        return replaced == inPlace
+    }
+
+    /// Whether one unit is a digit in any script.
+    static func isDigit(_ unit: UInt32) -> Bool {
+        Unicode.Scalar(unit)?.properties.numericType != nil
+    }
+
     /// Edits from the query to the nearest opening of a candidate, counting a transposition as one, ignoring case.
     public static func prefixDistance(_ query: [UInt32], _ candidate: [UInt32], within budget: Int) -> Int {
         let rows = query.count

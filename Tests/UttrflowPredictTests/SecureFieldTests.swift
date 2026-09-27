@@ -178,4 +178,22 @@ struct SecureFieldReadableValueTests {
             value: { "see you at six" })
         #expect(value == "see you at six")
     }
+
+    @Test(
+        "On screen, a secret's name marks only a field, while the secure role marks every element",
+        arguments: [
+            ("AXTextField", nil, "Password", true), ("AXTextArea", nil, "One-time code", true),
+            ("AXComboBox", nil, "Card number", true), ("AXSearchField", nil, "PIN", true),
+            ("AXStaticText", nil, "what's the wifi password?", false),
+            ("AXGroup", nil, "send me the OTP", false),
+            ("AXCell", nil, "card number ending 4242", false),
+            ("AXWebArea", nil, "Reset your password", false),
+            ("AXStaticText", "AXSecureTextField", nil, true), ("AXSecureTextField", nil, nil, true),
+        ] as [(String, String?, String?, Bool)])
+    func secureOnScreen(role: String, subrole: String?, description: String?, secure: Bool) {
+        #expect(
+            SecureField.isDeclaredSecureOnScreen(
+                role: role, subrole: subrole, identifier: nil, placeholder: nil, description: description)
+                == secure)
+    }
 }

@@ -146,6 +146,26 @@ struct CompletionParsingTests {
                 == "INSERT INTO products (id, name, price, stock)")
     }
 
+    @Test("A time or date inside the line is its answer, and only a stamp hung after the line is dropped")
+    func onlyATrailingStampIsDropped() {
+        #expect(
+            CompletionText.trimmed(
+                "The meeting is at 10:30, see you there", typed: "The meeting is at", echoing: [])
+                == "The meeting is at 10:30, see you there")
+        #expect(
+            CompletionText.trimmed(
+                "Let's meet on Friday, 5 March, at the office", typed: "Let's meet on", echoing: [])
+                == "Let's meet on Friday, 5 March, at the office")
+        #expect(
+            CompletionText.trimmed("The meeting is at 10:30", typed: "The meeting is at", echoing: [])
+                == "The meeting is at 10:30")
+        #expect(
+            CompletionText.trimmed(
+                "See you there, 4 September at 6:41 PM", typed: "See you", echoing: [])
+                == "See you there")
+        #expect(CompletionText.trimmed("ok, 12:46 PM", typed: "ok", echoing: []) == nil)
+    }
+
     @Test(
         "A new word of one or two characters is nothing, while a character that finishes the typed word stays."
     )
@@ -377,67 +397,67 @@ struct ContinuationLengthTests {
     }
 }
 
-/// A mail the person is replying to, signed by its sender.
-private let incoming =
-    "From: Sam\nHi, could you share the invoice for August when you get a chance? Thanks, Sam"
-
-@Suite("A sign-off is never signed with a name from the screen")
+@Suite("A sign-off is signed only with a name the person wrote")
 struct SignOffTests {
     @Test("A closing the person typed is not signed with the sender's name")
     func theSendersNameIsNotSigned() {
         let own = ["Please find the document attached.", "Kind regards,"]
         #expect(
-            SignOff.unsigned("Kind regards, Sam", typed: "Kind regards,", screen: [incoming], ownLines: own)
+            SignOff.unsigned("Kind regards, Sam", typed: "Kind regards,", ownLines: own)
                 == nil)
-        #expect(SignOff.unsigned("Thanks, Sam.", typed: "Thanks, ", screen: [incoming], ownLines: own) == nil)
-        #expect(SignOff.unsigned("best,  Sam", typed: "best,", screen: [incoming], ownLines: []) == nil)
+        #expect(SignOff.unsigned("Thanks, Sam.", typed: "Thanks, ", ownLines: own) == nil)
+        #expect(SignOff.unsigned("best,  Sam", typed: "best,", ownLines: []) == nil)
     }
 
     @Test("A closing still being typed is finished without the sender's name after it")
     func theClosingIsKept() {
         #expect(
-            SignOff.unsigned("Kind regards, Sam", typed: "Kind reg", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Kind regards, Sam", typed: "Kind reg", ownLines: [])
                 == "Kind regards,")
     }
 
     @Test("A name the person has written in their own lines is theirs to sign with")
     func theirOwnNameIsKept() {
-        let screen = incoming + "\nOn Monday, Alex wrote:"
         #expect(
             SignOff.unsigned(
-                "Kind regards, Alex", typed: "Kind regards,", screen: [screen], ownLines: ["Cheers, Alex"])
+                "Kind regards, Alex", typed: "Kind regards,", ownLines: ["Cheers, Alex"])
                 == "Kind regards, Alex")
+    }
+
+    @Test("A name found nowhere the person wrote is cut back to the closing")
+    func anInventedNameIsCut() {
+        #expect(SignOff.unsigned("Best regards, David", typed: "Best regards,", ownLines: []) == nil)
+        #expect(SignOff.unsigned("Best regards, David", typed: "Best", ownLines: []) == "Best regards,")
         #expect(
-            SignOff.unsigned("Kind regards, Alex", typed: "Kind regards,", screen: [], ownLines: [])
-                == "Kind regards, Alex")
+            SignOff.unsigned("Thanks, Sam Collins", typed: "Thanks,", ownLines: ["Cheers, Sam"]) == nil)
+        #expect(
+            SignOff.unsigned("Thanks, Sam Collins", typed: "Thanks, Sam", ownLines: ["Collins here"])
+                == "Thanks, Sam Collins")
     }
 
     @Test("Words after a comma that are not a closing's signature are left alone")
     func otherLinesAreLeftAlone() {
-        let screen = "Sam: see you tomorrow at the August review"
         #expect(
-            SignOff.unsigned("Thanks, see you tomorrow", typed: "Thanks,", screen: [screen], ownLines: [])
+            SignOff.unsigned("Thanks, see you tomorrow", typed: "Thanks,", ownLines: [])
                 == "Thanks, see you tomorrow")
         #expect(
-            SignOff.unsigned("Hi Sam, could you share", typed: "Hi", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Hi Sam, could you share", typed: "Hi", ownLines: [])
                 == "Hi Sam, could you share")
-        #expect(SignOff.unsigned("Hi, Sam", typed: "Hi,", screen: [incoming], ownLines: []) == "Hi, Sam")
+        #expect(SignOff.unsigned("Hi, Sam", typed: "Hi,", ownLines: []) == "Hi, Sam")
         #expect(
-            SignOff.unsigned("Kind regards,", typed: "Kind", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Kind regards,", typed: "Kind", ownLines: [])
                 == "Kind regards,")
         #expect(
-            SignOff.unsigned("Kind regards", typed: "Kind", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Kind regards", typed: "Kind", ownLines: [])
                 == "Kind regards")
         #expect(
             SignOff.unsigned(
-                "Thanks, Sam Could You Share", typed: "Thanks,", screen: [incoming], ownLines: [])
+                "Thanks, Sam Could You Share", typed: "Thanks,", ownLines: [])
                 == "Thanks, Sam Could You Share")
     }
 
-    @Test("A signature is signed only where every word of it came from the screen")
-    func aPartlyOwnSignatureIsKept() {
-        #expect(
-            SignOff.unsigned("Thanks, Sam Rivers", typed: "Thanks,", screen: [incoming], ownLines: [])
-                == "Thanks, Sam Rivers")
+    @Test("A signature partly on screen and partly made up is cut")
+    func aPartlyInventedSignatureIsCut() {
+        #expect(SignOff.unsigned("Thanks, Sam Rivers", typed: "Thanks,", ownLines: []) == nil)
     }
 }

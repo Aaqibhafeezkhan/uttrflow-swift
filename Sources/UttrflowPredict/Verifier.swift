@@ -89,12 +89,13 @@ public actor Verifier {
             of: candidate.text, following: typed, before: deadline)
         guard plausibility != .overBudget else { return .rejected }
 
+        // Only a machine that answered can condemn a line for good; the model alone refuses it this time only.
         let verdict = await reported(
             Verification.verdict(
                 word: judged?.word ?? token.token, known: judged?.known ?? [],
                 modelObjects: Verification.objects(to: plausibility)),
             on: candidate.text, leading: token.leading + (judged?.prefix ?? ""), in: surface,
-            forGood: Verification.isClosedVocabulary(for: token))
+            forGood: judged != nil && Verification.isClosedVocabulary(for: token))
         cache.remember(verdict, for: key, now: now)
         return verdict
     }

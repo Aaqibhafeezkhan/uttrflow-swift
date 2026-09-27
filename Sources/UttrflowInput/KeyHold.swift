@@ -22,6 +22,9 @@ final class KeyHold: Sendable {
         since.store(max(now, 1), ordering: .releasing)
     }
 
+    /// Whether keys are being held back, which keeps the tap on while nothing is armed.
+    var isHolding: Bool { since.load(ordering: .acquiring) != 0 }
+
     /// Keeps a copy of a key-down back and returns true while a hold is in force; false lets it through.
     func keep(_ event: CGEvent, now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Bool {
         let start = since.load(ordering: .acquiring)
