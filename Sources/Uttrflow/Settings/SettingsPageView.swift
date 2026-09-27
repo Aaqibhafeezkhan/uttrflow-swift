@@ -158,6 +158,8 @@ struct SettingsTabStrip: View {
                             .lineLimit(1)
                             .fixedSize()
                     }
+                    // Room either side of the words, so the chosen tab's fill never touches them.
+                    .padding(.horizontal, 8)
                     .foregroundStyle(isSelected ? SettingsPalette.inverseInk : SettingsPalette.ink(0.62))
                     .frame(maxWidth: .infinity)
                     .frame(height: 32)
