@@ -150,6 +150,9 @@ public enum FocusedFieldReader {
                 try unlessSuperseded(isWanted) { windowTitle(of: field) }
             )
         } catch { return nil }
+        guard isWanted() else { return nil }
+        // An editor that draws its own text keeps an empty input at the caret, so its line is read off the rendered text.
+        let hidden = secure ? nil : hiddenInputLine(field, role: role, value: value)
 
         return FocusedFieldSnapshot(
             bundleIdentifier: app.bundleIdentifier,
@@ -160,11 +163,11 @@ public enum FocusedFieldReader {
             placeholder: placeholder,
             accessibilityDescription: description,
             document: tail.document,
-            value: secure ? nil : value,
-            selection: read.selection,
-            caret: tail.caret.map { flip($0, below: flipped) },
+            value: secure ? nil : hidden.map { $0.before + $0.after } ?? value,
+            selection: hidden.map { NSRange(location: $0.before.utf16.count, length: 0) } ?? read.selection,
+            caret: (hidden?.caret ?? tail.caret).map { flip($0, below: flipped) },
             window: tail.window.map { flip($0, below: flipped) },
-            field: tail.frame.map { flip($0, below: flipped) },
+            field: (hidden?.line ?? tail.frame).map { flip($0, below: flipped) },
             pointSize: style?.size,
             fontFamily: style?.family,
             textColor: style?.color,
@@ -175,6 +178,18 @@ public enum FocusedFieldReader {
             readMicroseconds: Int((DispatchTime.now().uptimeNanoseconds - started) / 1000),
             windowTitle: tail.title
         )
+    }
+
+    /// The caret's line read off an editor's rendered text, for the empty caret-sized input such an editor keeps focused.
+    private static func hiddenInputLine(
+        _ field: AXUIElement, role: String, value: String?
+    ) -> HiddenInputLine.Reading? {
+        guard FocusedFieldSnapshot.isTextEntry(role), (value ?? "").isEmpty else { return nil }
+        let node = AXNode(field)
+        guard let stub = node.answers.frame, HiddenInputLine.isStub(value: value, frame: stub) else {
+            return nil
+        }
+        return HiddenInputLine.read(around: node, at: stub, in: AXElementTree())
     }
 
     /// The field's value around the caret, with the selection moved into it, so a long scrollback is never copied whole.
