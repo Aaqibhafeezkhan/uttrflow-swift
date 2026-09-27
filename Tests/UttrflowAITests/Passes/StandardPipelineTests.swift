@@ -143,4 +143,22 @@ struct StandardPipelineTests {
         let pipeline = CleaningPipeline(passes: pieces + [FirstWordPass(state: state), TerminalStopPass()])
         #expect(pipeline.run(Draft(text: input)).text == expected)
     }
+
+    /// Measured on dictated hesitations: the filler's pause decided where the sentence broke. Issue #2243.
+    @Test(
+        "reads a hesitation's pause through, before the model and after it",
+        arguments: [
+            ("I think we should um... move the meeting.", "I think we should move the meeting."),
+            ("The problem is um. We don't have enough time.", "The problem is we don't have enough time."),
+            ("Let's um. Order pizza for the team.", "Let's order pizza for the team."),
+            ("We are going to... Um. Ship it next week.", "We are going to... ship it next week."),
+            ("we are done um. Next item", "We are done. Next item."),
+        ]
+    )
+    func readsAHesitationThrough(input: String, expected: String) {
+        #expect(CleaningPipeline.standard.run(Draft(text: input)).text == expected)
+        let before = CleaningPipeline.beforeModel(for: .standard(for: .plain), situation: .unknown)
+        let after = CleaningPipeline.afterModel(for: .standard(for: .plain), situation: .unknown)
+        #expect(after.run(before.run(Draft(text: input))).text == expected)
+    }
 }
