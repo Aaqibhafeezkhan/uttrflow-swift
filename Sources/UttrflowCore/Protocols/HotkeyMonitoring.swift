@@ -21,8 +21,11 @@ public struct HotkeyBinding: Sendable, Equatable, Codable {
         self.modifiers = modifiers
     }
 
-    /// Option + Space, the shortcut the product ships with.
+    /// Option + Space, the dictation shortcut of installs onboarded before ⌃⌥ held became the default.
     public static let optionSpace = HotkeyBinding(keyCode: 49, modifiers: [.option])
+
+    /// Control + Option held with no other key, the dictation shortcut the product ships with.
+    public static let controlOptionHold = HotkeyBinding(keyCode: 58, modifiers: [.control, .option])
 
     /// ⇧⌘V, the clipboard panel's default; it shadows "paste without formatting". See `Docs/core-hotkeys.md`.
     public static let shiftCommandV = HotkeyBinding(keyCode: 9, modifiers: [.shift, .command])

@@ -34,6 +34,12 @@ public struct UserDefaultsSettingsStore: SettingsStore {
         return settings
     }
 
+    /// Saves the first settings an install keeps, so a later change of default never moves an onboarded user.
+    public func pinDefaults(onboarded: Bool) {
+        guard store.data(forKey: key) == nil else { return }
+        save(onboarded ? .earlierInstall : .default)
+    }
+
     /// Writes the blob; encoding settings made of strings, numbers, booleans and arrays cannot fail.
     public func save(_ settings: Settings) {
         store.set(try? JSONEncoder().encode(settings), forKey: key)

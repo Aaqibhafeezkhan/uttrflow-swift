@@ -68,7 +68,7 @@ final class DockPanelController {
 
     init(
         presentation: DockPresentation = DictationPresenter.dock(for: .idle),
-        shortcut: String = "⌥Space",
+        shortcut: String = "⌃⌥",
         anchor: DockAnchor = .bottomRight
     ) {
         let model = DockViewModel(

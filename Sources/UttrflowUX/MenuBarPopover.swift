@@ -11,7 +11,7 @@ public enum MenuBarHeader: Sendable, Equatable {
     case status(MenuBarStatus)
 }
 
-/// "hold ⌥Space to talk", in three parts so the keys can sit on a keycap.
+/// "hold ⌃⌥ to talk", in three parts so the keys can sit on a keycap.
 public struct MenuBarHint: Sendable, Equatable {
     /// "hold" or "press", following how the shortcut is set up.
     public let verb: String

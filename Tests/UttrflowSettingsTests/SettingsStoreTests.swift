@@ -167,9 +167,9 @@ struct SettingsTests {
         #expect(settings.profile == .default)
     }
 
-    @Test("defaults every field for an empty object")
+    @Test("defaults every field for an empty object, with the dictation shortcut an earlier install had")
     func emptyPayload() throws {
-        #expect(try decode("{}") == .default)
+        #expect(try decode("{}") == .earlierInstall)
     }
 
     /// One unreadable value must not cost the user the ten choices either side of it.
@@ -264,7 +264,7 @@ struct SettingsTests {
             """
         )
 
-        #expect(settings == Settings(opensAtLogin: false))
+        #expect(settings == Settings(shortcuts: .earlierDefault, opensAtLogin: false))
     }
 
     @Test("keeps a retention the user actually chose", arguments: [1, 30, 365])
@@ -308,10 +308,19 @@ struct SettingsTests {
         #expect(try decode(#"{"hotkey": "option-space"}"#).hotkey == .optionSpace)
     }
 
-    @Test("ships Option+Space when nothing has been stored")
+    @Test("ships ⌃⌥ held to a new install, and ⌥Space to a saved file that names no dictation shortcut")
     func defaultHotkey() throws {
-        #expect(Settings.default.hotkey == .optionSpace)
+        #expect(Settings.default.hotkey == .controlOptionHold)
         #expect(try decode("{}").hotkey == .optionSpace)
+        #expect(try decode(#"{"shortcuts": {}}"#).hotkey == .optionSpace)
+    }
+
+    @Test("keeps the rest of the defaults for an earlier install, and only ⌥Space apart")
+    func earlierInstallDiffersOnlyInDictation() {
+        var earlier = Settings.earlierInstall
+        #expect(earlier.hotkey == .optionSpace)
+        earlier.hotkey = .controlOptionHold
+        #expect(earlier == .default)
     }
 
     /// One number for both would empty the panel on the user's behalf, having never asked.
@@ -422,7 +431,7 @@ struct SettingsTests {
             #"{"shortcuts": {"dictate": [{"keyCode": 55, "modifiers": ["command"]}], "clipboard": [{"keyCode": 9, "modifiers": ["control"]}]}}"#
         )
 
-        #expect(settings.shortcuts.first(for: .dictate) == .optionSpace)
+        #expect(settings.shortcuts.first(for: .dictate) == .controlOptionHold)
         #expect(settings.shortcuts.first(for: .clipboard) == HotkeyBinding(keyCode: 9, modifiers: [.control]))
         #expect(settings.shortcutsReturnedToDefault == [.dictate])
     }
@@ -445,7 +454,7 @@ struct SettingsTests {
         let restored = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(read))
 
         #expect(restored.shortcutsReturnedToDefault == [.dictate])
-        #expect(restored.shortcuts.first(for: .dictate) == .optionSpace)
+        #expect(restored.shortcuts.first(for: .dictate) == .controlOptionHold)
     }
 
     @Test("returns nothing, and notes nothing, for shortcuts the user could press")
@@ -463,7 +472,7 @@ struct SettingsTests {
         let restored = try JSONDecoder().decode(
             Settings.self, from: JSONEncoder().encode(written))
 
-        #expect(restored.shortcuts.bindings(for: .dictate) == [.optionSpace, .functionHold])
+        #expect(restored.shortcuts.bindings(for: .dictate) == [.controlOptionHold, .functionHold])
     }
 
     /// These strings are on disk in every installation, so renaming a case resets it for everyone.
@@ -580,6 +589,49 @@ struct UserDefaultsSettingsStoreTests {
 
         #expect(defaults.keys.count == 1)
         #expect(store.load().transcriptRetentionDays == 90)
+    }
+
+    @Test("pins ⌃⌥ held for a new install, so finishing onboarding later does not move it")
+    func pinsTheNewDefaultForANewInstall() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+
+        store.pinDefaults(onboarded: false)
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().hotkey == .controlOptionHold)
+    }
+
+    @Test("pins ⌥Space for an install that finished onboarding before ⌃⌥ held was the default")
+    func keepsOptionSpaceForAnOnboardedInstall() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load() == .earlierInstall)
+    }
+
+    @Test("leaves a saved shortcut alone, whether or not onboarding finished")
+    func keepsAStoredShortcut() {
+        for onboarded in [false, true] {
+            let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+            var saved = Settings.default
+            saved.hotkey = .optionSpace
+            store.save(saved)
+
+            store.pinDefaults(onboarded: onboarded)
+
+            #expect(store.load() == saved, "onboarded: \(onboarded)")
+        }
+    }
+
+    @Test("keeps ⌥Space for a file an earlier build saved in the shape before shortcuts were a set")
+    func keepsALegacyStoredShortcut() {
+        let defaults = InMemoryKeyValueStore(json: #"{"hotkey": {"keyCode": 49, "modifiers": ["option"]}}"#)
+        let store = UserDefaultsSettingsStore(store: defaults)
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().hotkey == .optionSpace)
     }
 }
 

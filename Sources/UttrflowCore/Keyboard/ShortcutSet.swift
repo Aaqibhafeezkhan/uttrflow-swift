@@ -15,11 +15,18 @@ public struct ShortcutSet: Sendable, Equatable {
 
     /// What the product ships with; the shortcuts screen offers this back as "reset".
     public static let `default` = ShortcutSet([
-        .dictate: [.optionSpace],
+        .dictate: [.controlOptionHold],
         .clipboard: [.shiftCommandV],
         .pasteLastTranscript: [.controlCommandV],
         .copyLastTranscript: [.controlCommandC],
     ])
+
+    /// The defaults with ⌥Space for dictation, which an install onboarded before ⌃⌥ held keeps.
+    public static let earlierDefault: ShortcutSet = {
+        var set = ShortcutSet.default
+        set.replace(at: 0, with: .optionSpace, for: .dictate)
+        return set
+    }()
 
     /// Every binding for one action, which is empty when the user has bound none.
     public func bindings(for action: ShortcutAction) -> [HotkeyBinding] {

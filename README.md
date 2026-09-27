@@ -34,7 +34,7 @@
        alt="A chat composer holding a dictated message, beside a card showing what was said, with um and uh struck out, and the cleaned sentence that landed.">
 </p>
 
-**Hold ⌥ Space** in any app and talk. Let go, and the words land at your cursor.
+**Hold ⌃ ⌥** (Control and Option) in any app and talk. Let go, and the words land at your cursor.
 
 - Recognition runs on your Mac.
 - Clean-up removes fillers, adds punctuation and applies your dictionary, matched by sound.
@@ -151,7 +151,7 @@ Thank you to everyone who has sent a fix, filed an issue or asked a good questio
   alias you gave a clip. ↑↓ to choose, **⌘1** for All, **⌘2–⌘9** to choose a collection, ⏎ to paste where the caret already was, **⌘⏎** to
   paste as plain text however it was copied, **⌘Z** to undo a delete, Esc to close. The window underneath never loses
   focus.
-- **Hold ⌥Space** and talk. Let go, and the words land at the cursor in the app you were
+- **Hold ⌃⌥** and talk. Let go, and the words land at the cursor in the app you were
   already in. The floating button at the screen edge shows the microphone level while you
   hold it, and the shortcut can be changed in Settings.
 - **Dictionary.** A name the recogniser keeps getting wrong is fixed once; matching is by

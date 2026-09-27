@@ -10,7 +10,7 @@ import SwiftUI
 @Observable
 final class DockViewModel {
     var presentation: DockPresentation
-    /// How the shortcut reads on a keycap, for example "⌥Space".
+    /// How the shortcut reads on a keycap, for example "⌃⌥".
     var shortcut: String
     /// Why the shortcut cannot be heard right now, shown in place of the keycap when set.
     var shortcutUnheard: String?

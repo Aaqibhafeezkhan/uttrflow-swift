@@ -86,7 +86,7 @@ private struct MenuBarMarkTile: View {
     }
 }
 
-/// "hold [⌥Space] to talk", the keys on a keycap.
+/// "hold [⌃⌥] to talk", the keys on a keycap.
 private struct MenuBarHintView: View {
     let hint: MenuBarHint
 
