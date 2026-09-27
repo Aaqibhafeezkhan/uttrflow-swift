@@ -553,6 +553,7 @@ struct MainIntentWiringTests {
         let signedIn = try await SignedInAccount()
         let sandbox = Sandbox()
         let app = AppDelegate(container: sandbox.root, account: signedIn.layer)
+        app.drawsWindows = false
 
         app.carryOut(.signOut)
 
@@ -566,6 +567,7 @@ struct MainIntentWiringTests {
         let signedIn = try await SignedInAccount()
         let sandbox = Sandbox()
         let app = AppDelegate(container: sandbox.root, account: signedIn.layer)
+        app.drawsWindows = false
         app.readAccount()
         #expect(app.accountPage(at: .now).identity?.name == "Development User")
 

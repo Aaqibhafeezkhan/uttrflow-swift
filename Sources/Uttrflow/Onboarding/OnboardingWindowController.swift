@@ -18,6 +18,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     var onFinish: ((OnboardingReadiness) -> Void)?
     /// The window has gone, however it went; the Account page re-reads the session on it.
     var onClose: (() -> Void)?
+    /// Called as soon as a sign-in's profile is kept, before the setup pages after it.
+    var onSignIn: (() -> Void)?
 
     private let flow: OnboardingFlow
     private let model: OnboardingModel
@@ -51,6 +53,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         )
         model = OnboardingModel(flow: flow)
         super.init()
+        flow.onSignIn = { [weak self] in self?.onSignIn?() }
         flow.onFinish = { [weak self] readiness in
             guard let self else { return }
             self.finish(readiness) { self.close() }
