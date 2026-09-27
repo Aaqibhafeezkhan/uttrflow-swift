@@ -99,6 +99,30 @@ struct WindowAttentionTests {
 
         #expect(attention.animates)
     }
+
+    @Test("counts as attended under Reduce Motion or Low Power Mode, which the caller judges for itself")
+    func attendedIgnoresTheMotionBudget() {
+        var attention = inUse
+        attention.motion = MotionBudget(
+            reducesMotion: true, energy: EnergyConditions(isLowPowerMode: true))
+
+        #expect(attention.isAttended)
+        #expect(!attention.animates)
+    }
+
+    @Test("is not attended when covered, hidden, behind another window or scrolled away")
+    func notAttendedOutOfSight() {
+        let changes: [(inout WindowAttention) -> Void] = [
+            { $0.isOnScreen = false }, { $0.isApplicationHidden = true }, { $0.isKey = false },
+            { $0.isApplicationActive = false }, { $0.isShown = false }, { $0.isViewVisible = false },
+        ]
+        for change in changes {
+            var attention = inUse
+            change(&attention)
+
+            #expect(!attention.isAttended)
+        }
+    }
 }
 
 /// Whether a view's own frame can be seen, which a visible window does not settle.

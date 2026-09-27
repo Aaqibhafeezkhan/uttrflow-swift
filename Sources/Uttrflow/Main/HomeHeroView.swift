@@ -200,6 +200,9 @@ struct HomeModelBar: View {
     /// When the bar appeared, so the segment starts from the left.
     @State private var began = Date.now
 
+    /// Whether its window is the one being used; starts still so a window opened behind others never moves.
+    @State private var attended = false
+
     var body: some View {
         ZStack(alignment: .leading) {
             Capsule().fill(PagePalette.ringTrack)
@@ -214,8 +217,9 @@ struct HomeModelBar: View {
                         value: fraction)
             case .sliding:
                 let motion = MotionBudgetObserver.shared.budget
-                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motion.workingBarsMove)) {
-                    timeline in
+                TimelineView(
+                    .animation(minimumInterval: 1.0 / 30, paused: !attended || !motion.workingBarsMove)
+                ) { timeline in
                     Capsule()
                         .fill(Self.fill)
                         .frame(width: Self.width * Self.segment)
@@ -223,6 +227,7 @@ struct HomeModelBar: View {
                             x: motion.workingBarsMove
                                 ? Self.offset(at: timeline.date.timeIntervalSince(began)) : 0)
                 }
+                .onWindowAttentionChange(includingMotionBudget: false) { attended = $0 }
             }
         }
         .frame(width: Self.width, height: Self.height)

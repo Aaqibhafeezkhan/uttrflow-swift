@@ -85,10 +85,17 @@ final class MenuBarController: NSObject {
             button.title = button.image == nil ? "Uttrflow" : ""
         }
         fillMenu()
+        // A closed popover keeps its old content, so a hidden panel never starts an animation.
+        guard panel.isVisible else { return }
+        hostPresentation()
+        placePanel()
+    }
+
+    /// Puts the current presentation in the popover.
+    private func hostPresentation() {
         hostingView.rootView = MenuBarPopoverView(presentation: presentation) { [weak self] intent in
             self?.run(intent)
         }
-        if panel.isVisible { placePanel() }
     }
 
     /// The icon: a template except when something needs attention, where the colour is the message.
@@ -160,6 +167,7 @@ final class MenuBarController: NSObject {
     private func showPopover() {
         guard !panel.isVisible else { return }
         onMenuWillOpen?()
+        hostPresentation()
         placePanel()
         panel.orderFrontRegardless()
         statusItem.button?.highlight(true)

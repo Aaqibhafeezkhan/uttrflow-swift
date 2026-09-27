@@ -298,7 +298,7 @@ on every run:
 |---|---|
 | wakeups | a repeating `Timer` (including one whose `repeats` is passed in), repeating `DispatchSource` timer, display link, sleeping loop, or function that delays (`asyncAfter`, `perform(_:with:afterDelay:)`, a sleep, a one-shot `Timer`) and then calls itself, in product code has an interval under 500 ms, or one the audit cannot resolve, and is not listed with the reason it is not an idle cost |
 | priority | the suggestion and local-model modules ask for more than utility priority, detach a task without one, or the app uses the suggestion model outside a `Discretionary` wrapper |
-| motion | a `TimelineView`, `repeatForever`, phase or keyframe animator or repeating symbol effect reads neither `MotionBudget` nor `WindowAttention`, or is paused by a literal |
+| motion | a `TimelineView`, `repeatForever`, phase or keyframe animator or repeating symbol effect reads neither `MotionBudget` nor `WindowAttention`, is paused by a literal, or never reads `WindowAttention` outside the dock and menu bar panels, which never become key |
 | cache | a model pass (`perform`, `generate`, `TokenIterator`, `ChatSession`) sits in no function that caps MLX's cache and clears it on exit, a `release()` does not clear it, or the cap is over 256 MB |
 | counters | `ResourceBudget`'s limits differ from the table above |
 

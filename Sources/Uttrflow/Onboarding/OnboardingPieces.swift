@@ -162,11 +162,15 @@ struct OnboardingShake: GeometryEffect {
 
 /// An arc turning round a disc while the browser has the user; still under Reduce Motion.
 struct OnboardingSpinner: View {
+    /// Whether its window is the one being used; starts still so a window opened behind others never moves.
+    @State private var attended = false
+
     var body: some View {
         let motion = MotionBudgetObserver.shared.budget
         TimelineView(
             .animation(
-                minimumInterval: MotionBudget.demonstrationFrameInterval, paused: !motion.workingBarsMove)
+                minimumInterval: MotionBudget.demonstrationFrameInterval,
+                paused: !attended || !motion.workingBarsMove)
         ) { timeline in
             let turn = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2
             Circle()
@@ -175,6 +179,7 @@ struct OnboardingSpinner: View {
                 .rotationEffect(.degrees(motion.workingBarsMove ? turn * 360 : -90))
                 .padding(1.25)
         }
+        .onWindowAttentionChange(includingMotionBudget: false) { attended = $0 }
     }
 }
 
@@ -182,12 +187,15 @@ struct OnboardingSpinner: View {
 struct OnboardingFieldView: View {
     let field: OnboardingField
     let width: CGFloat
+    /// Whether its window is the one being used; starts still so a window opened behind others never moves.
+    @State private var attended = false
 
     var body: some View {
         let motion = MotionBudgetObserver.shared.budget
         TimelineView(
             .animation(
-                minimumInterval: MotionBudget.demonstrationFrameInterval, paused: !motion.demonstrationMoves)
+                minimumInterval: MotionBudget.demonstrationFrameInterval,
+                paused: !attended || !motion.demonstrationMoves)
         ) { timeline in
             let time = motion.demonstrationMoves ? timeline.date.timeIntervalSinceReferenceDate : 0
             HStack(spacing: 1) {
@@ -206,6 +214,7 @@ struct OnboardingFieldView: View {
         .padding(.horizontal, 14)
         .frame(width: width, alignment: .leading)
         .background(.white.opacity(0.95), in: .rect(cornerRadius: 12, style: .continuous))
+        .onWindowAttentionChange(includingMotionBudget: false) { attended = $0 }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
     }
