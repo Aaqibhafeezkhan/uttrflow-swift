@@ -190,7 +190,7 @@ struct NamedSecretScan {
     private var bareRun: (start: TextPosition, stop: TextPosition, lastNumber: Int?, lastNonLatin: Int?)?
     /// The last quoted value read: where its opening quote stands, and where the value ends.
     private var quotedRun: (open: String.Index, end: String.Index?)?
-    /// The last line ending asked about: where the value ended, and where the pattern's `$` stands after it.
+    /// The last value ending asked about: where the value stopped, and where the match ends after it.
     private var lineEnd: (from: String.Index, end: String.Index?)?
 
     init(_ text: String) {
@@ -204,7 +204,8 @@ struct NamedSecretScan {
             ["", "_", "-"].map { first + $0 + second }
         }
         let plurals =
-            (joined("api", "key") + joined("secret", "key") + ["secret", "token", "password", "credential"])
+            (joined("api", "key") + joined("secret", "key")
+            + ["secret", "token", "password", "passphrase", "credential"])
             .flatMap {
                 [$0, $0 + "s"]
             }
@@ -295,7 +296,7 @@ struct NamedSecretScan {
         return expected == UInt8(ascii: "k") && character.isKelvinSign
     }
 
-    /// Where `["']?\s*[:=]\s*`, a value and the end of its line match after a keyword, and whether the rule accepts the value.
+    /// Where `["']?\s*[:=]\s*`, a value and what may follow it match after a keyword, and whether the rule accepts the value.
     private mutating func assignment(after end: TextPosition) -> (end: String.Index, accepted: Bool)? {
         var position = end
         if let byte = byte(at: position.index), byte == UInt8(ascii: "\"") || byte == UInt8(ascii: "'") {
@@ -312,9 +313,9 @@ struct NamedSecretScan {
             quote == UInt8(ascii: "\"") || quote == UInt8(ascii: "'")
         {
             guard let close = closingQuote(from: position, quote: quote),
-                let lineEnd = endOfLine(from: text.index(after: close))
+                let end = endOfValue(from: text.index(after: close), quoted: true)
             else { return nil }
-            return (lineEnd, true)
+            return (end, true)
         }
         return bareAssignment(from: position)
     }
@@ -362,9 +363,8 @@ struct NamedSecretScan {
     /// Where an unquoted value from `start` ends its line, and whether it has a digit, or is long and Latin, to be a secret.
     private mutating func bareAssignment(from start: TextPosition) -> (end: String.Index, accepted: Bool)? {
         let run = bareValue(from: start)
-        guard run.stop.offset > start.offset, let lineEnd = endOfLine(from: run.stop.index) else {
-            return nil
-        }
+        guard run.stop.offset > start.offset, let lineEnd = endOfValue(from: run.stop.index, quoted: false)
+        else { return nil }
         let length = run.stop.offset - start.offset
         // The rule reads a value that opens with a quote character as quoted, and quoted values always count.
         let first = String(text[start.index])
@@ -445,21 +445,70 @@ struct NamedSecretScan {
         return (position, lastNumber, lastNonLatin)
     }
 
-    /// Where `\s*[,;]?\s*$` from `start` puts `$`, which backtracks to the last line break it can reach.
-    private mutating func endOfLine(from start: String.Index) -> String.Index? {
+    /// Where the match ends after a value stopping at `start`: its line's end, a comment, or for a quoted value the rest of an object. See Docs/clipboard-secrets.md.
+    private mutating func endOfValue(from start: String.Index, quoted: Bool) -> String.Index? {
         if let cached = lineEnd, cached.from == start { return cached.end }
         var index = start
         let lastBreak = lastLineBreak(skipping: &index)
+        // An unquoted value runs into a comment marker with no space between them.
+        let mayComment = quoted || index > start
         var end: String.Index?
+        var comment = index
         if let mark = byte(at: index), mark == UInt8(ascii: ",") || mark == UInt8(ascii: ";") {
             var after = text.index(after: index)
             let breakAfterMark = lastLineBreak(skipping: &after)
             end = after == text.endIndex ? after : breakAfterMark ?? lastBreak
+            comment = after
         } else {
             end = index == text.endIndex ? index : lastBreak
         }
+        if end == nil, mayComment { end = afterCommentMarker(at: comment) }
+        if end == nil, quoted { end = afterClosingOrNextKey(at: index) }
         lineEnd = (start, end)
         return end
+    }
+
+    /// Where the text continues after a `#` or `//` at `index`.
+    private mutating func afterCommentMarker(at index: String.Index) -> String.Index? {
+        guard let first = byte(at: index) else { return nil }
+        let next = text.index(after: index)
+        if first == UInt8(ascii: "#") { return next }
+        guard first == UInt8(ascii: "/"), byte(at: next) == UInt8(ascii: "/") else { return nil }
+        return text.index(after: next)
+    }
+
+    /// Where `[}\]]`, or `,\s*["']?name["']?\s*[:=]`, ends when it stands at `index`, as in a one-line object.
+    private mutating func afterClosingOrNextKey(at index: String.Index) -> String.Index? {
+        guard let first = byte(at: index) else { return nil }
+        if first == UInt8(ascii: "}") || first == UInt8(ascii: "]") { return text.index(after: index) }
+        guard first == UInt8(ascii: ",") else { return nil }
+        var position = TextPosition(index: text.index(after: index), offset: 0)
+        skipWhitespace(&position)
+        if let quote = byte(at: position.index), quote == UInt8(ascii: "\"") || quote == UInt8(ascii: "'") {
+            advance(&position)
+        }
+        guard let initial = byte(at: position.index), Self.isKeyByte(initial, first: true) else { return nil }
+        advance(&position)
+        while let byte = byte(at: position.index), Self.isKeyByte(byte, first: false) { advance(&position) }
+        if let quote = byte(at: position.index), quote == UInt8(ascii: "\"") || quote == UInt8(ascii: "'") {
+            advance(&position)
+        }
+        skipWhitespace(&position)
+        guard let separator = byte(at: position.index),
+            separator == UInt8(ascii: ":") || separator == UInt8(ascii: "=")
+        else { return nil }
+        return text.index(after: position.index)
+    }
+
+    /// Whether a byte may stand in a key's name: a letter, `_` or `$`, and after the first, a digit or `-`.
+    private static func isKeyByte(_ byte: UInt8, first: Bool) -> Bool {
+        switch byte {
+        case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "_"),
+            UInt8(ascii: "$"):
+            true
+        case UInt8(ascii: "0")...UInt8(ascii: "9"), UInt8(ascii: "-"): !first
+        default: false
+        }
     }
 
     /// The last line break in the whitespace from `index`, leaving `index` after the whitespace.
