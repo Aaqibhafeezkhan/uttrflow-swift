@@ -81,10 +81,7 @@ struct HomeSearchField: View {
     var isEnabled = true
     var onIntent: (MainIntent) -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        let isLight = colorScheme == .light
         Button {
             onIntent(action.intent)
         } label: {
@@ -105,15 +102,10 @@ struct HomeSearchField: View {
             .foregroundStyle(PagePalette.text.opacity(isEnabled ? 0.5 : 0.4))
             .padding(.horizontal, 14)
             .frame(width: 300, height: 40)
-            // A white field on the light page, as a card is, since a faint ink film vanishes against it.
-            .background(
-                isLight ? PagePalette.card : PagePalette.text.opacity(0.05),
-                in: .rect(cornerRadius: 12, style: .continuous)
-            )
+            .background(PagePalette.text.opacity(0.05), in: .rect(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(
-                        isLight ? PagePalette.controlEdge : PagePalette.text.opacity(0.12), lineWidth: 1)
+                    .strokeBorder(PagePalette.text.opacity(0.12), lineWidth: 1)
             }
             .contentShape(.rect)
         }
