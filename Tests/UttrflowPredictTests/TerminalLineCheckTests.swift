@@ -39,6 +39,55 @@ private let check = TerminalLineCheck(files: project())
 /// The directory most lines are judged from.
 private let api = "/Users/someone/api"
 
+/// A fork with two remotes: `shared` on both, `solo` on one alone though both loose and packed, `split` loose on one and packed on the other.
+private func fork() -> FakeDisk {
+    FakeDisk(
+        home: "/Users/someone", searchPaths: ["/usr/bin"],
+        directories: [
+            "/Users/someone/fork/.git/refs/heads", "/Users/someone/fork/.git/refs/remotes/origin",
+            "/Users/someone/fork/.git/refs/remotes/upstream",
+        ],
+        files: [
+            "/Users/someone/fork/.git/refs/heads/main", "/Users/someone/fork/.git/refs/remotes/origin/shared",
+            "/Users/someone/fork/.git/refs/remotes/upstream/shared",
+            "/Users/someone/fork/.git/refs/remotes/origin/solo",
+            "/Users/someone/fork/.git/refs/remotes/origin/split",
+        ],
+        executables: ["/usr/bin/git"],
+        texts: [
+            "/Users/someone/fork/.git/packed-refs":
+                "abc123 refs/remotes/origin/solo\nabc124 refs/remotes/upstream/split\nabc125 refs/remotes/upstream/packed-only\n"
+        ])
+}
+
+@Suite("Checking a git line in a repository with two remotes")
+struct TwoRemoteCheckTests {
+    @Test(
+        "A branch only one remote has is checked out or switched to, however its refs are stored.",
+        arguments: [
+            "git switch solo", "git checkout solo", "git switch packed-only", "git checkout packed-only",
+        ])
+    func oneRemoteStands(_ line: String) {
+        #expect(TerminalLineCheck(files: fork()).allows(line, in: "/Users/someone/fork"), "\(line)")
+    }
+
+    @Test(
+        "A branch two remotes both have is refused, since git will not guess which one to track.",
+        arguments: ["git switch shared", "git checkout shared", "git switch split", "git checkout split"])
+    func twoRemotesAreAmbiguous(_ line: String) {
+        #expect(!TerminalLineCheck(files: fork()).allows(line, in: "/Users/someone/fork"), "\(line)")
+    }
+
+    @Test("Each remote holding the branch is counted once, loose and packed together.")
+    func remotesAreCountedOnce() throws {
+        let repository = try #require(GitRepository.holding("/Users/someone/fork", files: fork()))
+        #expect(repository.remotes(holdingBranch: "solo") == ["origin"])
+        #expect(repository.remotes(holdingBranch: "split") == ["origin", "upstream"])
+        #expect(repository.remotes(holdingBranch: "shared") == ["origin", "upstream"])
+        #expect(repository.remotes(holdingBranch: "gone") == [])
+    }
+}
+
 @Suite("Checking a terminal line against the disk")
 struct TerminalLineCheckTests {
     @Test(
