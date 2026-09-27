@@ -653,13 +653,15 @@ public actor DictationPipeline {
                 toWrite, cleanedBy: whole.cleaned.producedBy, changes: changes,
                 delivery: delivery, generation: mine)
         else { return }
+        // Read before the next await, since the next dictation may start once these words are on screen.
+        let wasSecure = destinationIsSecure
 
         // An unconfirmed paste is not proof the words reached the user, so nothing is learnt from it yet.
         guard arrival != .unconfirmed else { return }
         // Both run after the words are on screen, and neither can fail the dictation. §19.
         await count(changes)
         // A secret is not a word to learn.
-        guard !destinationIsSecure else { return }
+        guard !wasSecure else { return }
         await learnWords(heard: whole.heard.text, wrote: toWrite, seeing: appContext ?? AppContext())
     }
 
