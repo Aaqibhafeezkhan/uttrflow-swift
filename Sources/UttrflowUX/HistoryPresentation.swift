@@ -150,6 +150,8 @@ public struct HistorySnapshot: Sendable, Equatable {
     public let playing: UUID?
     /// The clock the page is drawn against.
     public let now: Date
+    /// Whether ``entries`` has been read from the store yet; false only before the first reading.
+    public let hasReadHistory: Bool
 
     /// Builds a snapshot; everything but entries and the clock has a default.
     public init(
@@ -160,7 +162,8 @@ public struct HistorySnapshot: Sendable, Equatable {
         recordings: [KeptRecording] = [],
         retrying: UUID? = nil,
         playing: UUID? = nil,
-        now: Date
+        now: Date,
+        hasReadHistory: Bool = true
     ) {
         self.entries = entries
         self.query = query
@@ -170,6 +173,7 @@ public struct HistorySnapshot: Sendable, Equatable {
         self.retrying = retrying
         self.playing = playing
         self.now = now
+        self.hasReadHistory = hasReadHistory
     }
 }
 
@@ -177,7 +181,7 @@ public struct HistorySnapshot: Sendable, Equatable {
 public struct HistoryPresentation: Sendable, Equatable {
     /// The dictations, grouped by day.
     public let days: [HistoryDay]
-    /// Set when — and only when — ``days`` is empty, saying which of three reasons nothing survived.
+    /// Set when ``days`` is empty once the history is read, saying which of three reasons nothing survived.
     public let emptyState: MainEmptyState?
     /// The promise under the list.
     public let retentionNotice: HistoryRetentionNotice
@@ -185,6 +189,8 @@ public struct HistoryPresentation: Sendable, Equatable {
     public let showsSearch: Bool
     /// The four stat tiles across the top, the same figures home shows; empty when nothing is kept.
     public let tiles: [HomeStatTile]
+    /// Set until the history has first been read, when the page shows only its header.
+    public let isReading: Bool
 
     /// Builds the page from its parts; no tiles unless given.
     public init(
@@ -192,13 +198,15 @@ public struct HistoryPresentation: Sendable, Equatable {
         emptyState: MainEmptyState?,
         retentionNotice: HistoryRetentionNotice,
         showsSearch: Bool,
-        tiles: [HomeStatTile] = []
+        tiles: [HomeStatTile] = [],
+        isReading: Bool = false
     ) {
         self.days = days
         self.emptyState = emptyState
         self.retentionNotice = retentionNotice
         self.showsSearch = showsSearch
         self.tiles = tiles
+        self.isReading = isReading
     }
 }
 
@@ -215,6 +223,12 @@ public enum HistoryPresenter {
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent
     ) -> HistoryPresentation {
+        // Nothing is said about an empty history before the store has answered.
+        guard snapshot.hasReadHistory else {
+            return HistoryPresentation(
+                days: [], emptyState: nil, retentionNotice: notice(for: snapshot), showsSearch: false,
+                isReading: true)
+        }
         let kept = retained(
             snapshot.entries, days: snapshot.settings.transcriptRetentionDays, now: snapshot.now)
         let matching = matches(kept, query: snapshot.query, locale: locale)
@@ -295,8 +309,8 @@ public enum HistoryPresenter {
 
         for item in interleaved(entries, recordings) {
             let day = calendar.startOfDay(for: item.when)
-            let row = row(for: item, snapshot: snapshot, calendar: calendar, locale: locale)
             let words = item.entry.map { MainFormatting.words(in: $0.text) } ?? 0
+            let row = row(for: item, words: words, snapshot: snapshot, calendar: calendar, locale: locale)
             if let index = grouped.firstIndex(where: { $0.day == day }) {
                 grouped[index].rows.append(row)
                 grouped[index].words += words
@@ -348,11 +362,11 @@ public enum HistoryPresenter {
 
     /// One dictation or recording as a row.
     static func row(
-        for item: Item, snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
+        for item: Item, words: Int, snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
     ) -> HistoryRow {
         switch item {
         case .entry(let entry):
-            row(for: entry, relativeTo: snapshot.now, calendar: calendar, locale: locale)
+            row(for: entry, words: words, relativeTo: snapshot.now, calendar: calendar, locale: locale)
         case .recording(let recording):
             row(for: recording, snapshot: snapshot, calendar: calendar, locale: locale)
         }
@@ -368,7 +382,7 @@ public enum HistoryPresenter {
 
     /// One dictation as a row, with the buttons it offers when pointed at.
     static func row(
-        for entry: HistoryEntry, relativeTo now: Date,
+        for entry: HistoryEntry, words: Int? = nil, relativeTo now: Date,
         calendar: Calendar = .autoupdatingCurrent, locale: Locale
     ) -> HistoryRow {
         let (tag, tone) = HomeDashboard.outcome(of: entry.changes)
@@ -378,7 +392,7 @@ public enum HistoryPresenter {
             when: when(entry.when, relativeTo: now, locale: locale),
             text: entry.text,
             time: HomeDashboard.time(entry.when, calendar: calendar, locale: locale),
-            length: length(of: entry),
+            length: length(of: entry, words: words),
             // Only a change is worth a tag; "as dictated" is what every quiet row already says.
             tag: tone == .changed ? tag : nil,
             isFlagged: entry.isFlagged,
@@ -426,8 +440,9 @@ public enum HistoryPresenter {
     }
 
     /// "0:09 · 23 words"; the words stand alone when nothing timed the dictation.
-    static func length(of entry: HistoryEntry) -> String {
-        let words = MainFormatting.count(MainFormatting.words(in: entry.text), "word", "words")
+    static func length(of entry: HistoryEntry, words counted: Int? = nil) -> String {
+        let words = MainFormatting.count(
+            counted ?? MainFormatting.words(in: entry.text), "word", "words")
         guard let spoken = entry.spokenFor else { return words }
         return "\(clock(spoken)) · \(words)"
     }

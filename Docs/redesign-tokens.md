@@ -65,6 +65,21 @@ The floating button's ink clears 4.5:1 on its glass and the meter 3:1, measured 
 same dark and light desktops `Docs/app-dock.md` uses.
 `BrandPaletteTests` measures both.
 
+### The Insights calendar's day numbers
+
+Every tile is `#5FE0D3` at a shade, in both appearances, over the card's film. In dark the
+number is white up to a shade of 0.5 and `calendarDeepInk` (`#04332F`) from 0.72, and no tile
+is drawn between the two, because there neither ink reaches 4.5:1:
+
+| Shade | White | `#04332F` |
+|---|---|---|
+| 0.50 | 4.84:1 | 2.86:1 |
+| 0.61 | 3.67:1 | 3.77:1 |
+| 0.72 | 2.83:1 | 4.87:1 |
+
+A tile whose share of the busiest day lands in that band is drawn at the nearer edge. Light
+clears 9:1 with either ink on every shade. `InsightsCalendarDay.shade` holds the rule.
+
 ## Typeface
 
 Headings use Outfit, a variable font under the SIL Open Font License 1.1. The font file and its

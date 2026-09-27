@@ -13,24 +13,32 @@ final class RecordingPlayback: NSObject, AVAudioPlayerDelegate {
 
     private var player: AVAudioPlayer?
 
-    /// Plays these WAV bytes as the recording `id`, stopping whatever was playing before.
+    /// Plays these WAV bytes as the recording `id`, stopping whatever was playing, with one redraw for both.
     func play(_ wav: Data, id: UUID) {
-        stop()
-        guard let player = try? AVAudioPlayer(data: wav) else { return }
-        player.delegate = self
-        guard player.play() else { return }
-        self.player = player
-        playing = id
-        onChange()
+        let before = playing
+        halt()
+        if let player = try? AVAudioPlayer(data: wav) {
+            player.delegate = self
+            if player.play() {
+                self.player = player
+                playing = id
+            }
+        }
+        if playing != before { onChange() }
     }
 
     /// Stops the recording playing, if any.
     func stop() {
-        guard let player else { return }
-        player.stop()
-        self.player = nil
-        playing = nil
+        guard player != nil else { return }
+        halt()
         onChange()
+    }
+
+    /// Stops and forgets the player without asking for a redraw.
+    private func halt() {
+        player?.stop()
+        player = nil
+        playing = nil
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {

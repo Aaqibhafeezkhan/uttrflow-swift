@@ -18,10 +18,12 @@ struct HistoryPageView: View {
 
     var body: some View {
         // Only with no search field, so typing a query that matches nothing never rebuilds the field.
-        if let empty = presentation.emptyState, !presentation.showsSearch {
+        if presentation.isReading || (presentation.emptyState != nil && !presentation.showsSearch) {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                MainEmptyStateView(state: empty, onIntent: onIntent)
+                if let empty = presentation.emptyState {
+                    MainEmptyStateView(state: empty, onIntent: onIntent)
+                }
             }
             .padding(.horizontal, 28)
             .padding(.top, 34)
@@ -67,19 +69,19 @@ struct HistoryPageView: View {
         }
     }
 
-    /// The aurora's soft glow rising behind the header, drawn once and never moving.
-    private var aurora: some View {
-        AngularGradient(
-            colors: IslandPalette.aurora + [IslandPalette.aurora[0]], center: .center,
-            angle: .degrees(210)
-        )
-        .frame(height: 220)
-        .padding(.horizontal, -60)
-        .blur(radius: 70)
-        .opacity(0.4)
-        .offset(y: -120)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+    /// The aurora's soft glow rising behind the header, a picture blurred once so scrolling never re-blurs it.
+    @ViewBuilder private var aurora: some View {
+        if let picture = HistoryGlow.aurora {
+            let spill = HistoryGlow.spill(70)
+            Image(nsImage: picture)
+                .resizable()
+                .frame(height: 220 + spill * 2)
+                .padding(.horizontal, -60 - spill)
+                .opacity(0.4)
+                .offset(y: -120 - spill)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 
     /// "History" beside the search field, then the caption with the way to the privacy settings.
@@ -230,12 +232,16 @@ struct HistoryStatTile: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .background(alignment: .topTrailing) {
-            Circle()
-                .fill(accent)
-                .frame(width: 90, height: 90)
-                .blur(radius: 34)
-                .opacity(0.3)
-                .offset(x: 24, y: -24)
+            if let disc = HistoryGlow.disc {
+                let spill = HistoryGlow.spill(34)
+                Image(nsImage: disc)
+                    .renderingMode(.template)
+                    .resizable()
+                    .foregroundStyle(accent)
+                    .frame(width: 90 + spill * 2, height: 90 + spill * 2)
+                    .opacity(0.3)
+                    .offset(x: 24 + spill, y: -24 - spill)
+            }
         }
         .background(PagePalette.text.opacity(0.045))
         .clipShape(.rect(cornerRadius: 16, style: .continuous))
