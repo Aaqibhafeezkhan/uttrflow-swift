@@ -77,6 +77,7 @@ struct DockView: View {
     var body: some View {
         form
             .fixedSize()
+            .foregroundStyle(Color.dockInk)
             .scaleEffect(model.isPressed ? 0.96 : 1)
             .animation(.spring(duration: 0.22), value: model.isPressed)
             .contentShape(.rect)
@@ -650,17 +651,16 @@ extension DockMetrics {
 // MARK: - Material
 
 extension View {
-    /// The translucent slab every form but the resting one is drawn on.
+    /// The tinted glass every form but the resting one is drawn on: violet-black when dark, frosted white when light.
     fileprivate func glass(cornerRadius: CGFloat) -> some View {
-        background(.ultraThinMaterial, in: .rect(cornerRadius: cornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.5)
-            )
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        return background(Color.dockGlass, in: shape)
+            .background(.ultraThinMaterial, in: shape)
+            .overlay(shape.strokeBorder(Color.dockGlassEdge, lineWidth: 1))
             // Clipped and flattened before the shadow, or the material's rectangular backing leaks a square halo.
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(shape)
             .compositingGroup()
-            .shadow(color: .black.opacity(0.34), radius: 12, y: 5)
+            .shadow(color: .dockShadow, radius: 12, y: 7)
     }
 }
 
@@ -679,6 +679,13 @@ extension Color {
     static let dockActive = Color(rgb: BrandPalette.Teal.primary)
     /// Ink for the mark inside the weight's disc; fixed, since the disc is the same teal in both appearances.
     static let dockWeightInk = Color(rgb: BrandPalette.Teal.inkOnDisc)
+    /// Words and glyphs on the dock's glass: white when dark, ink when light.
+    static let dockInk = Color(nsColor: .orbit(BrandPalette.Redesign.textStrong))
+    /// The dock's glass tint over the system material.
+    static let dockGlass = Color(nsColor: .orbit(BrandPalette.Redesign.dockGlass))
+    /// The hairline round the dock's glass.
+    static let dockGlassEdge = Color(nsColor: .orbit(BrandPalette.Redesign.dockGlassEdge))
+    static let dockShadow = Color(nsColor: .orbit(BrandPalette.Redesign.dockShadow))
     static let dockSuccess = Color(rgb: BrandPalette.Semantic.success)
     static let dockWarning = Color(rgb: BrandPalette.Semantic.warning)
     /// The warning as text on the dock's glass, which the bright tone fails on a light desktop.

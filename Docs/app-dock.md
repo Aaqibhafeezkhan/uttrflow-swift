@@ -19,6 +19,11 @@ the two things that are not obvious from the code.
 `noticeMaxWidth` (300) applies to the blocked form alone. A single width applied to every
 form made the listening pill 286 points wide on every dictation, for a state it never entered.
 
+Every form but the resting grip sits on the same glass: the system material under
+`BrandPalette.Redesign.dockGlass`, violet-black at 72% when dark and white at 90% when light,
+with a one-point `dockGlassEdge` hairline. Words and glyphs on it are `textStrong`, white when
+dark and ink when light.
+
 The blocked form's message wraps to at most `noticeMaxLines` (3) lines and the form grows to
 hold it; the recovery button sits under the words rather than beside them, so it never takes
 width the message needs. At one line with no button the form is the 40-point capsule it always
