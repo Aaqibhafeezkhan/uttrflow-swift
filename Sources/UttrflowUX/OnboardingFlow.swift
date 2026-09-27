@@ -29,6 +29,9 @@ public final class OnboardingFlow {
     /// Called once, when the user closes onboarding, with what they ended up able to do.
     public var onFinish: ((OnboardingReadiness) -> Void)?
 
+    /// Called as soon as a sign-in's profile is kept, so the app opens before the rest of setup.
+    public var onSignIn: (() -> Void)?
+
     private let microphone: any PermissionGate
     private let accessibility: any PermissionGate
     private let installer: any OnboardingModelInstaller
@@ -39,13 +42,8 @@ public final class OnboardingFlow {
 
     private let authentication: any AuthenticationService
     private let profiles: any ProfileCache
-    /// Where the choice to work without an account is kept; cleared the moment a real sign-in succeeds.
-    private let local: any LocalAccountStore
     private let entitlements: EntitlementGate
     private let network: any NetworkReachability
-
-    /// What macOS calls the person at this Mac; injected so a test controls the value.
-    private let systemName: @Sendable () -> String?
 
     /// Opens the provider's page in the user's browser, never a web view, since a password is typed there.
     private let openBrowser: @Sendable (URL) -> Void
@@ -75,9 +73,6 @@ public final class OnboardingFlow {
     /// Waits before closing on a first try that worked; injected so a test need not wait.
     private let pause: @Sendable (Duration) async -> Void
 
-    /// Set by ``resume(askingToSignIn:)`` and lives as long as this flow.
-    private var wasAskedToSignIn = false
-
     /// Wires every gate, store and system hook in; the flow starts on the sign-in page.
     public init(
         microphone: any PermissionGate,
@@ -87,9 +82,7 @@ public final class OnboardingFlow {
         record: any OnboardingRecordStore,
         authentication: any AuthenticationService,
         profiles: any ProfileCache,
-        local: any LocalAccountStore,
         network: any NetworkReachability,
-        systemName: @escaping @Sendable () -> String?,
         openBrowser: @escaping @Sendable (URL) -> Void,
         openSystemSettings: @escaping @Sendable (SystemSettingsPane) -> Void,
         now: @escaping @Sendable () -> Date,
@@ -102,10 +95,8 @@ public final class OnboardingFlow {
         self.record = record
         self.authentication = authentication
         self.profiles = profiles
-        self.local = local
-        self.entitlements = EntitlementGate(profiles: profiles, local: local)
+        self.entitlements = EntitlementGate(profiles: profiles)
         self.network = network
-        self.systemName = systemName
         self.openBrowser = openBrowser
         self.openSystemSettings = openSystemSettings
         self.now = now
@@ -127,12 +118,6 @@ public final class OnboardingFlow {
 
     /// Opens on the first page that still has something to ask.
     public func start() async {
-        await moveOn(past: 0)
-    }
-
-    /// Opens like ``start()``; with `askingToSignIn` a local account does not count as signed in.
-    public func resume(askingToSignIn: Bool = false) async {
-        wasAskedToSignIn = askingToSignIn
         await moveOn(past: 0)
     }
 
@@ -161,9 +146,6 @@ public final class OnboardingFlow {
             guard state.step == .signIn else { return }
             abandonSignIn()
             await enter(.signIn)
-        case .continueOnThisMac:
-            guard state.step == .signIn else { return }
-            await continueOnThisMac()
         case .finish:
             // Only the last page offers this, so an instruction to close from anywhere else is ignored.
             guard let readiness = state.detail.readiness else { return }
@@ -245,8 +227,7 @@ public final class OnboardingFlow {
     /// Whether a page still has a question the system has not already answered.
     private func isOutstanding(_ step: OnboardingStep) async -> Bool {
         switch step {
-        // Somebody who pressed Sign In wants an Uttrflow account; a local one satisfies every other way in.
-        case .signIn: wasAskedToSignIn ? profiles.load() == nil : !isSignedIn
+        case .signIn: !isSignedIn
         case .microphone: await microphone.status() != .granted
         case .accessibility: await accessibility.status() != .granted
         case .setup: !installer.isInstalled
@@ -397,8 +378,7 @@ public final class OnboardingFlow {
 
                 let profile = try await authentication.completeSignIn(challenge)
                 try profiles.save(profile)
-                // A real account supersedes the Mac one, and only after the profile is safely kept.
-                local.clear()
+                onSignIn?()
                 // Not guarded on the generation: a cancelled exchange that finished is still a sign-in.
                 await moveOn(after: .signIn)
             } catch {
@@ -407,13 +387,6 @@ public final class OnboardingFlow {
                 report(error)
             }
         }
-    }
-
-    /// Carries on without an account as the person at this Mac, abandoning any sign-in still in a browser.
-    private func continueOnThisMac() async {
-        abandonSignIn()
-        local.save(LocalAccount(name: systemName(), since: now()))
-        await moveOn(after: .signIn)
     }
 
     /// Stops waiting for a sign-in in a browser tab; the backend forgets the attempt within ten minutes.

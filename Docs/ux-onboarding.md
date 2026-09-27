@@ -53,19 +53,17 @@ The provider's page opens in the user's own browser, never a web view: a passwor
 there, and the only window in which that is safe is one whose address bar the user can see
 and whose password manager they already trust.
 
-## Working without an account
+## No way past sign-in
 
-Sign-in is mandatory, so no page offers "Continue on this Mac". The code behind it stays:
-`OnboardingIntent.continueOnThisMac` still saves a `LocalAccount` named after the macOS
-user, abandoning any sign-in still waiting in a browser tab first, and a real sign-in
-clears the local account once the profile has been saved. A Mac that already holds a local
-account from an earlier build still counts as signed in, so its user is not sent back
-through onboarding.
+Sign-in is mandatory and nothing else in the app opens without a session; see
+`Docs/entitlements.md`. There is no way to work without an account. A Mac upgraded from a
+build that offered one has its old record removed at launch (`RetiredLocalAccount`) and
+opens on this page, even though its setup is finished.
 
 Offline, the sign-in page offers only Try again.
 
-`resume(askingToSignIn: true)` makes a local account *not* count as signed in, because
-somebody who pressed Sign In on the Account page is asking for an Uttrflow account.
+`OnboardingFlow.onSignIn` fires as soon as the profile is kept, so the rest of the app is
+switched on before the remaining setup pages, whose last one asks for a first dictation.
 
 ## The first try
 

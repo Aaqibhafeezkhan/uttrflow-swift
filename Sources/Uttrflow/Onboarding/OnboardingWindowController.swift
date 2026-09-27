@@ -40,10 +40,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             record: record,
             authentication: account.authentication,
             profiles: account.profiles,
-            local: account.local,
             network: network,
-            // Read here, not in the flow, so the flow under test greets whoever the test says.
-            systemName: { NSFullUserName() },
             openBrowser: { url in
                 Task { @MainActor in NSWorkspace.shared.open(url) }
             },
@@ -81,8 +78,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     var isRequired: Bool { flow.isRequired }
 
     /// Puts the window on screen and brings the app forward; a first run is the one moment that is right.
-    func present(askingToSignIn: Bool = false) {
-        model.asksToSignIn = askingToSignIn
+    func present() {
         let window = window ?? makeWindow()
         self.window = window
         window.center()

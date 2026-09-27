@@ -17,7 +17,6 @@ extension HistoryFixture {
         ],
         entries: [HistoryEntry] = [],
         account: Account? = nil,
-        local: LocalAccount? = nil,
         systemName: String? = nil,
         shortcut: String = "⌥Space",
         settings: Settings = .default,
@@ -25,7 +24,7 @@ extension HistoryFixture {
     ) -> HomePresentation {
         HomePresenter.page(
             for: HomeSnapshot(
-                permissions: permissions, entries: entries, account: account, local: local,
+                permissions: permissions, entries: entries, account: account,
                 systemName: systemName, shortcut: shortcut, settings: settings, now: moment),
             calendar: calendar, locale: locale)
     }
@@ -348,60 +347,6 @@ struct HomeAccountTests {
         ).account
 
         #expect(corner == .signedIn(initials: "?", name: "account-1", open: .account))
-    }
-
-    /// Once the person has chosen this Mac, a monogram is the truth; the view draws it unfilled.
-    @Test("shows the Mac's owner once they have chosen to be one")
-    func onThisMac() {
-        let corner = HistoryFixture.home(
-            local: LocalAccount(name: "Naveen Bhatt", since: HistoryFixture.now),
-            systemName: "Naveen Bhatt"
-        ).account
-
-        #expect(corner == .onThisMac(initials: "NB", name: "Naveen", open: .account))
-        #expect(corner.open.intent == .show(.account), "there is a page there to open now")
-    }
-
-    /// Only the recorded choice counts, which is why the chip reads the local account and not `systemName`.
-    @Test("the Mac's name alone is still not an account")
-    func systemNameIsNotAChoice() {
-        #expect(HistoryFixture.home(systemName: "Naveen Bhatt").account == .signedOut(open: .signIn))
-    }
-
-    @Test("a Mac account with no name still draws something honest")
-    func onThisMacWithNoName() {
-        let corner = HistoryFixture.home(
-            local: LocalAccount(name: nil, since: HistoryFixture.now)
-        ).account
-
-        #expect(corner == .onThisMac(initials: "?", name: "This", open: .account))
-    }
-
-    /// The chip and the Account page draw one monogram for the same Mac owner, named or not.
-    @Test(
-        "the Mac account's chip agrees with its Account page",
-        arguments: [nil, "Nadia Leigh Stone", "Nadia\tStone", "123 456"])
-    func onThisMacAgreesWithPage(name: String?) {
-        let local = LocalAccount(name: name, since: HistoryFixture.now)
-        let corner = HistoryFixture.home(local: local).account
-        let page = AccountPagePresenter.identity(for: local)
-
-        guard case .onThisMac(let initials, _, _) = corner else {
-            Issue.record("expected a Mac account chip, got \(corner)")
-            return
-        }
-        #expect(initials == page.initials)
-    }
-
-    /// The signed value wins here too, and for the same reason the Account page's does.
-    @Test("a real account beats a Mac account in the corner")
-    func accountBeatsLocal() {
-        let corner = HistoryFixture.home(
-            account: HistoryFixture.account(name: "Naveen Bhatt"),
-            local: LocalAccount(name: "Somebody Else", since: HistoryFixture.now)
-        ).account
-
-        #expect(corner == .signedIn(initials: "NB", name: "Naveen", open: .account))
     }
 
     @Test("the chip leads to the Account page")

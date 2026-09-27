@@ -272,6 +272,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         probeTransformers()
         probeSpeechModel()
         refreshAccount()
+        // A Mac that worked without an account keeps no trace of it, and meets sign-in like anyone signed out.
+        RetiredLocalAccount.forget()
         presentOnboardingIfNeeded()
         // Shown at launch, since a menu-bar icon alone is an interface most people never find.
         if onboarding == nil { show(.main(.home)) }
@@ -548,13 +550,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Brings forward the flow already open, else builds a fresh one so a finished flow never reopens on its last page.
-    private func presentOnboarding(askingToSignIn: Bool = false) {
+    private func presentOnboarding() {
         let (onboarding, isNew) = OnboardingWindowController.reusing(onboarding) {
             OnboardingWindowController(
                 settingsStore: settingsStore, installer: speechInstall, account: account)
         }
         guard isNew else {
-            onboarding.present(askingToSignIn: askingToSignIn)
+            onboarding.present()
             return
         }
         self.onboarding = onboarding
@@ -578,7 +580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             refreshMainWindow()
             loadSpeechModelIfItArrived()
         }
-        onboarding.present(askingToSignIn: askingToSignIn)
+        onboarding.present()
     }
 
     /// How long quitting waits for a dictation to land. See `Docs/quitting.md`.
@@ -1934,7 +1936,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for: HomeSnapshot(
                     permissions: knownPermissions, entries: entries,
                     account: knownEntitlement?.account,
-                    local: knownLocalAccount,
                     // The name macOS knows, read here so a test decides who is greeted.
                     systemName: NSFullUserName(),
                     shortcut: shortcut, settings: settings, now: now,
@@ -1990,15 +1991,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             shortcutKeycaps: SettingsShortcut.keycaps(for: settings.hotkey))
     }
 
-    /// Reads the account the pages draw from, the entitlement and the local choice together.
+    /// Reads the account the pages draw from.
     func readAccount() {
         // The signed half only. See `Docs/entitlements.md`.
         let profile = account.profiles.load()
         knownEntitlement = profile?.entitlement
         // Displayed, never enforced, and only from a document that names the signed account.
         knownMemberSince = profile.flatMap { $0.isInternallyConsistent ? $0.account.createdAt : nil }
-        // Read beside the entitlement, so two surfaces cannot draw from two readings.
-        knownLocalAccount = account.local.load()
     }
 
     /// The Account page as the last reading of the account draws it.
@@ -2006,11 +2005,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         AccountPagePresenter.page(
             for: AccountPageSnapshot(
                 entitlement: knownEntitlement,
-                access: EntitlementGate(profiles: account.profiles, local: account.local)
+                access: EntitlementGate(profiles: account.profiles)
                     .access(at: now, networkIsReachable: network.isReachable),
                 now: now,
                 picture: knownPicture?.bytes,
-                local: knownLocalAccount,
                 memberSince: knownMemberSince,
                 macName: MacName.current))
     }
@@ -2054,8 +2052,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var knownEntitlement: Entitlement?
     /// When the signed-in account was created, from the unsigned profile beside the entitlement.
     private var knownMemberSince: Date?
-    /// The choice to work without an account, consulted only when there is no entitlement.
-    private var knownLocalAccount: LocalAccount?
     /// The person's picture and the path it came from, kept together so it is fetched once per account.
     private var knownPicture: (path: String, bytes: Data)?
     /// The timings last read, so a keystroke redraws without hopping to the actor.
@@ -2194,7 +2190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         case .signIn:
             // Onboarding owns the whole sign-in conversation, so this asks for it explicitly.
-            presentOnboarding(askingToSignIn: true)
+            presentOnboarding()
         case .dismissNotice:
             actionNotice = nil
             redrawMainWindow()

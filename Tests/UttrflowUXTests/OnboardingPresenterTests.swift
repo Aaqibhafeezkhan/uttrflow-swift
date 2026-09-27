@@ -217,7 +217,6 @@ struct OnboardingPresenterTests {
     @Test("offers no way past sign-in without an account")
     func signInIsMandatory() {
         for state in everyState where state.step == .signIn {
-            #expect(!intents(page(state)).contains(.continueOnThisMac), "\(state)")
             #expect(!intents(page(state)).contains(.advance), "\(state)")
         }
     }

@@ -71,8 +71,7 @@ struct WindowLifetimeTests {
             record: NeverFinished(),
             account: OnboardingAccountLayer(
                 authentication: service,
-                profiles: UserDefaultsProfileCache(storage: defaults, verifier: service.verifier),
-                local: InMemoryLocalAccountStore()),
+                profiles: UserDefaultsProfileCache(storage: defaults, verifier: service.verifier)),
             network: AlwaysReachable())
     }
 

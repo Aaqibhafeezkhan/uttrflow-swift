@@ -663,8 +663,7 @@ private struct SignedInAccount {
         profiles = UserDefaultsProfileCache(
             storage: MemoryStorage(), verifier: authentication.backend.verifier)
         layer = OnboardingAccountLayer(
-            authentication: authentication, profiles: profiles,
-            local: UserDefaultsLocalAccountStore(storage: MemoryStorage()))
+            authentication: authentication, profiles: profiles)
         authentication.profiles.withLock { [profiles] in $0 = profiles }
         let challenge = try await authentication.beginSignIn(with: .google)
         try profiles.save(await authentication.completeSignIn(challenge))

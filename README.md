@@ -38,7 +38,7 @@
 
 - Recognition runs on your Mac.
 - Clean-up removes fillers, adds punctuation and applies your dictionary, matched by sound.
-- Works offline, with or without an account.
+- Works offline once you have signed in.
 
 **In the code:** `UttrflowAudio` → `UttrflowSpeech` → `UttrflowAI` → `UttrflowPipeline` →
 `UttrflowInput`, with the dock in `Sources/Uttrflow/Dock`. Read
@@ -195,22 +195,21 @@ three completions typed past in one field are each reason enough to draw nothing
 editors ship switched off, because their own completion already reads the whole file.
 [`Docs/predict.md`](Docs/predict.md) is the full account.
 
-**Works offline.** Signing in needs a network exactly once, and "Continue on this Mac"
-needs none at all. After that every launch, every dictation and every paste works with
+**Works offline.** Signing in needs a network exactly once. After that every launch, every dictation and every paste works with
 Wi-Fi off — proven by a sandbox that fails any test touching the network.
 
 </details>
 
-## It runs without an account, and without anything of ours
+## A clone runs without anything of ours
 
 Worth saying early, because it is the question every reader of a client repository has:
-**you do not need an account, an API key, or access to any server we run.**
+**you do not need an API key or access to any server we run.**
 
 Dictation is on-device. The clipboard, history, dictionary and snippets live in Application
-Support and are never sent anywhere. The one screen that would need a network — sign-in —
-offers **"continue on this Mac"** beside the providers, which uses the name macOS already
-knows you by and needs nothing. An account buys the things that genuinely need one:
-carrying a dictionary between Macs, and a subscription to bill.
+Support and are never sent anywhere. The released app asks you to sign in before anything
+else opens; a development build signs in against an in-process stand-in, so its sign-in
+needs no network and no account of ours. An account buys the things that genuinely need
+one: carrying a dictionary between Macs, and a subscription to bill.
 
 So a clone builds, tests and runs, complete. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -408,11 +407,10 @@ data if they were ever completed and run, and anything shorter than two characte
 (`CaptureGate` in `Sources/UttrflowPredictCapture`). A field keeps at most 2,000 entries.
 You can forget one line, everything one application taught, or all of it.
 
-**There is an account, and the first run asks for it — but it is not required to
-dictate.** "Continue on this Mac", on that same page from the start, records the choice to
-do without one and permits dictation, with no network involved. Signing in instead needs a
-network exactly once; every launch after that works without one, and an entitlement that
-has aged out still lets you dictate rather than locking you out.
+**There is an account, and nothing opens until you sign in.** Signing in needs a network
+exactly once; every launch after that works without one, and an entitlement that has aged
+out still lets you dictate rather than locking you out. Signing out, or a session the
+server has ended, closes every window and stops dictation until you sign in again.
 
 **Anonymous usage statistics are sent, they can only carry numbers, and one switch turns
 them off.** Once an hour, and when the app quits, Uttrflow sends a report of counts and
