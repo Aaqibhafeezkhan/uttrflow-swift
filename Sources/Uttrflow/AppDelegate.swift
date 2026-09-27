@@ -1946,12 +1946,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     shortcutKeys: SettingsShortcut.keycaps(for: settings.hotkey), settings: settings,
                     version: .ofThisBuild,
                     now: now)),
-            dictation: DictationPresenter.page(
-                for: DictationSnapshot(
-                    permissions: knownPermissions, entries: entries, corrections: corrections,
-                    query: query(for: .dictation), shortcut: shortcut,
-                    settings: settings, recordings: knownRecordings, retrying: retryingRecording,
-                    now: now, speechModel: speechModelLoad)),
             history: HistoryPresenter.page(
                 for: HistorySnapshot(
                     entries: entries, query: query(for: .history), settings: settings,

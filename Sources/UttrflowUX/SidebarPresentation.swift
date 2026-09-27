@@ -224,7 +224,6 @@ public enum SidebarPresenter {
         case .page(let page):
             switch page {
             case .home: "Home"
-            case .dictation: "Dictation"
             case .history: "History"
             case .dictionary: "Dictionary"
             case .corrections: "Corrections"
@@ -245,7 +244,6 @@ public enum SidebarPresenter {
         case .page(let page):
             switch page {
             case .home: "house.fill"
-            case .dictation: "mic"
             case .history: "clock"
             case .dictionary: "square.split.1x2"
             case .corrections: "arrow.left.arrow.right"

@@ -21,7 +21,6 @@ public enum SettingsTab: String, Sendable, Equatable, Hashable, CaseIterable, Co
 public enum MainTab: String, Sendable, Equatable, Hashable, CaseIterable, Codable {
     /// Where the window opens, and the only page about the person rather than about a feature.
     case home
-    case dictation
     case history
     case dictionary
     case corrections

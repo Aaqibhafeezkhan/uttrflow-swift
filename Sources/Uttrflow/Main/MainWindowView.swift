@@ -117,8 +117,6 @@ struct MainWindowView: View {
         switch model.page {
         case .home:
             HomePageView(presentation: model.content.home, onIntent: onIntent)
-        case .dictation:
-            DictationPageView(presentation: model.content.dictation, onIntent: onIntent)
         case .history:
             HistoryPageView(
                 presentation: model.content.history, chrome: model.chrome, query: $model.searchQuery,

@@ -16,7 +16,7 @@ struct DestinationTests {
         #expect(
             MainTab.allCases == [
                 .home,
-                .dictation, .history, .dictionary, .corrections, .insights, .snippets, .account,
+                .history, .dictionary, .corrections, .insights, .snippets, .account,
             ])
     }
 
@@ -25,7 +25,7 @@ struct DestinationTests {
     func equality() {
         #expect(Destination.settings(.privacy) == .settings(.privacy))
         #expect(Destination.settings(.privacy) != .settings(.general))
-        #expect(Destination.main(.dictation) != .settings(.general))
+        #expect(Destination.main(.history) != .settings(.general))
         #expect(Destination.onboarding == .onboarding)
     }
 
