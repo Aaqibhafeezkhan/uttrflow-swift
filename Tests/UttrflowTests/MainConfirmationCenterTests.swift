@@ -24,4 +24,26 @@ struct MainConfirmationCenterTests {
         #expect(center.pending == nil)
         #expect(center.answer(confirming: true) == nil)
     }
+
+    @Test("pressing Sign out asks first and sends nothing until the answer")
+    func signOutAsksFirst() {
+        let center = MainConfirmationCenter()
+        var sent: [MainIntent] = []
+        let signOut = MainAction(title: "Sign out", intent: .signOut, isDestructive: true)
+        MainConfirmationCenter.press(signOut, in: center) { sent.append($0) }
+        #expect(sent.isEmpty)
+        #expect(center.pending?.confirmation == .signOut)
+        #expect(center.pending?.intent == .signOut)
+    }
+
+    @Test("pressing an action with no question sends it at once")
+    func plainActionActsAtOnce() {
+        let center = MainConfirmationCenter()
+        var sent: [MainIntent] = []
+        MainConfirmationCenter.press(MainAction(title: "Sign In", intent: .signIn), in: center) {
+            sent.append($0)
+        }
+        #expect(sent == [.signIn])
+        #expect(center.pending == nil)
+    }
 }

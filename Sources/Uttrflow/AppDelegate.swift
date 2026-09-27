@@ -513,8 +513,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Shows or hides the sidebar's names, and does nothing when there is no window yet.
     @objc func toggleSidebarFromMenu(_ sender: Any?) { mainWindow?.toggleSidebar() }
 
-    /// Puts the caret in the page's search field, and does nothing when the page has none.
-    @objc func findFromMenu(_ sender: Any?) { mainWindow?.focusSearch() }
+    /// Puts the caret in the page's search field, or opens Home's search, as ⌘K does, when the page has none.
+    @objc func findFromMenu(_ sender: Any?) {
+        guard let mainWindow, mainWindow.isVisible else { return }
+        if mainWindow.canFocusSearch {
+            mainWindow.focusSearch()
+        } else {
+            carryOut(.search)
+        }
+    }
 
     /// Answers for the two items whose state the window decides, rather than the menu's fixed text.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
@@ -524,7 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.title = mainWindow?.isSidebarExpanded == true ? "Hide Sidebar" : "Show Sidebar"
             return mainWindow != nil
         case #selector(findFromMenu(_:)):
-            return mainWindow?.canFocusSearch == true
+            return mainWindow?.isVisible == true
         default:
             return true
         }
@@ -1946,12 +1953,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     shortcutKeys: SettingsShortcut.keycaps(for: settings.hotkey), settings: settings,
                     version: .ofThisBuild,
                     now: now)),
-            dictation: DictationPresenter.page(
-                for: DictationSnapshot(
-                    permissions: knownPermissions, entries: entries, corrections: corrections,
-                    query: query(for: .dictation), shortcut: shortcut,
-                    settings: settings, recordings: knownRecordings, retrying: retryingRecording,
-                    now: now, speechModel: speechModelLoad)),
             history: HistoryPresenter.page(
                 for: HistorySnapshot(
                     entries: entries, query: query(for: .history), settings: settings,

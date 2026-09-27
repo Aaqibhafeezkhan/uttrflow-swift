@@ -146,7 +146,6 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/ApplicationIconSource+System.swift": "asks the system for another app's icon",
     "Uttrflow/Panel/PanelThumbnailSource+System.swift": "decodes a picture off the disk",
     "Uttrflow/Main/OrbitPalette.swift": "colour values; the two decidable parts are tested in OrbitPaletteTests",
-    "Uttrflow/Main/DictationPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/DictionaryPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/PageParts.swift": "SwiftUI parts of the redesigned pages, drawn from tested presentations",
     "Uttrflow/Main/PageTable.swift": (

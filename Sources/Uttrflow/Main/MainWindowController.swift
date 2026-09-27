@@ -10,7 +10,6 @@ struct MainContent: Sendable, Equatable {
     var notice: MainNotice?
     var home: HomePresentation
     var sidebar: SidebarPresentation
-    var dictation: DictationPresentation
     var history: HistoryPresentation
     var dictionary: DictionaryPresentation
     var corrections: CorrectionsPresentation
@@ -56,7 +55,6 @@ final class MainWindowModel {
         switch page {
         // Home draws its own greeting, so the toolbar above it stays empty.
         case .home: MainPageChrome(title: "")
-        case .dictation: content.dictation.chrome
         case .history:
             MainPageChrome(
                 title: SidebarPresenter.title(for: .history),
