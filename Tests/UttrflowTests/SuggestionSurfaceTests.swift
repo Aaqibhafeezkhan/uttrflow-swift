@@ -100,6 +100,29 @@ struct SuggestionSurfaceTests {
         #expect(panel.drawn.maximumWidth == field.maxX - caret.maxX)
     }
 
+    @Test("Drawing the same offer at the same caret again does no layout, no placement and no fronting")
+    func anUnchangedRedrawDoesNothing() throws {
+        let screen = try #require(NSScreen.screens.first).visibleFrame
+        let caret = CGRect(x: screen.minX + 200, y: screen.midY, width: 0, height: 17)
+        let panel = SuggestionPanelController.shared
+        defer { panel.hide() }
+        panel.show(.certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret)
+        let renders = panel.renders
+        let placements = panel.placements
+        for _ in 0..<10 {
+            #expect(panel.show(.certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret))
+        }
+        // A read that reports the same caret half a point off is the same place.
+        panel.show(
+            .certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret.offsetBy(dx: 0.5, dy: 0))
+        #expect(panel.renders == renders)
+        #expect(panel.placements == placements)
+        panel.show(
+            .certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret.offsetBy(dx: 6, dy: 0))
+        #expect(panel.renders == renders + 1)
+        #expect(panel.placements == placements + 1)
+    }
+
     @Test("VoiceOver is told once as a suggestion appears, not on a redraw, and not when it cannot be drawn")
     func aSuggestionIsAnnouncedOnce() throws {
         let screen = try #require(NSScreen.screens.first).visibleFrame

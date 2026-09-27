@@ -11,7 +11,7 @@ final class SuggestionPanel: NSPanel {
 }
 
 /// What the surface was last asked to draw, so a display setting can change under it.
-private struct SuggestionRequest {
+private struct SuggestionRequest: Equatable {
     var suggestion: Suggestion = .silent
     /// What is already in the field, so the surface offers only what the suggestion adds.
     var typed: String = ""
@@ -29,6 +29,23 @@ private struct SuggestionRequest {
     var fontFamily: String?
     /// The field's own text colour, so the ghost reads against the field and not against Uttrflow's appearance.
     var textColor: TextColor?
+
+    /// How far apart two reads of one caret may be and still be the same place, since a field can report it a point off.
+    static let caretTolerance: CGFloat = 1
+
+    /// Whether this asks for exactly what `other` drew, the caret allowed its read-to-read wobble.
+    func draws(sameAs other: Self) -> Bool {
+        var aligned = self
+        aligned.caret = other.caret
+        return aligned == other && Self.sameCaret(caret, other.caret)
+    }
+
+    /// Whether two caret reads are one place.
+    private static func sameCaret(_ lhs: CGRect?, _ rhs: CGRect?) -> Bool {
+        guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+        return abs(lhs.minX - rhs.minX) <= caretTolerance && abs(lhs.maxX - rhs.maxX) <= caretTolerance
+            && abs(lhs.minY - rhs.minY) <= caretTolerance && abs(lhs.maxY - rhs.maxY) <= caretTolerance
+    }
 }
 
 /// Owns the panel the suggestion is drawn in, one for the whole process so no two ghosts are ever on screen.
@@ -85,6 +102,8 @@ final class SuggestionPanelController {
             suggestion: suggestion, typed: typed, placement: placement, caret: caret,
             window: window, field: field, fieldPointSize: fieldPointSize, selection: selection,
             acceptKey: acceptKey, fontFamily: fontFamily, textColor: textColor)
+        // The same offer at the same caret is already on screen, so nothing is laid out, placed or fronted again.
+        if isActuallyShowing, next.draws(sameAs: request) { return true }
         request = next
         return render()
     }
@@ -96,7 +115,7 @@ final class SuggestionPanelController {
         render()
     }
 
-    /// Whether a suggestion is on screen, which keeps the pause clock following the field.
+    /// Whether a suggestion is on screen, which is what a scroll acts on.
     var isShowing: Bool { isActuallyShowing }
 
     /// Exposed so a probe or a test can read back what was actually configured.
@@ -107,6 +126,9 @@ final class SuggestionPanelController {
 
     /// How many times the view has been replaced, so a test can see that a redundant hide changes nothing.
     private(set) var renders = 0
+
+    /// How many times the panel has been placed, so a test can see that one redraw moves it once.
+    private(set) var placements = 0
 
     /// The ghost line's full width in this presentation's face, as the view would draw it with no room limit.
     private func width(of row: SuggestionPresentation.Row, in presentation: SuggestionPresentation) -> CGFloat
@@ -166,8 +188,8 @@ final class SuggestionPanelController {
             withdraw()
             return false
         }
-        // `orderFrontRegardless`, never `makeKeyAndOrderFront`: no keyboard is taken.
-        panel.orderFrontRegardless()
+        // `orderFrontRegardless`, never `makeKeyAndOrderFront`: no keyboard is taken; a panel already up is not fronted again.
+        if !isActuallyShowing || !panel.isVisible { panel.orderFrontRegardless() }
         isActuallyShowing = true
         // The panel is out of VoiceOver's reach, so the offer and its accept key are spoken once as it appears.
         if let text = announcer.announcement(for: presentation) { announce(text) }
@@ -213,7 +235,7 @@ final class SuggestionPanelController {
             return
         }
         guard reposition() else { return withdraw() }
-        panel.orderFrontRegardless()
+        if !isActuallyShowing || !panel.isVisible { panel.orderFrontRegardless() }
         isActuallyShowing = true
     }
 
@@ -225,6 +247,8 @@ final class SuggestionPanelController {
                 for: request.placement, caret: request.caret, window: request.window,
                 field: request.field, screen: screenFrame, size: panelSize)
         else { return false }
+        guard anchor.frame != panel.frame else { return true }
+        placements += 1
         panel.setFrame(anchor.frame, display: true)
         return true
     }

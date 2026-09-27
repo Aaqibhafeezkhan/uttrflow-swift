@@ -36,7 +36,7 @@ struct SuggestionTickingTests {
         _ = ticking.noteActivity(at: noon)
 
         let answer3 = ticking.tick(
-            at: noon.addingTimeInterval(SuggestionTicking.window - 0.5), isShowing: false)
+            at: noon.addingTimeInterval(SuggestionTicking.window - 0.5))
         #expect(answer3)
         #expect(ticking.isRunning)
     }
@@ -47,20 +47,21 @@ struct SuggestionTickingTests {
         _ = ticking.noteActivity(at: noon)
 
         let answer4 = ticking.tick(
-            at: noon.addingTimeInterval(SuggestionTicking.window + 0.5), isShowing: false)
+            at: noon.addingTimeInterval(SuggestionTicking.window + 0.5))
         #expect(!answer4)
         #expect(!ticking.isRunning)
     }
 
-    @Test("keeps running past the window while a suggestion is on screen")
-    func followsADrawnSuggestion() {
+    @Test(
+        "stops past the window even while a suggestion is on screen, so a still ghost is not re-read every second"
+    )
+    func aDrawnSuggestionDoesNotKeepItRunning() {
         var ticking = SuggestionTicking()
         _ = ticking.noteActivity(at: noon)
 
-        let answer5 = ticking.tick(
-            at: noon.addingTimeInterval(SuggestionTicking.window * 10), isShowing: true)
-        #expect(answer5)
-        #expect(ticking.isRunning)
+        let answer5 = ticking.tick(at: noon.addingTimeInterval(SuggestionTicking.window + 0.5))
+        #expect(!answer5)
+        #expect(!ticking.isRunning)
     }
 
     @Test("restarts on the next activity after stopping, measured from that activity")
@@ -68,11 +69,11 @@ struct SuggestionTickingTests {
         var ticking = SuggestionTicking()
         _ = ticking.noteActivity(at: noon)
         let later = noon.addingTimeInterval(SuggestionTicking.window * 3)
-        _ = ticking.tick(at: later, isShowing: false)
+        _ = ticking.tick(at: later)
 
         let answer6 = ticking.noteActivity(at: later)
         #expect(answer6)
-        let answer7 = ticking.tick(at: later.addingTimeInterval(1), isShowing: false)
+        let answer7 = ticking.tick(at: later.addingTimeInterval(1))
         #expect(answer7)
     }
 
@@ -80,7 +81,7 @@ struct SuggestionTickingTests {
     func aStrayTickIsIgnored() {
         var copy = SuggestionTicking()
 
-        let answer8 = copy.tick(at: noon, isShowing: false)
+        let answer8 = copy.tick(at: noon)
         #expect(!answer8)
     }
 

@@ -23,10 +23,10 @@ struct SuggestionTicking: Sendable, Equatable {
         return true
     }
 
-    /// Answers whether this tick wakes a turn; when it does not, the clock has stopped and must be invalidated.
-    mutating func tick(at moment: Date, isShowing: Bool) -> Bool {
+    /// Answers whether this tick wakes a turn; a drawn ghost does not keep it running, since a key, click, scroll or switch wakes one.
+    mutating func tick(at moment: Date) -> Bool {
         guard isRunning, let lastActivity else { return false }
-        guard isShowing || moment.timeIntervalSince(lastActivity) <= Self.window else {
+        guard moment.timeIntervalSince(lastActivity) <= Self.window else {
             isRunning = false
             return false
         }

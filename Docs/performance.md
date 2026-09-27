@@ -52,7 +52,7 @@ has to be.
 | state | budget | today |
 |---|---|---|
 | idle: menu bar only, windows closed, suggestions off | ~0% of a core; at most 2 timer wakeups a second from the app's own code | clipboard poll 1.7/s at the shipped 500 ms interval (100 ms tolerance) |
-| idle with tab-to-complete on | nothing beyond the line above once 12 s have passed with no keystroke, click or switch and nothing drawn | a 1 Hz tick, each one an Accessibility read of the frontmost app, that stops itself 12 s after the last activity once nothing is drawn (`SuggestionTicking`) |
+| idle with tab-to-complete on | nothing beyond the line above once 12 s have passed with no keystroke, click or switch, drawn ghost or not | a 1 Hz tick, each one an Accessibility read of the frontmost app, that stops itself 12 s after the last activity (`SuggestionTicking`); a redraw of what is already on screen does no layout and no placement |
 | typing, suggestions on | the tap callback does one atomic load; a turn per keystroke, coalesced to one running and one waiting; a model pass only after 120 ms of quiet, cancelled by the next key | as budgeted |
 | a model suggestion pass | at utility priority; none in Low Power Mode or at serious thermal pressure; ≤ 1 processor-second per pass on M1 | run at utility priority and gated on energy conditions (`DiscretionaryGenerator`); 0.17 processor-seconds per pass here since #427, so ≈ 0.3 on M1 |
 | dictation | speech ≤ 0.1 processor-seconds per second of audio on M1; finished within 0.5× the audio's length on M1 | 0.04 here, which scales to ≈ 0.07; 0.20× wall clock here on a loaded machine |

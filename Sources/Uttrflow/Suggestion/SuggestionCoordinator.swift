@@ -79,7 +79,7 @@ final class SuggestionCoordinator {
     /// The Space and sleep observers, each of which leaves a ghost with no field under it.
     private var spaceObservers: [any NSObjectProtocol] = []
     private var ticker: Timer?
-    /// Whether the pause clock should be running, which it is only shortly after activity or while something is drawn.
+    /// Whether the pause clock should be running, which it is only for a short window after activity.
     private var ticking = SuggestionTicking()
     private var swallowed: Task<Void, Never>?
     private var lastReading: FieldReading?
@@ -302,9 +302,9 @@ final class SuggestionCoordinator {
         ticker = timer
     }
 
-    /// Wakes a turn while the clock is wanted, and stops it once nothing is happening and nothing is drawn.
+    /// Wakes a turn while the clock is wanted, and stops it once nothing has happened for its window.
     private func tick() {
-        guard ticking.tick(at: Date(), isShowing: panel.isShowing) else {
+        guard ticking.tick(at: Date()) else {
             ticker?.invalidate()
             ticker = nil
             return
