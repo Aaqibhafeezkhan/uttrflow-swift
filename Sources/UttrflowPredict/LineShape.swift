@@ -41,7 +41,8 @@ struct LineShape: Equatable, Sendable {
         return LineShape(
             command: command,
             kind: CommandGrammar.kind(
-                of: command, after: arguments, flags: options.filter { $0.hasPrefix("-") }, previous: rest.last,
+                of: command, after: arguments, flags: options.filter { $0.hasPrefix("-") },
+                previous: rest.last,
                 endOfOptions: end != nil))
     }
 }
@@ -94,7 +95,8 @@ enum CommandGrammar {
 
     /// The flags of each git verb whose value is the name of a branch it creates.
     static let gitBranchCreatingFlags: [String: Set<String>] = [
-        "checkout": ["-b", "-B", "--orphan"], "switch": ["-c", "-C", "--create", "--force-create", "--orphan"],
+        "checkout": ["-b", "-B", "--orphan"],
+        "switch": ["-c", "-C", "--create", "--force-create", "--orphan"],
         "worktree": ["-b", "-B"],
     ]
 
@@ -164,7 +166,9 @@ enum CommandGrammar {
             if endOfOptions { return .file }
             // A flag that creates a branch takes a new name, which no existing branch may complete.
             if let previous, gitBranchCreatingFlags[verb]?.contains(previous) == true { return .free }
-            if verb == "branch" { return gitBranchArgument(flags: flags, previous: previous, given: arguments.count - 1) }
+            if verb == "branch" {
+                return gitBranchArgument(flags: flags, previous: previous, given: arguments.count - 1)
+            }
             if gitBranchVerbs.contains(verb) { return .branch }
             if gitBranchOrFileVerbs.contains(verb) { return .branchOrFile }
             return gitFileVerbs.contains(verb) ? .file : .free

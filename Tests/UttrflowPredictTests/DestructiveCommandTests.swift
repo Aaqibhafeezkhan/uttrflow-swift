@@ -222,7 +222,8 @@ struct DestructiveCommandTests {
         arguments: [
             "echo x > notes.txt", "echo \"\" > notes.txt", "> notes.txt", "sort data.csv >| data.csv",
             "ls 1> listing.txt", "make &> build.log", "echo x >notes.txt", "cat a.txt > b.txt && ls",
-            "make 2>&1 | tee build.log", "make >& build.log", "make >&build.log", "ls -la >&listing.txt && ls",
+            "make 2>&1 | tee build.log", "make >& build.log", "make >&build.log",
+            "ls -la >&listing.txt && ls",
         ])
     func truncatingRedirectionIsDestructive(_ line: String) {
         #expect(
@@ -304,7 +305,10 @@ struct DestructiveCommandTests {
 
     @Test(
         "A fetch that prunes and a push naming its refs plainly are ordinary.",
-        arguments: ["git fetch --prune", "git fetch --prune origin", "git remote prune origin", "git push origin main"])
+        arguments: [
+            "git fetch --prune", "git fetch --prune origin", "git remote prune origin",
+            "git push origin main",
+        ])
     func pruningFetchIsOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
@@ -312,14 +316,18 @@ struct DestructiveCommandTests {
     @Test(
         "A cloud or hosting tool deleting a repository, a release, a bucket or a resource is destructive.",
         arguments: [
-            "gh repo delete example/demo --yes", "gh release delete v1.0", "gh release delete-asset v1.0 app.zip",
+            "gh repo delete example/demo --yes", "gh release delete v1.0",
+            "gh release delete-asset v1.0 app.zip",
             "gh -R example/demo release delete v1.0", "gh secret delete TOKEN", "gh api -X DELETE repos/o/r",
             "gh api --method DELETE repos/o/r", "sudo gh repo delete example/demo",
             "aws s3 rm s3://example-bucket --recursive", "aws s3 rm s3://example-bucket/key.txt",
-            "aws s3 rb s3://example-bucket --force", "aws --profile prod s3 rm s3://example-bucket --recursive",
+            "aws s3 rb s3://example-bucket --force",
+            "aws --profile prod s3 rm s3://example-bucket --recursive",
             "aws --region eu-west-1 s3 rb s3://example-bucket", "aws s3 sync . s3://example-bucket --delete",
-            "aws s3api delete-bucket --bucket example-bucket", "aws ec2 terminate-instances --instance-ids i-1",
-            "aws rds delete-db-instance --db-instance-identifier db", "timeout 60 aws s3 rm s3://b --recursive",
+            "aws s3api delete-bucket --bucket example-bucket",
+            "aws ec2 terminate-instances --instance-ids i-1",
+            "aws rds delete-db-instance --db-instance-identifier db",
+            "timeout 60 aws s3 rm s3://b --recursive",
             "gcloud compute instances delete vm-1", "gcloud --project demo sql instances delete db",
             "az group delete --name demo", "az -o json vm delete -g demo -n vm1", "gsutil rm gs://example/x",
             "gsutil -m rm -r gs://example", "gsutil rb gs://example", "gsutil rsync -d src gs://example",

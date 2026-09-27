@@ -58,7 +58,9 @@ public enum DestructiveCommand {
     ]
 
     /// Shell reserved words that stand in front of the command a clause runs, as a loop's `do` and an `if`'s `then` do.
-    private static let reservedWords: Set<String> = ["do", "then", "else", "elif", "if", "while", "until", "!"]
+    private static let reservedWords: Set<String> = [
+        "do", "then", "else", "elif", "if", "while", "until", "!",
+    ]
 
     /// Programs that destroy whatever they are pointed at.
     private static let destroyers: Set<String> = [
@@ -116,7 +118,8 @@ public enum DestructiveCommand {
             destroys: { positionals, _ in positionals.first == "delete" }),
         "gh": VerbTool(
             valued: [
-                "-r", "--repo", "--hostname", "-x", "--method", "-f", "--field", "--raw-field", "-h", "--header",
+                "-r", "--repo", "--hostname", "-x", "--method", "-f", "--field", "--raw-field", "-h",
+                "--header",
                 "-q", "--jq", "-t", "--template", "--input", "-p", "--preview", "--cache",
             ],
             destroys: { positionals, arguments in
@@ -126,14 +129,16 @@ public enum DestructiveCommand {
         "aws": VerbTool(
             valued: [
                 "--profile", "--region", "--output", "--endpoint-url", "--query", "--cli-read-timeout",
-                "--cli-connect-timeout", "--ca-bundle", "--color", "--cli-binary-format", "--exclude", "--include",
+                "--cli-connect-timeout", "--ca-bundle", "--color", "--cli-binary-format", "--exclude",
+                "--include",
             ],
             destroys: { positionals, arguments in
                 guard let service = positionals.first, let operation = positionals.dropFirst().first else {
                     return false
                 }
                 if service == "s3" {
-                    return operation == "rm" || operation == "rb" || (operation == "sync" && arguments.contains("--delete"))
+                    return operation == "rm" || operation == "rb"
+                        || (operation == "sync" && arguments.contains("--delete"))
                 }
                 return operation.hasPrefix("delete-") || operation.hasPrefix("terminate-")
             }),
