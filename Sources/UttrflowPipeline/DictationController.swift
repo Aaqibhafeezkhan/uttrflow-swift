@@ -421,7 +421,7 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         onAdvice(.finishNow)
         guard await pipeline.currentState.isListening else { return stopWatchingTheLimit(generation) }
         setHandsFree(false)
-        await pipeline.finishRecording()
+        await finishListening()
         stopWatchingTheLimit(generation)
     }
 
@@ -458,7 +458,7 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
             // A slip on a click-started dictation finishes it cleanly, the way a release would, rather than discarding the words.
             guard pressOpenedTheMicrophone else {
                 stopWatchingTheLimit()
-                await pipeline.finishRecording()
+                await finishListening()
                 return
             }
             stopWatchingTheLimit()
