@@ -298,6 +298,9 @@ public struct PanelPresentation: Sendable, Equatable {
         self.rowHint = rowHint
     }
 
+    /// Whether the footer is offering ⌘Z to put a deleted clip back, which is then what ⌘Z does.
+    public var offersUndo: Bool { hint == PanelPresenter.undoHint }
+
     /// The row Return would insert, so neither the view nor the app counts rows itself.
     public var selectedRow: PanelRow? { rows.first { $0.isSelected } }
 }
