@@ -39,7 +39,7 @@ struct SpeechModelLoadTests {
         #expect(load.recovery == nil)
     }
 
-    @Test("a failed load says so and offers a fresh download")
+    @Test("a first failed load says so and offers to load it again")
     func failedCopy() {
         let load = SpeechModelLoad.failed
 
@@ -48,8 +48,21 @@ struct SpeechModelLoadTests {
         #expect(load.title == "The speech model didn’t load")
         #expect(load.line == "Speech model didn’t load")
         #expect(load.status == "Speech model didn’t load")
+        #expect(load.recovery == .retry)
+        #expect(load.message.contains("Try loading it again"))
+    }
+
+    @Test("a damaged model says so and offers a fresh download")
+    func brokenCopy() {
+        let load = SpeechModelLoad.broken
+
+        #expect(!load.isLoading)
+        #expect(load.title == "The speech model is damaged")
+        #expect(load.line == "Speech model is damaged")
+        #expect(load.status == "Speech model is damaged")
         #expect(load.recovery == .downloadSpeechModel)
         #expect(load.message.contains("Download it again"))
+        #expect(load.accessibilityLabel.hasSuffix("Download it again to repair it."))
     }
 
     @Test("a missing model says it was never downloaded and offers the download")

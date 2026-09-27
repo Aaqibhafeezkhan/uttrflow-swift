@@ -147,6 +147,24 @@ struct SpeechModelDockTests {
         #expect(dock.primaryLine == failure.message)
         #expect(dock.action == .retry)
         #expect(dock.secondaryLine == "Dictation can’t start without it")
+        #expect(dock.accessibilityLabel.hasSuffix("Try loading it again."))
+    }
+
+    @Test(
+        "resting, the button offers the same fix as the load it draws",
+        arguments: [SpeechModelLoad.failed, .broken, .missing])
+    func restingOffersTheLoadsFix(load: SpeechModelLoad) {
+        #expect(DictationPresenter.dock(for: .idle, speechModel: load).action == load.recovery)
+    }
+
+    @Test("resting with a damaged model says so and offers a fresh download, not a reload")
+    func restingBroken() {
+        let dock = DictationPresenter.dock(for: .idle, speechModel: .broken)
+
+        #expect(dock.primaryLine == "Speech model is damaged")
+        #expect(dock.action == .downloadSpeechModel)
+        #expect(dock.setup == .broken)
+        #expect(dock.setup?.actionTitle == "Download")
         #expect(dock.accessibilityLabel.hasSuffix("Download it again to repair it."))
     }
 
