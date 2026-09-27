@@ -351,4 +351,13 @@ struct PanelThumbnailsCapacityTests {
         #expect(PanelThumbnailsTests.thumbnailBytes < 30_000)
     }
 
+    @Test("a representation with no pixels behind it weighs nothing")
+    func aRepresentationWithoutPixelsWeighsNothing() {
+        let empty = NSImage(size: NSSize(width: 68, height: 68))
+        empty.addRepresentation(NSImageRep())
+        #expect(PanelThumbnails.bytes(of: empty) == 0)
+        let mixed = PanelThumbnailsTests.bitmap()
+        mixed.addRepresentation(NSImageRep())
+        #expect(PanelThumbnails.bytes(of: mixed) == PanelThumbnailsTests.thumbnailBytes)
+    }
 }

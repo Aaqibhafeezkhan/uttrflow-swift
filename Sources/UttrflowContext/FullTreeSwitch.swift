@@ -1,4 +1,5 @@
 import Foundation
+import UttrflowCore
 
 private import Synchronization
 
@@ -17,13 +18,7 @@ public final class FullTreeSwitch: Sendable {
     static let enhancedAttribute = "AXEnhancedUserInterface"
 
     /// The Chromium browsers, the only applications the screen reader's switch is set on, since it slows window animations elsewhere.
-    static let chromiumBrowsers: Set<String> = [
-        "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.dev", "com.google.Chrome.canary",
-        "org.chromium.Chromium", "com.microsoft.edgemac", "com.microsoft.edgemac.Beta",
-        "com.microsoft.edgemac.Dev", "com.microsoft.edgemac.Canary", "com.brave.Browser",
-        "com.brave.Browser.beta", "com.brave.Browser.nightly", "com.vivaldi.Vivaldi",
-        "com.operasoftware.Opera", "company.thebrowser.Browser",
-    ]
+    static let chromiumBrowsers = DestinationRules.chromiumBrowsers
 
     private struct State {
         /// Every process asked once already, whatever it answered, so no keystroke asks twice.

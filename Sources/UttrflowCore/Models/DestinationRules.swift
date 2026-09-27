@@ -75,6 +75,15 @@ public enum DestinationRules {
         ),
     ]
 
+    /// The Chromium browsers, named here with every other app, for the reads that treat their engine differently.
+    public static let chromiumBrowsers: Set<String> = [
+        "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.dev", "com.google.Chrome.canary",
+        "org.chromium.Chromium", "com.microsoft.edgemac", "com.microsoft.edgemac.Beta",
+        "com.microsoft.edgemac.Dev", "com.microsoft.edgemac.Canary", "com.brave.Browser",
+        "com.brave.Browser.beta", "com.brave.Browser.nightly", "com.vivaldi.Vivaldi",
+        "com.operasoftware.Opera", "company.thebrowser.Browser",
+    ]
+
     /// Every bundle prefix the rows of these kinds name, lowercased, for a module that asks only by identifier.
     public static func bundlePrefixes(of kinds: Set<AppKind>) -> [String] {
         standard.filter { $0.kind.map(kinds.contains) ?? false }

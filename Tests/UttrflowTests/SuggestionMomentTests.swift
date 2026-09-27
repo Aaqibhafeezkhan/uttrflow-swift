@@ -101,4 +101,33 @@ struct SuggestionMomentTests {
             SuggestionMoment.recentLines(["Thanks", "See you", "Thanks for"], typing: "Thanks for coming")
                 == ["See you"])
     }
+
+    @Test("The place an answer is remembered at is exactly the preceding text the model is shown")
+    func thePlaceIsWhatTheModelSees() {
+        #expect(SuggestionMoment.place(of: composer()) == "Dear team,")
+        let long = String(repeating: "word ", count: 200) + "end\nThanks for"
+        let snapshot = composer(value: long)
+        let place = SuggestionMoment.place(of: snapshot)
+        #expect(place?.count == SuggestionMoment.precedingContextLength)
+        #expect(place?.hasSuffix("end") == true)
+        let situation = SuggestionMoment.situation(of: snapshot, surroundings: nil, recentLines: [])
+        #expect(place == situation.preceding)
+        #expect(SuggestionMoment.place(of: composer(value: "Thanks for")) == nil)
+    }
+
+    @Test("A window is one app's one document, whatever the field holds")
+    func aWindowIsAnAppsDocument() {
+        func field(_ bundle: String, _ document: String?, _ value: String) -> FocusedFieldSnapshot {
+            FocusedFieldSnapshot(
+                bundleIdentifier: bundle, applicationName: "App", role: "AXTextArea", document: document,
+                value: value)
+        }
+        let key = SuggestionMoment.windowKey(of: field("com.example.mail", "draft", "Hi"))
+        #expect(key == SuggestionMoment.windowKey(of: field("com.example.mail", "draft", "Hi there")))
+        #expect(key != SuggestionMoment.windowKey(of: field("com.example.mail", "reply", "Hi")))
+        #expect(key != SuggestionMoment.windowKey(of: field("com.example.notes", "draft", "Hi")))
+        #expect(
+            SuggestionMoment.windowKey(of: field("com.example.mail", nil, "Hi"))
+                != SuggestionMoment.windowKey(of: field("com.example.mail", "draft", "Hi")))
+    }
 }
