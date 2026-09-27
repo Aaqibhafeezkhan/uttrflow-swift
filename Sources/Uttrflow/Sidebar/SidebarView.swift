@@ -148,22 +148,39 @@ enum SidebarMetrics {
     static let topInset: CGFloat = 48
 }
 
-/// The island's ground with the aurora glowing up from its foot.
+/// The island's ground with the aurora glowing up from its foot: soft radial washes, violet to teal, with no edge.
 struct SidebarIslandBackground: View {
     var body: some View {
-        IslandPalette.ground
-            .overlay(alignment: .bottomLeading) {
-                AngularGradient(
-                    colors: IslandPalette.aurora + IslandPalette.aurora.prefix(1),
-                    center: .center, startAngle: .degrees(120), endAngle: .degrees(480)
+        GeometryReader { proxy in
+            let reach = max(proxy.size.width, 1) * 1.7
+            ZStack {
+                IslandPalette.ground
+                glow(IslandPalette.aurora[0], at: UnitPoint(x: -0.05, y: 1.02), reach: reach, strength: 0.5)
+                glow(
+                    IslandPalette.aurora[1], at: UnitPoint(x: 0.3, y: 1.08), reach: reach * 0.8,
+                    strength: 0.35)
+                glow(
+                    IslandPalette.aurora[2], at: UnitPoint(x: 0.7, y: 1.05), reach: reach * 0.75,
+                    strength: 0.3)
+                glow(
+                    IslandPalette.aurora[3], at: UnitPoint(x: 1.0, y: 1.0), reach: reach * 0.6, strength: 0.22
                 )
-                .frame(width: 300, height: 320)
-                .blur(radius: 70)
-                .opacity(0.45)
-                .offset(x: -40, y: 80)
-                .allowsHitTesting(false)
             }
-            .accessibilityHidden(true)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// One wash, strongest at its centre and gone by `reach`, eased so it has no ring.
+    private func glow(_ color: Color, at center: UnitPoint, reach: CGFloat, strength: Double) -> some View {
+        RadialGradient(
+            stops: [
+                .init(color: color.opacity(strength), location: 0),
+                .init(color: color.opacity(strength * 0.55), location: 0.35),
+                .init(color: color.opacity(strength * 0.18), location: 0.7),
+                .init(color: color.opacity(0), location: 1),
+            ],
+            center: center, startRadius: 0, endRadius: reach)
     }
 }
 
