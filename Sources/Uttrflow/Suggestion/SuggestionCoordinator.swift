@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import OSLog
 import UttrflowContext
+import UttrflowCore
 import UttrflowInput
 import UttrflowPredict
 import UttrflowPredictCapture
@@ -833,8 +834,10 @@ final class SuggestionCoordinator {
                 generating?.cancel()
                 // Held across the insert so the keys it posts are ignored on both the tap and the monitor.
                 isInserting = true
-                await take(text, after: typed, in: reading)
+                let taken = await take(text, after: typed, in: reading)
                 isInserting = false
+                // A field that is no longer the drawn line gets its key back, so Tab still does what Tab does there.
+                if !taken { KeyStrokeReturn.post(stroke) }
                 noteActivity()
                 // The field is re-read a moment later, since an application applies the insertion after the keys land.
                 wake(.tick, afterMilliseconds: 80)
@@ -880,26 +883,36 @@ final class SuggestionCoordinator {
         }
     }
 
-    /// Puts the tail into the field and hands the taken line to capture, which weighs it and refuses what it must.
-    private func take(_ text: String, after typed: String, in reading: FieldReading?) async {
-        do {
-            // What the gates left is a whole line, so taking it may replace characters as well as add.
-            let method = try await acceptor.accept(.certain(text), after: typed)
-            Self.log.debug(
-                "\(SuggestionLog.accept(text: text, typed: typed, via: method?.rawValue ?? "nothing"), privacy: .public)"
-            )
-        } catch {
-            // The case names which route refused and why; the user-facing message belongs to dictation, whose route has a clipboard.
-            Self.log.error("\(SuggestionLog.landedNowhere(error, typed: typed), privacy: .public)")
-            return
+    /// Puts the tail into the field and hands the taken line to capture, answering false when the field refused it unwritten.
+    private func take(_ text: String, after typed: String, in reading: FieldReading?) async -> Bool {
+        // What the gates left is a whole line, so taking it may replace characters as well as add.
+        var via = "nothing"
+        switch await acceptor.aim(.certain(text), after: typed) {
+        case .refused(let reason):
+            Self.log.error("\(SuggestionLog.refusedUnwritten(reason, typed: typed), privacy: .public)")
+            return false
+        case .nothing:
+            break
+        case .write(let edit):
+            do throws(TextInsertionError) {
+                via = try await acceptor.write(edit)?.rawValue ?? via
+            } catch {
+                // The case names which route refused and why; the user-facing message belongs to dictation, whose route has a clipboard.
+                Self.log.error("\(SuggestionLog.landedNowhere(error, typed: typed), privacy: .public)")
+                return true
+            }
         }
-        guard let reading else { return }
+        Self.log.debug(
+            "\(SuggestionLog.accept(text: text, typed: typed, via: via), privacy: .public)"
+        )
+        guard let reading else { return true }
         do {
             _ = try await capture.accepted(text, in: reading, at: Date())
         } catch {
             // The session holds the acceptance and retries it before the next event.
             Self.log.error("An accepted suggestion's corpus write failed and is held for a retry")
         }
+        return true
     }
 
     // MARK: Consent

@@ -49,6 +49,10 @@ struct SuggestionLogTests {
         ),
         ("accept", SuggestionLog.accept(text: offered, typed: typed, via: "accessibility")),
         ("landedNowhere", SuggestionLog.landedNowhere(.noFocusedTextField, typed: typed)),
+        (
+            "refusedUnwritten",
+            SuggestionLog.refusedUnwritten("the focused field cannot be read", typed: typed)
+        ),
     ]
 
     @Test("no line carries the typed text or the offered text")
