@@ -238,3 +238,7 @@ clip.
 ⌫ and ⌘⌫ are left to the search field, which is why Delete takes ⇧ as well; ⌘C is the
 field's copy, so the row's is ⌘⇧C. A chord that acted on a row only while the field was
 empty would be a trap, so none of them does.
+
+The panel takes its row chords before the main menu sees them (`QuickPanel.performKeyEquivalent`).
+Window ▸ Minimise is also ⌘M, and the menu swallows a key equivalent even when its item is
+disabled, so without that ⌘M would never reach Move.
