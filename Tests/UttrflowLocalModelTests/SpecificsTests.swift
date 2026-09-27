@@ -10,6 +10,22 @@ private func chat(screen: String? = nil, own: [String] = [], choices: [String] =
         choices: choices)
 }
 
+/// A source file with code above the line, which reads as the code register.
+private func code() -> GenerationSituation {
+    GenerationSituation(
+        application: "Editor", field: "Source", document: "Math.swift",
+        preceding: "func add(a: Int, b: Int) -> Int {\n    return a + b\n}\n",
+        recentLines: ["}", "    return a + b", "func add(a: Int, b: Int) -> Int {"], isMultiline: true)
+}
+
+/// A query editor with a query above the line, which reads as the code register.
+private func sql() -> GenerationSituation {
+    GenerationSituation(
+        application: "Editor", field: "SQL editor", document: "orders",
+        preceding: "SELECT * FROM users LIMIT 10;",
+        recentLines: ["SELECT * FROM users LIMIT 10;", "SELECT count(*) FROM orders;"], isMultiline: true)
+}
+
 @Suite("A model's line never adds a number, an amount or an address nobody gave it")
 struct SpecificsTests {
     @Test(
@@ -61,5 +77,86 @@ struct SpecificsTests {
         for token in ["python3", "utf8", "hello", "docs/guide.md", "e.g", "@", "readme.md"] {
             #expect(!Specifics.isSpecific(token), "\(token)")
         }
+    }
+
+    @Test(
+        "In code a literal that carries no value of its own is kept.",
+        arguments: [
+            ("0", "var co", "var count = 0"),
+            ("0 with a semicolon", "let co", "let count = 0;"),
+            ("1", "i ", "i += 1"),
+            ("-1", "ret", "return -1"),
+            ("0.0", "let off", "let offset = 0.0"),
+            ("1.0", "view.al", "view.alpha = 1.0"),
+            ("0 as an index", "let fi", "let first = items[0]"),
+            ("0 as a bound", "for i", "for i in range(0, n):"),
+            ("1 as a limit", "SELECT * FROM users ", "SELECT * FROM users LIMIT 1;"),
+            ("1 taken from a count", "let last = ", "let last = count - 1"),
+            ("true", "isRe", "isReady = true"),
+            ("false", "isRe", "isReady = false"),
+            ("nil", "var cache: Cache? ", "var cache: Cache? = nil"),
+            ("null", "let us", "let user = null;"),
+            ("None", "res", "result = None"),
+            ("an empty string", "let na", "let name = \"\""),
+            ("an empty quoted string", "na", "name = ''"),
+            ("an empty list", "var it", "var items = []"),
+            ("an empty object", "const op", "const options = {};"),
+        ])
+    func conventionalLiteralsAreKeptInCode(entry: String, typed: String, line: String) {
+        #expect(Specifics.areGrounded(line, typed: typed, in: code(), writesCode: true), "\(entry)")
+        #expect(CompletionText.finished([line], typed: typed, in: code()) == [line], "\(entry)")
+    }
+
+    @Test(
+        "In code a literal that names a value nobody gave is refused.",
+        arguments: [
+            ("2", "let re", "let retries = 2"),
+            ("10", "for i ", "for i in 0..<10 {"),
+            ("0.5", "let ra", "let ratio = 0.5"),
+            ("01", "let mo", "let month = 01"),
+            ("1e9", "let li", "let limit = 1e9"),
+            ("0x1f", "let ma", "let mask = 0x1f"),
+            ("1_000", "let ca", "let cap = 1_000"),
+            ("1 with a unit", "let de", "let delay = 1s"),
+            ("0 and 2", "let pair = ", "let pair = (0, 2)"),
+            ("an id of 1", "WHERE ", "WHERE id = 1;"),
+            ("a key of 1", "WHERE ", "WHERE user_id = 1"),
+            ("a camel-case key of 0", "fetch(", "fetch(userId: 0)"),
+            ("a quoted key of 1", "{\"", "{\"id\": 1}"),
+            ("an amount", "let fee = ", "let fee = $0"),
+            ("a share", "let cut = ", "let cut = 0%"),
+        ])
+    func inventedLiteralsAreRefusedInCode(entry: String, typed: String, line: String) {
+        #expect(!Specifics.areGrounded(line, typed: typed, in: code(), writesCode: true), "\(entry)")
+        #expect(CompletionText.finished([line], typed: typed, in: code()).isEmpty, "\(entry)")
+    }
+
+    @Test("A query keeps a conventional limit and refuses a made-up id.")
+    func queriesKeepLimitsAndRefuseIds() {
+        #expect(
+            CompletionText.finished(["SELECT * FROM orders LIMIT 1;"], typed: "SELECT * FROM ord", in: sql())
+                == [
+                    "SELECT * FROM orders LIMIT 1;"
+                ])
+        #expect(CompletionText.finished(["WHERE id = 1042;"], typed: "WHERE ", in: sql()).isEmpty)
+        #expect(CompletionText.finished(["WHERE id = 1;"], typed: "WHERE ", in: sql()).isEmpty)
+    }
+
+    @Test(
+        "In prose even a conventional literal is a made-up number.",
+        arguments: [
+            ("Can we meet at ", "Can we meet at 1"), ("I have ", "I have 0 left"), ("Rated ", "Rated 1.0"),
+        ])
+    func conventionalLiteralsAreRefusedInProse(typed: String, line: String) {
+        #expect(!Specifics.areGrounded(line, typed: typed, in: chat()))
+        #expect(CompletionText.finished([line], typed: typed, in: chat()).isEmpty)
+    }
+
+    @Test("A name's words split at underscores and at each step into a capital.")
+    func namesSplitIntoWords() {
+        #expect(Specifics.words(of: "userId") == ["user", "id"])
+        #expect(Specifics.words(of: "user_id") == ["user", "id"])
+        #expect(Specifics.words(of: "ID") == ["id"])
+        #expect(Specifics.words(of: "paid") == ["paid"])
     }
 }

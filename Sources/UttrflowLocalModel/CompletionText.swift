@@ -142,8 +142,11 @@ enum CompletionText {
                 guard !copiesContext(kept, typed: typed, context: context, ownLines: situation.recentLines)
                 else { return nil }
             }
-            // A number, an amount or an address the model added is kept only where someone already wrote it.
-            guard Specifics.areGrounded(kept, typed: typed, in: situation) else { return nil }
+            // A number, an amount or an address the model added is kept only where someone already wrote it; code keeps its conventional literals.
+            let writesCode = !register.endsAtSentence && !register.answersFromHistoryAlone
+            guard Specifics.areGrounded(kept, typed: typed, in: situation, writesCode: writesCode) else {
+                return nil
+            }
             guard kept.count - typed.count <= register.longestContinuation, seen.insert(kept).inserted
             else { return nil }
             return kept
