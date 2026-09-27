@@ -306,6 +306,25 @@ struct StoreMatchingTests {
         #expect(found.first?.text == "git status")
     }
 
+    @Test("A line used lately reaches ranking however many older, more frequent lines share its opening.")
+    func aRecentLineOutranksStaleFrequentOnes() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        let monthsAgo = moment - 200 * 86_400
+        for index in 0..<(PredictStore.candidateLimit + 4) {
+            for _ in 0..<5 {
+                try await store.record(
+                    String(format: "git stash-%03d end", index), in: terminal, at: monthsAgo)
+            }
+        }
+        for _ in 0..<2 { try await store.record("git switch feature-x", in: terminal, at: moment) }
+        let found = try await store.candidates(for: terminal, matching: "git s")
+        #expect(found.count == PredictStore.candidateLimit)
+        #expect(found.first?.text == "git switch feature-x")
+        let scores = found.map { Frecency.score($0, now: moment) }
+        #expect(scores.first == scores.max())
+    }
+
     @Test("Two characters are too few to correct, or everything would match.")
     func shortQueriesAreNotCorrected() async throws {
         let corpus = Corpus()
@@ -697,6 +716,17 @@ struct QueryPlanTests {
         try seed(corpus.path, surfaces: 4, each: 500)
         let database = try Database(path: corpus.path)
         let plan = try database.plan(of: PredictStore.prefixQuery).joined(separator: " | ")
+        #expect(plan.contains("USING INDEX entry_prefix"), "the plan was: \(plan)")
+        #expect(plan.contains("text_lower>?"), "the plan was: \(plan)")
+        #expect(!plan.contains("SCAN entry"), "the plan was: \(plan)")
+    }
+
+    @Test("The newest-first prefix query narrows on the text as well as the field.")
+    func recentPrefixUsesBothIndexColumns() throws {
+        let corpus = Corpus()
+        try seed(corpus.path, surfaces: 4, each: 500)
+        let database = try Database(path: corpus.path)
+        let plan = try database.plan(of: PredictStore.recentPrefixQuery).joined(separator: " | ")
         #expect(plan.contains("USING INDEX entry_prefix"), "the plan was: \(plan)")
         #expect(plan.contains("text_lower>?"), "the plan was: \(plan)")
         #expect(!plan.contains("SCAN entry"), "the plan was: \(plan)")

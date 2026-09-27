@@ -1,9 +1,9 @@
-import struct Foundation.Date
-import func Foundation.log
-import func Foundation.pow
+public import struct Foundation.Date
+public import func Foundation.log
+public import func Foundation.pow
 
 /// Scores a candidate by how much evidence stands behind it, never by whether it is correct.
-enum Frecency {
+public enum Frecency {
     /// How long a single use takes to lose half its weight.
     static let halfLifeInDays = 21.0
 
@@ -20,7 +20,7 @@ enum Frecency {
     static let environmentWeight = 1.0
 
     /// The score of one candidate at a moment in time.
-    static func score(_ candidate: Candidate, now: Date) -> Double {
+    public static func score(_ candidate: Candidate, now: Date) -> Double {
         guard let evidence = candidate.evidence else { return environmentWeight / distancePenalty(candidate) }
         let uses = effectiveCount(evidence)
         guard uses > 0 else { return 0 }
