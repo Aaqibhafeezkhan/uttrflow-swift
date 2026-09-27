@@ -194,9 +194,7 @@ struct SurroundingsTests {
 
     @Test("Once the characters are gathered, no farther ring is walked at all.")
     func aFullReadStopsWalkingOutward() {
-        // Distinct texts so dedup does not collapse the wall down to one occurrence. See #1947.
-        // Four 400-char walls exhaust the 1200-character budget after the third is read, so the
-        // fourth is not even visited — exactly what the test was already asserting for identical walls.
+        // Four distinct 400-character walls, so the budget runs out on the third and the fourth is unread.
         let lines = (21..<25).map { String(repeating: "w\($0)", count: 133) + "w\($0)" }
         let near = Node(
             id: 20, children: lines.enumerated().map { label(21 + $0.offset, $0.element) })
@@ -405,8 +403,7 @@ struct SurroundingsTests {
         #expect(got.filter { $0 == "Chats" }.count == 1, "the chat list reads once, not twice: \(got)")
     }
 
-    /// #1947: a substring of one line that also reads as a whole line elsewhere is kept whole once.
-    /// Mirrored nav rows are short on purpose so the dedup pass is what stands between the prompt and a repeat.
+    /// A substring of one line that also reads as a whole line elsewhere is kept whole once.
     @Test("A short line that repeats in a long line drops only the repeat, not the long one.")
     func aSubstringDoesNotCollapseIntoItsHost() {
         let chats = label(80, "Chats")
