@@ -774,7 +774,8 @@ public enum SettingsPresenter {
                 "Forget \(counted(learned, "completion", "completions")) from "
                 + "\(application.name). Everywhere else is untouched.",
             control: .removal(SettingsRemoval(reset: reset, title: "Forget", confirmation: nil)),
-            unavailability: SettingsEditor.unavailability(of: reset, given: personalisation))
+            unavailability: SettingsEditor.unavailability(of: reset, given: personalisation),
+            style: .inset)
     }
 
     // MARK: - Privacy
