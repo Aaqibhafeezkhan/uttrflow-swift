@@ -257,9 +257,18 @@ final class SuggestionCoordinator {
         }
     }
 
-    /// Whether a key-down is ⌘V under any layout, which pastes text rather than typing it.
+    /// Whether a key-down is ⌘V under the selected layout, matched by the key its ⌘ table puts V on.
     nonisolated static func isPaste(_ event: NSEvent) -> Bool {
-        event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers?.lowercased() == "v"
+        isPaste(
+            keyCode: event.keyCode, modifiers: event.modifierFlags,
+            pasteKeyCode: CGEventKeystrokeSender.pasteKeyCode)
+    }
+
+    /// Whether a key with `modifiers` held is the layout's ⌘V, whatever letter the key types without ⌘.
+    nonisolated static func isPaste(
+        keyCode: UInt16, modifiers: NSEvent.ModifierFlags, pasteKeyCode: UInt16
+    ) -> Bool {
+        modifiers.contains(.command) && keyCode == pasteKeyCode
     }
 
     /// Withdraws the ghost and holds every turn while a dictation is under way, so its models have the GPU.

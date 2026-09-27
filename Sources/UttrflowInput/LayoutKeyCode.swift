@@ -24,3 +24,8 @@ enum LayoutKeyCode {
         }
     }
 }
+
+extension CGEventKeystrokeSender {
+    /// The key code the selected layout gives ⌘V, which is how a person's own paste is recognised.
+    public static var pasteKeyCode: UInt16 { PasteKeyLayout.vKeyCode() }
+}
