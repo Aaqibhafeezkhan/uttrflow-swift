@@ -160,6 +160,9 @@ the AI suggestions screen. The answer is kept in
 `~/Library/Application Support/Uttrflow/predict-consent.v1.json`, written the first time the
 loop meets an application the screen already allows, and rewritten when a switch there moves.
 
+Importing a shell's history asks the same question of the terminal it seeds: an application not
+yet allowed, or declined, gets nothing, and the one-time import stays unspent until it is allowed.
+
 Both sides file an application under `ApplicationKey`, which is its bundle identifier lowercased,
 because macOS is not consistent about the case and the two sides do not see it from the same
 place: the switch has the identifier the Applications list holds, and capture has whatever the
