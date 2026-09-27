@@ -37,23 +37,45 @@ final class SlowFields: Sendable {
         var length: UInt64
     }
 
-    private let rests = Mutex<[Key: Rest]>([:])
+    /// Every field's rest, and each application quieted whole until its resting field may lose focus.
+    private struct State {
+        var rests: [Key: Rest] = [:]
+        var quiet: [Int32: UInt64] = [:]
+    }
 
-    /// Whether this field is still resting at `now`, when no message may be sent to it.
+    private let state = Mutex(State())
+
+    /// Whether this field is still resting at `now`, when no message may be sent to it; one that is quiets its application again.
     func isResting(_ key: Key, at now: UInt64) -> Bool {
-        rests.withLock { ($0[key]?.until ?? 0) > now }
+        state.withLock { state in
+            guard let until = state.rests[key]?.until, until > now else { return false }
+            state.quiet[key.process] = until
+            return true
+        }
+    }
+
+    /// Whether an application is quiet at `now` because its focused field rests, so not even its focus is asked for.
+    func isQuiet(_ process: Int32, at now: UInt64) -> Bool {
+        state.withLock { ($0.quiet[process] ?? 0) > now }
+    }
+
+    /// Ends every application's quiet, since a click, a switch or a focus key may have left the resting field.
+    func focusMayHaveMoved() {
+        state.withLock { $0.quiet = [:] }
     }
 
     /// Records a read of this field that ran past its budget: the first is forgiven as a cold start, then the rest doubles up to the longest.
     func ranOver(_ key: Key, at now: UInt64) {
-        rests.withLock { rests in
-            let length =
-                rests[key].map(Self.nextRest) ?? 0
-            rests[key] = Rest(until: now + length, length: length)
-            guard rests.count > Self.capacity,
-                let oldest = rests.filter({ $0.key != key }).min(by: { $0.value.until < $1.value.until })?.key
+        state.withLock { state in
+            let length = state.rests[key].map(Self.nextRest) ?? 0
+            state.rests[key] = Rest(until: now + length, length: length)
+            if length > 0 { state.quiet[key.process] = now + length }
+            guard state.rests.count > Self.capacity,
+                let oldest = state.rests.filter({ $0.key != key }).min(by: { $0.value.until < $1.value.until }
+                )?
+                .key
             else { return }
-            rests[oldest] = nil
+            state.rests[oldest] = nil
         }
     }
 
@@ -64,6 +86,9 @@ final class SlowFields: Sendable {
 
     /// Records a read of this field that kept to its budget, which ends any backing off.
     func answered(_ key: Key) {
-        rests.withLock { $0[key] = nil }
+        state.withLock { state in
+            state.rests[key] = nil
+            state.quiet[key.process] = nil
+        }
     }
 }
