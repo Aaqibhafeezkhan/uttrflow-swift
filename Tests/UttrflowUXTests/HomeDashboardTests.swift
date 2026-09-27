@@ -60,6 +60,96 @@ struct HomeMoodTests {
     }
 }
 
+@Suite("When home next changes")
+struct HomeMoodBoundaryTests {
+    /// A Gregorian calendar in `zone`, so the answers do not depend on the machine running the test.
+    static func calendar(_ zone: String) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: zone) ?? .gmt
+        return calendar
+    }
+
+    /// The instant of a wall-clock time in `calendar`'s zone, taking the earlier of a repeated hour.
+    static func date(
+        _ calendar: Calendar, _ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0,
+        _ second: Int = 0
+    ) -> Date {
+        let parts = DateComponents(
+            year: year, month: month, day: day, hour: hour, minute: minute, second: second)
+        return calendar.date(from: parts) ?? .distantPast
+    }
+
+    @Test("the boundaries are midnight and every hour the mood turns")
+    func boundaryHours() {
+        #expect(HomeMood.boundaryHours == [0, 5, 8, 12, 17, 20, 23])
+    }
+
+    @Test(
+        "a second before a boundary waits one second, and on it waits for the next",
+        arguments: [(0, 5), (5, 8), (8, 12), (12, 17), (17, 20), (20, 23), (23, 24)])
+    func aroundEachBoundary(boundary: Int, following: Int) {
+        let calendar = Self.calendar("Asia/Kolkata")
+        let at = Self.date(calendar, 2026, 9, 27, boundary)
+        let next = Self.date(calendar, 2026, 9, 27, following)
+        #expect(HomeMood.nextBoundary(after: at.addingTimeInterval(-1), calendar: calendar) == at)
+        #expect(HomeMood.nextBoundary(after: at, calendar: calendar) == next)
+        #expect(HomeMood.nextBoundary(after: at.addingTimeInterval(1), calendar: calendar) == next)
+    }
+
+    @Test("every boundary it names is an hour the mood or the date changes")
+    func changesAtEachBoundary() {
+        let calendar = Self.calendar("Asia/Kolkata")
+        var date = Self.date(calendar, 2026, 9, 27, 0, 30)
+        for _ in 0..<14 {
+            let next = HomeMood.nextBoundary(after: date, calendar: calendar)
+            let before = next.addingTimeInterval(-1)
+            let moodTurns =
+                HomeMood.at(hour: calendar.component(.hour, from: before))
+                != HomeMood.at(hour: calendar.component(.hour, from: next))
+            #expect(moodTurns || !calendar.isDate(before, inSameDayAs: next))
+            date = next
+        }
+    }
+
+    @Test("the spring-forward night waits for five in the morning, an hour sooner")
+    func springForward() {
+        let calendar = Self.calendar("America/New_York")
+        let start = Self.date(calendar, 2026, 3, 8, 0, 30)
+        let next = HomeMood.nextBoundary(after: start, calendar: calendar)
+        #expect(next == Self.date(calendar, 2026, 3, 8, 5))
+        #expect(next.timeIntervalSince(start) == 3.5 * 3600)
+    }
+
+    @Test("the fall-back night waits for five in the morning through the repeated hour")
+    func fallBack() {
+        let calendar = Self.calendar("America/New_York")
+        let start = Self.date(calendar, 2026, 11, 1, 0, 30)
+        let next = HomeMood.nextBoundary(after: start, calendar: calendar)
+        #expect(next == Self.date(calendar, 2026, 11, 1, 5))
+        #expect(next.timeIntervalSince(start) == 5.5 * 3600)
+    }
+
+    @Test("a day with no midnight changes the date at the first hour it has")
+    func missingMidnight() {
+        let calendar = Self.calendar("America/Santiago")
+        let start = Self.date(calendar, 2026, 9, 5, 23, 30)
+        let next = HomeMood.nextBoundary(after: start, calendar: calendar)
+        #expect(calendar.component(.day, from: next) == 6)
+        #expect(calendar.component(.hour, from: next) == 1)
+        #expect(next.timeIntervalSince(start) == 30 * 60)
+    }
+
+    @Test("a repeated eleven o'clock is a boundary again, and never one in the past")
+    func repeatedBoundaryHour() {
+        let calendar = Self.calendar("America/Santiago")
+        let start = Self.date(calendar, 2026, 4, 4, 23, 30)
+        let next = HomeMood.nextBoundary(after: start, calendar: calendar)
+        #expect(next > start)
+        #expect(next.timeIntervalSince(start) == 30 * 60)
+        #expect(calendar.component(.hour, from: next) == 23)
+    }
+}
+
 @Suite("The hero card")
 struct HomeHeroTests {
     @Test("names the three features in order and offers to start")

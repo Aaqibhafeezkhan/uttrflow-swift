@@ -1822,6 +1822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             redrawMainWindow()
         }
         window.onBecameVisible = { [weak self] in self?.catchUpMainWindow() }
+        window.onVisibilityChange = { [weak self] in self?.homeClock.setVisible($0) }
         window.onSettingsLostFocus = { [weak self] in self?.settingsPage.surfaceDidLoseFocus() }
         window.onDraft = { [weak self] in
             guard let self else { return }
@@ -1913,6 +1914,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func mainContent(measurements: [StageMeasurement]) -> MainContent {
         let now = Date()
+        homeClock.drew(at: now)
         // Handed over whole: `HistoryEntry` is `DictationRecord`, so nothing is rebuilt.
         let entries = kept
         let shortcut = SettingsShortcut.compact(settings.hotkey)
@@ -2032,6 +2034,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var editorGeneration = 0
     /// The same for redraws, which suspend six times and so can land out of order.
     private var refreshGeneration = 0
+    /// Redraws home as the clock crosses a mood boundary or midnight, while the window is in sight.
+    private lazy var homeClock = HomeClock { [weak self] in self?.redrawMainWindow() }
 
     /// What the snippet editor currently says, or nothing when it is shut.
     private var snippetDraft: SnippetDraft? {
