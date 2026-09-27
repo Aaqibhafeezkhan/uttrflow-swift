@@ -21,10 +21,15 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
 3. A connection string with a password: `scheme://user:pass@host`, or `scheme://:pass@host` with
    no user, the password-only form some caches use. The colon in the userinfo is what keeps
    `https://example.com:8443/path` and `https://token@github.com/repo` out.
-4. Vendor prefixes with a minimum length each (OpenAI, Anthropic, Stripe, GitHub, GitLab,
+4. A URL that works for whoever holds it: a Slack, Discord or Teams incoming webhook, or a
+   URL whose query or fragment carries `sig`, `signature`, `X-Amz-Signature`,
+   `X-Goog-Signature`, `access_token`, `id_token`, `refresh_token` or `token` with a value of
+   at least eight characters, which is what a signed (SAS, pre-signed) URL or a magic link is.
+   `?token=` with nothing, or with a short placeholder, stays a link.
+5. Vendor prefixes with a minimum length each (OpenAI, Anthropic, Stripe, GitHub, GitLab,
    Slack, AWS, Google, npm, DigitalOcean, Shopify, SendGrid), so prose about `sk-` keys is not
    itself one.
-5. A named secret per line (`API_KEY=…`, `password: …`, `passphrase: …`, `client_secret = …`) whose value is
+6. A named secret per line (`API_KEY=…`, `password: …`, `passphrase: …`, `client_secret = …`) whose value is
    quoted, or has a digit, or is at least 12 characters, so `var password: String` does not
    count. The name may carry a prefix: a keyword starts at a word boundary, after `_`, or at a
    lowercase-to-uppercase step, so `DB_PASSWORD`, `GITHUB_TOKEN`, `STRIPE_API_KEY` and
@@ -42,8 +47,8 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
    `_` and `$` with no digit and no part of 32 or more hex letters, is code that loads a
    credential rather than the credential. A quoted value or one with a digit still counts,
    and so does a single long bare word, which is what a letters-only password looks like.
-6. A payment card number (below).
-7. The statistical rule below.
+7. A payment card number (below).
+8. The statistical rule below.
 
 ## What the named-secret rule leaves alone
 

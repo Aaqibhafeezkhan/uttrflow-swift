@@ -154,6 +154,36 @@ struct SecretDetectionTests {
         #expect(SecretShapes.hasNamedSecret(text) == false)
     }
 
+    @Test(
+        "masks a webhook or signed address, which works for whoever holds it",
+        arguments: [
+            "https://hooks.slack.com/services/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",
+            "https://discord.com/api/webhooks/123456789012345678/Zx9kLmQ2rT7pQ3vB8nW4yH6sAbCdEf",
+            "https://example.webhook.office.com/webhookb2/0000-1111@2222-3333/IncomingWebhook/abcd/4444",
+            "https://example.blob.core.windows.net/c/f?sv=2022-11-02&se=2026-01-01&sp=r&sig=Zx9kLmQ2rT7p%3D",
+            "https://bucket.s3.amazonaws.com/f?X-Amz-Expires=300&X-Amz-Signature=0a1b2c3d4e5f6a7b",
+            "https://example.com/reset?token=Zx9kLmQ2rT7pQ3vB",
+            "https://example.com/callback#access_token=Zx9kLmQ2rT7pQ3vB&type=bearer",
+            "Post to \"https://hooks.slack.com/services/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\" today",
+        ])
+    func bearerAddresses(_ text: String) {
+        #expect(ClipKindDetector.kind(of: text) == .secret)
+    }
+
+    @Test(
+        "leaves an ordinary address with a query alone",
+        arguments: [
+            "https://hooks.slack.com/",
+            "https://discord.com/api/webhooks",
+            "https://example.com/search?q=token&page=2",
+            "https://example.com/login?token=",
+            "https://example.com/login?token={token}",
+            "https://example.com/watch?v=dQw4w9WgXcQ&t=42",
+        ])
+    func ordinaryAddresses(_ text: String) {
+        #expect(ClipKindDetector.kind(of: text) == .link)
+    }
+
     @Test("masks quoted named secrets whose value contains an escaped quote")
     func escapedQuotesInNamedSecrets() {
         let dotenv = #"password="abc123\"def456""#

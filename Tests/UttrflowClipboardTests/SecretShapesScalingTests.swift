@@ -19,6 +19,7 @@ extension HeavyClipScans {
             "headers and stops": "eyJa.",
             "schemes": "ab+c",
             "scheme separators": "a://b:",
+            "signed addresses": "a://b?sig=&",
             "quoted values and comments": "pwd=\"a\" x,",
             "quoted values and key lists": "pwd='a', k x",
             "keyword assignments": "pwd=",
@@ -44,6 +45,7 @@ extension HeavyClipScans {
             SecretShapes.$tally.withValue(tally) {
                 _ = SecretShapes.hasJSONWebToken(text)
                 _ = SecretShapes.hasCredentialledURL(text)
+                _ = SecretShapes.hasBearerURL(text)
                 _ = SecretShapes.hasNamedSecret(text)
             }
             return tally.count
