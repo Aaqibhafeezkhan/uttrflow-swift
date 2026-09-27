@@ -27,6 +27,9 @@ CACHE_CAP = 256 * 1_048_576
 
 # Wakeups below the floor that are allowed, keyed by file and interval expression, each with its reason printed on every run.
 WAKEUPS_ALLOWED = {
+    ("Sources/Uttrflow/Settings/SettingsPageView.swift", ".seconds(wait)"): (
+        "the suggestion pause countdown, at most once a minute and only while a pause runs with Settings open"
+    ),
     ("Sources/UttrflowPipeline/DictationController.swift", "start.advanced(by:elapsed)"): (
         "the recording cap's countdown, every ten seconds in a recording's last minute and never at rest"
     ),
@@ -453,8 +456,8 @@ GATES = ("MotionBudget", "WindowAttention")
 
 # Panels that never become key, so WindowAttention never lets them move; each has its own reason it is not hidden while it runs.
 WINDOW_EXEMPT = {
-    "Sources/Uttrflow/Dock/": "the dock is a floating panel above every window, ordered out when it has nothing to show",
-    "Sources/Uttrflow/MenuBar/": "the popover's controller hosts new content only while the panel is on screen",
+    "Sources/Uttrflow/Dock/": "the dock is a floating panel above every window, and its controller empties it whenever it is ordered out",
+    "Sources/Uttrflow/MenuBar/": "the popover's controller hosts content only while the panel is on screen and empties it on close",
 }
 
 

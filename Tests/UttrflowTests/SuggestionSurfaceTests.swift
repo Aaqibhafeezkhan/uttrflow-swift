@@ -66,19 +66,86 @@ struct SuggestionSurfaceTests {
         #expect(!panel.window.isVisible)
     }
 
-    @Test("A long suggestion at a caret near the edge stays inside the field and the screen")
-    func aLongSuggestionStaysOnScreen() throws {
+    @Test(
+        "A suggestion too long for the room to the field's edge is not drawn at all, so Tab cannot insert unseen words"
+    )
+    func aLongSuggestionIsNotDrawn() throws {
         let screen = try #require(NSScreen.screens.first).visibleFrame
         let caret = CGRect(x: screen.maxX - 300, y: screen.midY, width: 0, height: 17)
         let field = CGRect(x: screen.maxX - 500, y: screen.midY - 5, width: 400, height: 28)
         let panel = SuggestionPanelController.shared
-        panel.show(.certain(longLine), placement: .inlineGhost, caret: caret, field: field)
         defer { panel.hide() }
+        let drawn = panel.show(.certain(longLine), placement: .inlineGhost, caret: caret, field: field)
+        #expect(!drawn)
+        #expect(!panel.isShowing)
+        #expect(!panel.window.isVisible)
+        #expect(panel.drawn.inline == nil)
+    }
+
+    @Test("A suggestion that fits the room is drawn whole, inside the field and the screen")
+    func aFittingSuggestionIsDrawnWhole() throws {
+        let screen = try #require(NSScreen.screens.first).visibleFrame
+        let caret = CGRect(x: screen.maxX - 300, y: screen.midY, width: 0, height: 17)
+        let field = CGRect(x: screen.maxX - 500, y: screen.midY - 5, width: 400, height: 28)
+        let panel = SuggestionPanelController.shared
+        defer { panel.hide() }
+        let drawn = panel.show(
+            .certain("meet at noon"), typed: "meet", placement: .inlineGhost, caret: caret, field: field)
+        #expect(drawn)
         #expect(panel.window.isVisible)
         #expect(panel.window.frame.minX == caret.maxX)
         #expect(panel.window.frame.maxX <= field.maxX)
         #expect(screen.contains(panel.window.frame))
+        #expect(panel.drawn.inline?.ghost == " at noon")
         #expect(panel.drawn.maximumWidth == field.maxX - caret.maxX)
+    }
+
+    @Test("Drawing the same offer at the same caret again does no layout, no placement and no fronting")
+    func anUnchangedRedrawDoesNothing() throws {
+        let screen = try #require(NSScreen.screens.first).visibleFrame
+        let caret = CGRect(x: screen.minX + 200, y: screen.midY, width: 0, height: 17)
+        let panel = SuggestionPanelController.shared
+        defer { panel.hide() }
+        panel.show(.certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret)
+        let renders = panel.renders
+        let placements = panel.placements
+        for _ in 0..<10 {
+            #expect(panel.show(.certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret))
+        }
+        // A read that reports the same caret half a point off is the same place.
+        panel.show(
+            .certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret.offsetBy(dx: 0.5, dy: 0))
+        #expect(panel.renders == renders)
+        #expect(panel.placements == placements)
+        panel.show(
+            .certain("meeting"), typed: "mee", placement: .inlineGhost, caret: caret.offsetBy(dx: 6, dy: 0))
+        #expect(panel.renders == renders + 1)
+        #expect(panel.placements == placements + 1)
+    }
+
+    @Test(
+        "Typing the ghost's next letters keeps it on screen, moves it once per key and leaves the rest where it was"
+    )
+    func typingThroughTheGhostNeverHidesIt() throws {
+        let screen = try #require(NSScreen.screens.first).visibleFrame
+        let caret = CGRect(x: screen.minX + 200, y: screen.midY, width: 0, height: 17)
+        let panel = SuggestionPanelController.shared
+        defer { panel.hide() }
+        let line = "see you at the station"
+        panel.show(.certain(line), typed: "see", placement: .inlineGhost, caret: caret, fieldPointSize: 13)
+        let withdrawals = panel.withdrawals
+        let end = panel.window.frame.maxX
+        var typed = "see"
+        for character in " you " {
+            typed.append(character)
+            let placements = panel.placements
+            #expect(panel.advance(to: typed, showing: .certain(line)))
+            #expect(panel.placements == placements + 1)
+            #expect(panel.window.isVisible)
+            #expect(panel.drawn.inline?.ghost == String(line.dropFirst(typed.count)))
+            #expect(abs(panel.window.frame.maxX - end) <= 2)
+        }
+        #expect(panel.withdrawals == withdrawals)
     }
 
     @Test("VoiceOver is told once as a suggestion appears, not on a redraw, and not when it cannot be drawn")

@@ -75,8 +75,40 @@ public enum FocusedFieldReader {
         guard let app = await frontmostApp() else { return nil }
         // A field that stops answering costs the turn half a second at most, and no later turn waits behind it.
         return await queue.run(within: .milliseconds(500)) { isWanted in
-            snapshot(app: app, while: isWanted)
+            let reading = snapshot(app: app, while: isWanted)
+            // A browser engine answers zero-size caret bounds until its full tree is on.
+            if FullTreeSwitch.isNeeded(in: app.bundleIdentifier, after: reading) {
+                fullTree.switchOn(
+                    processIdentifier: app.processIdentifier, bundleIdentifier: app.bundleIdentifier,
+                    host: fullTreeHost(app.processIdentifier))
+            }
+            return reading
         }
+    }
+
+    /// The full Accessibility trees the suggestion loop turned on, kept so stopping the loop turns them off.
+    private static let fullTree = FullTreeSwitch()
+
+    /// Turns off every browser engine's full tree the suggestion loop turned on.
+    public static func releaseFullTrees() {
+        fullTree.switchOffEverything(host: fullTreeHost)
+    }
+
+    /// One application's full-tree switches, each message capped so a stalled application cannot hold the caller.
+    private static func fullTreeHost(_ processIdentifier: Int32) -> FullTreeSwitch.Host {
+        let application = AXUIElementCreateApplication(processIdentifier)
+        _ = AXUIElementSetMessagingTimeout(application, elementTimeoutInSeconds)
+        return FullTreeSwitch.Host(
+            read: { attribute in
+                var value: AnyObject?
+                guard AXUIElementCopyAttributeValue(application, attribute as CFString, &value) == .success
+                else { return nil }
+                return (value as? NSNumber)?.boolValue
+            },
+            write: { attribute, isOn in
+                AXUIElementSetAttributeValue(
+                    application, attribute as CFString, isOn ? kCFBooleanTrue : kCFBooleanFalse) == .success
+            })
     }
 
     /// Its own thread for the wider walk, so an application slow to describe its window never holds up a field read.
@@ -108,6 +140,9 @@ public enum FocusedFieldReader {
         )
     }
 
+    /// The fields whose reads ran past their budget lately, which are left alone until their rest is over.
+    static let slowFields = SlowFields()
+
     /// The same reading, synchronously, for the queue above and for the capability probe; the identity is read on main.
     static func snapshot(
         app: FrontmostApp, while isWanted: @Sendable () -> Bool = { true }
@@ -115,55 +150,86 @@ public enum FocusedFieldReader {
         let started = DispatchTime.now().uptimeNanoseconds
         guard AXIsProcessTrusted(), let field = SurfaceProbe.focusedField(of: app.processIdentifier)
         else { return nil }
+        let slow = SlowFields.Key(process: app.processIdentifier, element: CFHash(field))
+        // A field whose read ran over lately is asked nothing, so a heavy document does not stall its application every turn.
+        guard !slowFields.isResting(slow, at: started) else { return nil }
         // Every question to the field gives up quickly, so a field that stops answering costs a moment, not the loop.
         _ = AXUIElementSetMessagingTimeout(field, elementTimeoutInSeconds)
-        guard let role = SurfaceProbe.string(field, kAXRoleAttribute) else { return nil }
+        let budget = FieldReadBudget(started: started)
+        var ranOver = false
+        // Checked before every question after the first: a superseded read stops, and one past its budget stops and rests the field.
+        let goOn: () -> Bool = {
+            guard isWanted() else { return false }
+            guard budget.isSpent(at: DispatchTime.now().uptimeNanoseconds) else { return true }
+            ranOver = true
+            return false
+        }
+        let answer = read(field, of: app, started: started, while: goOn)
+        if ranOver {
+            slowFields.ranOver(slow, at: DispatchTime.now().uptimeNanoseconds)
+        } else if answer != nil {
+            slowFields.answered(slow)
+        }
+        return answer
+    }
 
-        let subrole = SurfaceProbe.string(field, kAXSubroleAttribute)
-        let identifier = SurfaceProbe.string(field, kAXIdentifierAttribute)
-        let placeholder = SurfaceProbe.string(field, kAXPlaceholderValueAttribute)
-        let description = SurfaceProbe.string(field, kAXDescriptionAttribute)
+    /// Everything the snapshot holds, each question asked once and none after `goOn` says stop.
+    private static func read(
+        _ field: AXUIElement, of app: FrontmostApp, started: UInt64, while goOn: () -> Bool
+    ) -> FocusedFieldSnapshot? {
+        let identity = identity(of: field)
+        guard let role = identity.role else { return nil }
         // Decided before the value is fetched, so a declared secure field's contents are never read at all.
         let declaredSecure = SecureField.isDeclaredSecure(
-            role: role, subrole: subrole, identifier: identifier, placeholder: placeholder,
-            description: description)
-        let range = SurfaceProbe.selectedRange(field)
+            role: role, subrole: identity.subrole, identifier: identity.identifier,
+            placeholder: identity.placeholder, description: identity.description)
+        guard goOn() else { return nil }
+        // A web field that refuses the character range still says where its selection is in text markers.
+        let range =
+            SurfaceProbe.selectedRange(field) ?? (declaredSecure || !goOn() ? nil : markerSelection(field))
+        guard goOn() else { return nil }
         let read = declaredSecure ? (value: nil, selection: nil) : boundedValue(of: field, at: range)
         let value = read.value
         let secure = declaredSecure || (value.map(SecureField.looksMasked) ?? false)
-        // Checked between messages: a turn that has given up should not pay for the rest of them.
-        guard isWanted() else { return nil }
+        guard goOn() else { return nil }
         // The attributed string carries the characters, so a secure field is never asked for its style.
         let style = secure ? nil : range.flatMap { typeStyle(field, at: $0) }
-        guard isWanted() else { return nil }
+        guard goOn() else { return nil }
         let flipped = cachedPrimaryScreenMaxY.withLock { $0 }
         let marked = CompositionProbe.markedText(of: field)
-        // Checked before every remaining question, so a superseded read stops where it is.
-        let tail: (document: String?, caret: CGRect?, window: CGRect?, frame: CGRect?, title: String?)
-        do {
-            tail = (
-                try unlessSuperseded(isWanted) { document(of: field) },
-                try unlessSuperseded(isWanted) { range.flatMap { caret(field, at: $0) } },
-                try unlessSuperseded(isWanted) { windowFrame(of: field) },
-                try unlessSuperseded(isWanted) { fieldFrame(of: field) },
-                try unlessSuperseded(isWanted) { windowTitle(of: field) }
-            )
-        } catch { return nil }
+        guard goOn() else { return nil }
+        let window = element(field, kAXWindowAttribute)
+        guard goOn() else { return nil }
+        let document = document(of: field, in: window)
+        guard goOn() else { return nil }
+        let fieldRect = frame(of: field)
+        guard goOn() else { return nil }
+        let caretRect = caret(field, at: range, frame: fieldRect, while: goOn)
+        guard goOn() else { return nil }
+        let windowRect = window.flatMap { frame(of: $0) }
+        guard goOn() else { return nil }
+        let title = window.flatMap { SurfaceProbe.string($0, kAXTitleAttribute) }
+        guard goOn() else { return nil }
+        // An editor that draws its own text keeps an empty input at the caret, so its line is read off the rendered text.
+        let hidden =
+            secure ? nil : hiddenInputLine(field, role: role, value: value, frame: fieldRect, while: goOn)
 
         return FocusedFieldSnapshot(
             bundleIdentifier: app.bundleIdentifier,
             applicationName: app.name,
             role: role,
-            subrole: subrole,
-            identifier: identifier,
-            placeholder: placeholder,
-            accessibilityDescription: description,
-            document: tail.document,
-            value: secure ? nil : value,
-            selection: read.selection,
-            caret: range.flatMap { caret(field, at: $0) }.map { flip($0, below: flipped) },
-            window: windowFrame(of: field).map { flip($0, below: flipped) },
-            field: fieldFrame(of: field).map { flip($0, below: flipped) },
+            subrole: identity.subrole,
+            identifier: identity.identifier,
+            placeholder: identity.placeholder,
+            accessibilityDescription: identity.description,
+            document: document,
+            value: secure ? nil : hidden.map { $0.before + $0.after } ?? value,
+            selection: hidden.map { NSRange(location: $0.before.utf16.count, length: 0) } ?? read.selection,
+            caret: (hidden?.caret ?? caretRect).map { flip($0, below: flipped) },
+            window: windowRect.map { flip($0, below: flipped) },
+            field: (hidden?.line ?? fieldRect).flatMap {
+                FocusedFieldSnapshot.isCaretShaped($0) ? nil : flip($0, below: flipped)
+            },
             pointSize: style?.size,
             fontFamily: style?.family,
             textColor: style?.color,
@@ -172,8 +238,39 @@ public enum FocusedFieldReader {
                 markedText: marked, inputSource: CompositionProbe.inputSourceKind()),
             markedText: marked,
             readMicroseconds: Int((DispatchTime.now().uptimeNanoseconds - started) / 1000),
-            windowTitle: tail.title
+            windowTitle: title
         )
+    }
+
+    /// The caret's line read off an editor's rendered text, for the empty caret-sized input such an editor keeps focused.
+    private static func hiddenInputLine(
+        _ field: AXUIElement, role: String, value: String?, frame: CGRect?, while goOn: () -> Bool
+    ) -> HiddenInputLine.Reading? {
+        guard FocusedFieldSnapshot.isTextEntry(role), let frame,
+            HiddenInputLine.isStub(value: value, frame: frame)
+        else { return nil }
+        return HiddenInputLine.read(around: AXNode(field), at: frame, in: AXElementTree(), while: goOn)
+    }
+
+    /// What names the field, asked in one message: its role and the four names it may publish for itself.
+    private static func identity(
+        of field: AXUIElement
+    ) -> (role: String?, subrole: String?, identifier: String?, placeholder: String?, description: String?) {
+        let attributes = [
+            kAXRoleAttribute, kAXSubroleAttribute, kAXIdentifierAttribute, kAXPlaceholderValueAttribute,
+            kAXDescriptionAttribute,
+        ]
+        var answers: CFArray?
+        let result = AXUIElementCopyMultipleAttributeValues(
+            field, attributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &answers)
+        // An element that will not answer the batch is asked one attribute at a time instead.
+        guard result == .success, let values = answers as? [AnyObject], values.count == attributes.count
+        else {
+            let named = attributes.map { SurfaceProbe.string(field, $0) }
+            return (named[0], named[1], named[2], named[3], named[4])
+        }
+        let named = values.map { $0 as? String }
+        return (named[0], named[1], named[2], named[3], named[4])
     }
 
     /// The field's value around the caret, with the selection moved into it, so a long scrollback is never copied whole.
@@ -203,21 +300,9 @@ public enum FocusedFieldReader {
     }
 
     /// The page or the directory the field belongs to, which the window publishes when the field does not.
-    private static func document(of field: AXUIElement) -> String? {
+    private static func document(of field: AXUIElement, in window: AXUIElement?) -> String? {
         if let own = SurfaceProbe.string(field, kAXDocumentAttribute) { return own }
-        guard let window = element(field, kAXWindowAttribute) else { return nil }
-        return SurfaceProbe.string(window, kAXDocumentAttribute)
-    }
-
-    /// The title of the window the field sits in, which is what names one conversation, note or thread apart from another.
-    private static func windowTitle(of field: AXUIElement) -> String? {
-        guard let window = element(field, kAXWindowAttribute) else { return nil }
-        return SurfaceProbe.string(window, kAXTitleAttribute)
-    }
-
-    /// The window's rectangle, which is what the strip stands on when no caret can be read.
-    private static func windowFrame(of field: AXUIElement) -> CGRect? {
-        element(field, kAXWindowAttribute).flatMap(frame(of:))
+        return window.flatMap { SurfaceProbe.string($0, kAXDocumentAttribute) }
     }
 
     /// An element's rectangle as Accessibility reports it, or nothing when it gives no position or no size.
@@ -228,40 +313,14 @@ public enum FocusedFieldReader {
         return CGRect(origin: origin, size: size)
     }
 
-    /// The field's frame for the snapshot, returned only when the host published one wider than a caret.
-    private static func fieldFrame(of field: AXUIElement) -> CGRect? {
-        guard let frame = frame(of: field), !FocusedFieldSnapshot.isCaretShaped(frame)
-        else { return nil }
-        return frame
-    }
-
-    /// The caret's screen rectangle, read off the glyph beside it because its own zero-length bounds lies.
-    private static func caret(_ field: AXUIElement, at range: CFRange) -> CGRect? {
-        // A real selection, unlike a caret, reports its own bounds honestly.
-        if range.length > 0, let rect = SurfaceProbe.bounds(field, at: range), rect.height > 0 { return rect }
-        let location = range.location
-        // The caret sits at the trailing edge of the glyph before it, which is what typing just moved past.
-        if location > 0,
-            let before = SurfaceProbe.bounds(field, at: CFRange(location: location - 1, length: 1)),
-            before.height > 0
-        {
-            return CGRect(x: before.maxX, y: before.minY, width: 0, height: before.height)
-        }
-        // At the very start there is no glyph before, so the caret takes the leading edge of the one after.
-        if let at = SurfaceProbe.bounds(field, at: CFRange(location: location, length: 1)), at.height > 0 {
-            return CGRect(x: at.minX, y: at.minY, width: 0, height: at.height)
-        }
-        // An empty line has no glyph beside the caret, so its own bounds is all there is.
-        if let rect = SurfaceProbe.bounds(field, at: range), rect.height > 0 { return rect }
-        // A web field answers glyph bounds with a zero-size rectangle, but its selection's text-marker range still has a place on screen.
-        if let rect = markerBounds(field), rect.height > 0 {
-            return CGRect(x: rect.minX, y: rect.minY, width: 0, height: rect.height)
-        }
-        // An editor that draws its own text keeps a one-pixel field at the caret for input methods, so that field's frame is the caret.
-        if let frame = AXNode(field).answers.frame, FocusedFieldSnapshot.isCaretShaped(frame) {
-            return CGRect(x: frame.minX, y: frame.minY, width: 0, height: frame.height)
-        }
-        return nil
+    /// The caret's screen rectangle, from the selection where the field answers it and from the text marker where it does not; `frame` is the field's own, already read.
+    private static func caret(
+        _ field: AXUIElement, at range: CFRange?, frame: CGRect?, while goOn: () -> Bool
+    ) -> CGRect? {
+        CaretLocator.caret(
+            at: range.map { (location: $0.location, length: $0.length) }, frame: frame,
+            bounds: { goOn() ? SurfaceProbe.bounds(field, at: CFRange(location: $0, length: $1)) : nil },
+            markerBounds: { goOn() ? markerBounds(field) : nil })
     }
 
     /// What a field says about its own type, either half of which it may leave out.
@@ -495,6 +554,30 @@ public enum FocusedFieldReader {
     private static let axFontSizeKey = "AXFontSize"
     private static let axFontFamilyKey = "AXFontFamily"
     private static let axForegroundColorKey = "AXForegroundColor"
+
+    /// The selection as a character range, measured in text markers from the field's start, for a field that refuses `AXSelectedTextRange`.
+    private static func markerSelection(_ field: AXUIElement) -> CFRange? {
+        var selected: AnyObject?
+        guard
+            AXUIElementCopyAttributeValue(field, "AXSelectedTextMarkerRange" as CFString, &selected)
+                == .success,
+            let selected, CFGetTypeID(selected) == AXTextMarkerRangeGetTypeID(),
+            let whole = SurfaceProbe.parameterized(field, "AXTextMarkerRangeForUIElement", field),
+            CFGetTypeID(whole) == AXTextMarkerRangeGetTypeID()
+        else { return nil }
+        // Checked by type ID above; `as?` on a Core Foundation type always succeeds.
+        let selection = unsafeDowncast(selected, to: AXTextMarkerRange.self)
+        let start = AXTextMarkerRangeCopyStartMarker(unsafeDowncast(whole, to: AXTextMarkerRange.self))
+        let before = AXTextMarkerRangeCreate(nil, start, AXTextMarkerRangeCopyStartMarker(selection))
+        guard let location = markerLength(field, before), let length = markerLength(field, selection)
+        else { return nil }
+        return CFRange(location: location, length: length)
+    }
+
+    /// How many characters a text-marker range spans, or nothing where the field will not count them.
+    private static func markerLength(_ field: AXUIElement, _ range: AXTextMarkerRange) -> Int? {
+        (SurfaceProbe.parameterized(field, "AXLengthForTextMarkerRange", range) as? NSNumber)?.intValue
+    }
 
     /// The screen rectangle of the selection's text-marker range, which web content answers where it answers nothing for a character range.
     private static func markerBounds(_ field: AXUIElement) -> CGRect? {

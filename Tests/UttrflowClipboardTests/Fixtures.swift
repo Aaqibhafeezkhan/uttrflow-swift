@@ -46,7 +46,7 @@ extension ClipboardBudget {
     /// The same budget with one bound narrowed in every pool, so a test names only the rule it is about.
     func limiting(
         items: Int? = nil, bytes: Int? = nil, days: Int? = nil, largestClip: Int? = nil,
-        disk: Int? = nil
+        largestPicture: Int? = nil, pictureEdge: Int? = nil, disk: Int? = nil
     ) -> ClipboardBudget {
         func narrowed(_ tier: ClipboardTier) -> ClipboardTier {
             ClipboardTier(
@@ -55,6 +55,7 @@ extension ClipboardBudget {
         return ClipboardBudget(
             ceiling: ceiling, copied: narrowed(copied), dictation: narrowed(dictation),
             images: narrowed(images), largestClip: largestClip ?? self.largestClip,
-            disk: disk ?? self.disk)
+            largestPicture: largestPicture ?? self.largestPicture,
+            pictureEdge: pictureEdge ?? self.pictureEdge, disk: disk ?? self.disk)
     }
 }

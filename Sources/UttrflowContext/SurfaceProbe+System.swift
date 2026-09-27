@@ -59,6 +59,12 @@ public enum SurfaceProbe {
     ) -> AnyObject? {
         var range = range
         guard let parameter = AXValueCreate(.cfRange, &range) else { return nil }
+        return parameterized(field, attribute, parameter)
+    }
+
+    /// One attribute read with any parameter, such as a text marker or an element.
+    static func parameterized(_ field: AXUIElement, _ attribute: String, _ parameter: AnyObject) -> AnyObject?
+    {
         var answer: AnyObject?
         guard
             AXUIElementCopyParameterizedAttributeValue(

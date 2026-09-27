@@ -68,7 +68,7 @@ struct SuggestionView: View {
 
     /// What the accept key will add, finishing the user's line, and nothing else: the grey, or its underline, is the hint.
     private func inlineLine(_ row: SuggestionPresentation.Row) -> some View {
-        offer(row)
+        SuggestionGhostLine(presentation: presentation, row: row)
             .foregroundStyle(ink(presentation.opacity))
     }
 
@@ -90,7 +90,7 @@ struct SuggestionView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .font(font(at: presentation.pointSize))
+        .font(presentation.font(at: presentation.pointSize))
         .foregroundStyle(ink(rowOpacity(row)))
     }
 
@@ -99,7 +99,7 @@ struct SuggestionView: View {
         Text(verbatim: presentation.footer)
             .lineLimit(1)
             .truncationMode(.tail)
-            .font(font(at: presentation.pointSize * 0.82))
+            .font(presentation.font(at: presentation.pointSize * 0.82))
             .foregroundStyle(ink(presentation.opacity * SuggestionPresentation.dimmedShare))
             .accessibilityHidden(true)
     }
@@ -108,33 +108,39 @@ struct SuggestionView: View {
     private func rowOpacity(_ row: SuggestionPresentation.Row) -> Double {
         row.isSelected ? presentation.opacity : presentation.opacity * SuggestionPresentation.dimmedShare
     }
+}
+
+/// The ghost on the caret's line, the one view both drawn and measured, so what fits is what is shown.
+struct SuggestionGhostLine: View {
+    let presentation: SuggestionPresentation
+    let row: SuggestionPresentation.Row
 
     /// The ghost continuation, preceded by the typed characters struck through only when Tab would consume any.
-    private func offer(_ row: SuggestionPresentation.Row) -> some View {
-        var text = AttributedString(row.ghost)
-        // At full strength the grey no longer marks the offer, so a dotted underline does.
-        if presentation.underlinesGhost { text.underlineStyle = Text.LineStyle(pattern: .dot) }
-        if row.isReplacement {
-            var consumed = AttributedString(row.consumed)
-            // The strike is the whole signal, so it takes the colour of the style around it.
-            consumed.strikethroughStyle = .single
-            text = consumed + text
-        }
-        return Text(text)
-            .font(font(at: presentation.pointSize))
+    var body: some View {
+        Text(text)
+            .font(presentation.font(at: presentation.pointSize))
             .lineLimit(1)
             .truncationMode(.tail)
     }
 
-    /// The field's own face where it names one, else the system face, monospaced where even the size is unknown.
-    private func font(at size: CGFloat) -> Font {
-        if let family = presentation.fontFamily { return .custom(family, size: size) }
-        return .system(size: size, design: fontDesign)
+    /// The ghost in the field's style, with what Tab takes back struck through ahead of it.
+    private var text: AttributedString {
+        var text = AttributedString(row.ghost)
+        // At full strength the grey no longer marks the offer, so a dotted underline does.
+        if presentation.underlinesGhost { text.underlineStyle = Text.LineStyle(pattern: .dot) }
+        guard row.isReplacement else { return text }
+        var consumed = AttributedString(row.consumed)
+        // The strike is the whole signal, so it takes the colour of the style around it.
+        consumed.strikethroughStyle = .single
+        return consumed + text
     }
+}
 
-    /// Monospaced where the field would not say what its own font is, so a terminal ghost still lines up.
-    private var fontDesign: Font.Design {
-        presentation.prefersMonospaced ? .monospaced : .default
+extension SuggestionPresentation {
+    /// The field's own face where it names one, else the system face, monospaced where even the size is unknown.
+    func font(at size: CGFloat) -> Font {
+        if let fontFamily { return .custom(fontFamily, size: size) }
+        return .system(size: size, design: prefersMonospaced ? .monospaced : .default)
     }
 }
 

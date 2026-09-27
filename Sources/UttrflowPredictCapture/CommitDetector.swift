@@ -13,14 +13,31 @@ public enum CaptureEvent: Sendable, Equatable {
     case applicationDeactivated(at: Date)
     /// Time passed, which is the only way this machine can notice a pause.
     case tick(at: Date)
+    /// Text reached the line without being typed, by a paste or a dictation, so the line is no longer only this person's typing.
+    case inserted(at: Date)
 
     /// When the event happened, which is the clock the detector runs on.
     public var moment: Date {
         switch self {
         case .keystroke(_, let moment), .returnPressed(let moment), .focusLeft(let moment),
-            .applicationDeactivated(let moment), .tick(let moment):
+            .applicationDeactivated(let moment), .tick(let moment), .inserted(let moment):
             moment
         }
+    }
+
+    /// Whether this event ends the field's life, and so commits whatever the line holds.
+    var endsTheField: Bool {
+        switch self {
+        case .returnPressed, .focusLeft, .applicationDeactivated: true
+        case .keystroke, .tick, .inserted: false
+        }
+    }
+
+    /// The events with an insertion marked after the line they read and before anything that would commit it.
+    public static func marking(_ events: [CaptureEvent], insertedAt moment: Date) -> [CaptureEvent] {
+        var marked = events
+        marked.insert(.inserted(at: moment), at: events.firstIndex(where: \.endsTheField) ?? events.endIndex)
+        return marked
     }
 }
 
@@ -68,6 +85,8 @@ public struct CommitDetector: Sendable, Equatable {
     private var committedPrior: String?
     /// The line an accepted completion already recorded, which an ending leaves alone unless it has changed since.
     private var acceptedLine: String?
+    /// Whether text that was not typed reached the line in this field's life, which keeps anything it ends from being learned.
+    private var holdsInsertion = false
 
     /// A detector watching a field nothing has been typed into.
     public init() {}
@@ -84,6 +103,12 @@ public struct CommitDetector: Sendable, Equatable {
         switch event {
         case .keystroke(let text, let moment):
             pending = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            lastKeystroke = moment
+            // A line emptied by hand holds nothing inserted, so what is typed into it next is learned again.
+            if pending.isEmpty { holdsInsertion = false }
+            return nil
+        case .inserted(let moment):
+            holdsInsertion = true
             lastKeystroke = moment
             return nil
         case .returnPressed:
@@ -115,6 +140,7 @@ public struct CommitDetector: Sendable, Equatable {
         committed = nil
         committedPrior = nil
         acceptedLine = nil
+        holdsInsertion = false
     }
 
     /// Undoes the most recent idle commit, so a later tick can re-emit the value after a failed write.
@@ -129,9 +155,10 @@ public struct CommitDetector: Sendable, Equatable {
         return commit(reason, admits)
     }
 
-    /// Emits what is pending, unless it is nothing, is exactly what was emitted last, or ended in a way not admitted.
+    /// Emits what is pending, unless it is nothing, holds text that was not typed, is exactly what was emitted last, or ended in a way not admitted.
     private mutating func commit(_ reason: CommitReason, _ admits: (CommitReason) -> Bool) -> Commit? {
-        guard !pending.isEmpty, pending != committed, pending != acceptedLine, admits(reason) else {
+        guard !pending.isEmpty, !holdsInsertion, pending != committed, pending != acceptedLine, admits(reason)
+        else {
             return nil
         }
         // An idle draft is retired by whatever the line became, even after it was backspaced away.

@@ -160,3 +160,59 @@ struct DictationPipelineLoadingTests {
         #expect(DictationFailure.stillLoading.message == SpeechModelLoad.refusal)
     }
 }
+
+@Suite("A speech model load that never returns", .timeLimit(.minutes(1)))
+struct DictationPipelineLoadDeadlineTests {
+    private func makePipeline(speech: FakeSpeechEngine, clock: ManualClock) -> DictationPipeline {
+        DictationPipeline(
+            capture: FakeAudioCaptureEngine(), speech: speech, cleaner: PassThroughCleaner(),
+            context: FakeContextEngine(context: .fixture()), inserter: LandingInserter(),
+            clock: clock, speechLoadLimit: .seconds(300))
+    }
+
+    @Test("fails with the retry once the limit passes, and is no longer loading")
+    func stuckLoadFailsAtTheLimit() async {
+        let clock = ManualClock()
+        let speech = FakeSpeechEngine(prepareHangs: true)
+        let pipeline = makePipeline(speech: speech, clock: clock)
+
+        let loading = Task { await pipeline.prepare() }
+        await clock.advanceWhenSomethingIsWaiting(by: .seconds(300))
+        await loading.value
+
+        #expect(await !pipeline.isLoading)
+        #expect(await !pipeline.isReady)
+        guard case .failed(let failure) = await pipeline.currentState else {
+            Issue.record("a stuck load was not reported as failed")
+            return
+        }
+        #expect(failure.recovery == .retry)
+        await speech.finishHungLoads()
+    }
+
+    @Test("a retry after the stuck load finally ends loads as usual")
+    func retryAfterTheStuckLoadEnds() async {
+        let clock = ManualClock()
+        let speech = FakeSpeechEngine(prepareHangs: true)
+        let pipeline = makePipeline(speech: speech, clock: clock)
+        let loading = Task { await pipeline.prepare() }
+        await clock.advanceWhenSomethingIsWaiting(by: .seconds(300))
+        await loading.value
+
+        await speech.finishHungLoads()
+        await pipeline.prepare()
+
+        #expect(await pipeline.isReady)
+        #expect(await pipeline.currentState == .idle)
+    }
+
+    @Test("a load inside the limit is not cut short")
+    func loadInsideTheLimitSucceeds() async {
+        let pipeline = makePipeline(speech: FakeSpeechEngine(), clock: ManualClock())
+
+        await pipeline.prepare()
+
+        #expect(await pipeline.isReady)
+        #expect(await !pipeline.isLoading)
+    }
+}

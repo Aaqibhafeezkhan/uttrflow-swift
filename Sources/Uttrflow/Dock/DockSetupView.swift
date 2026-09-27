@@ -88,22 +88,29 @@ struct DockSetupView: View {
     }
 }
 
-/// The arc filled clockwise from the top to the share done, with no track, easing between ticks unless motion is held still.
+/// The arc filled clockwise from the top to the share done over a faint track, easing between ticks unless motion is held still.
 private struct DockSetupRing: View {
     let fraction: Double
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let motion = MotionBudgetObserver.shared.budget
-        Circle()
-            .trim(from: 0, to: fraction)
-            .stroke(
-                Color.dockSetupAccent,
-                style: StrokeStyle(lineWidth: DockSetupMetrics.ringLine, lineCap: .round)
-            )
-            .rotationEffect(.degrees(-90))
-            .animation(motion.workingBarsMove ? .linear(duration: 1) : nil, value: fraction)
-            .frame(width: DockSetupMetrics.ringDiameter, height: DockSetupMetrics.ringDiameter)
-            .frame(width: DockSetupMetrics.ringBox, height: DockSetupMetrics.ringBox)
+        ZStack {
+            // White at 18%, which the design's light glass swallows, so only the dark button shows a track.
+            Circle().stroke(
+                scheme == .dark ? Color.white.opacity(DockSetupMetrics.trackOpacity) : .clear,
+                lineWidth: DockSetupMetrics.ringLine)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(
+                    Color.dockSetupAccent,
+                    style: StrokeStyle(lineWidth: DockSetupMetrics.ringLine, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .animation(motion.workingBarsMove ? .linear(duration: 1) : nil, value: fraction)
+        }
+        .frame(width: DockSetupMetrics.ringDiameter, height: DockSetupMetrics.ringDiameter)
+        .frame(width: DockSetupMetrics.ringBox, height: DockSetupMetrics.ringBox)
     }
 }
 
@@ -144,6 +151,8 @@ enum DockSetupMetrics {
     static let ringBox: CGFloat = 18
     static let ringDiameter: CGFloat = 15
     static let ringLine: CGFloat = 2.25
+    /// How strongly the dark ring's unfilled track is drawn.
+    static let trackOpacity: Double = 0.18
     static let spinnerDiameter: CGFloat = 15.75
     static let spinnerLine: CGFloat = 2.6
     /// The share of the circle the spinner's arc covers.
