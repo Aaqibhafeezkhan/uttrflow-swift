@@ -36,10 +36,18 @@ struct HomePageContent: View {
                 if let step = presentation.nextStep {
                     MainCard { MainEmptyStateView(state: step, onIntent: onIntent) }
                 }
-                if !presentation.tiles.isEmpty {
-                    tiles
+                Group {
+                    if !presentation.tiles.isEmpty {
+                        tiles
+                    }
+                    HomeActivityCard(presentation: presentation, onIntent: onIntent)
                 }
-                HomeActivityCard(presentation: presentation, onIntent: onIntent)
+                // Held in place but unseen until the history is read, then faded in without moving anything.
+                .opacity(presentation.isReading ? 0 : 1)
+                .allowsHitTesting(!presentation.isReading)
+                .accessibilityHidden(presentation.isReading)
+                .animation(
+                    MotionBudget.current().allowing(.easeOut(duration: 0.2)), value: presentation.isReading)
             }
         }
         .padding(.horizontal, 28)

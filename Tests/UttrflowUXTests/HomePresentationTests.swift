@@ -139,6 +139,18 @@ struct HomeEmptyTests {
             calendar: HistoryFixture.calendar, locale: HistoryFixture.locale)
         #expect(downloading.emptyState == nil)
     }
+
+    @Test("not before the history has been read, when the page says it is still reading instead")
+    func notBeforeTheFirstReading() {
+        let reading = HomePresenter.page(
+            for: HomeSnapshot(
+                permissions: [.microphone: .granted, .accessibility: .granted], shortcut: "⌥Space",
+                now: HistoryFixture.now, hasReadHistory: false),
+            calendar: HistoryFixture.calendar, locale: HistoryFixture.locale)
+        #expect(reading.emptyState == nil)
+        #expect(reading.isReading)
+        #expect(!HistoryFixture.home().isReading)
+    }
 }
 
 @Suite("Home when Uttrflow cannot listen")

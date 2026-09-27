@@ -2016,6 +2016,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let kept = await history.records(
                 keeping: Retention(days: settings.transcriptRetentionDays, now: Date()))
             self.kept = kept
+            hasReadHistory = true
             knownRecordings = await recordings.waiting(now: Date())
             recents = RecentDictations(showing: kept)
             knownWords = await dictionary.allEntries()
@@ -2054,7 +2055,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     systemName: NSFullUserName(),
                     shortcut: shortcut, settings: settings, now: now,
                     speechModel: speechModelLoad, speechDownload: speechReadiness.download,
-                    speechModelBytes: SpeechModel.default.downloadBytes)),
+                    speechModelBytes: SpeechModel.default.downloadBytes, hasReadHistory: hasReadHistory)),
             sidebar: SidebarPresenter.sidebar(
                 for: SidebarSnapshot(
                     // The page the window shows, which may be the Settings page on one of its tabs.
@@ -2175,6 +2176,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var mainWindowIsBehind = false
     /// Everything the store keeps, which is not ``recents`` — that is the menu's five.
     private var kept: [DictationRecord] = []
+    /// Whether ``kept`` has been read yet, so Home never shows its first-run page before it knows.
+    private var hasReadHistory = false
     /// Recordings whose words were lost, as of the last refresh.
     private var knownRecordings: [KeptRecording] = []
     /// The recording the pipeline is running again, so its row can say so.
