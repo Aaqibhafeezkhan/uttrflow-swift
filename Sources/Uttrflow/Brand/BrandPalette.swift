@@ -121,7 +121,7 @@ enum BrandPalette {
         static let warningFill: UInt32 = 0xC2_5E00
     }
 
-    /// The redesign's tokens; no screen draws them yet. See `Docs/redesign-tokens.md`.
+    /// The redesign's tokens, drawn by the screens already moved to it. See `Docs/redesign-tokens.md`.
     enum Redesign {
         /// The page behind everything.
         static let pageGround = BrandTone(dark: 0x0B_0C10, light: 0xF2_F1EC)
@@ -164,5 +164,7 @@ enum BrandPalette {
             tone: BrandTone(dark: 0x00_0000, light: 0x10_1316), darkOpacity: 0.5, lightOpacity: 0.22)
         /// The listening meter: white on the dark glass, dictation teal on the light.
         static let dockMeter = BrandTone(dark: textStrong.dark, light: dictationAccent.light)
+        /// The initials on the avatar's lilac-to-teal disc.
+        static let avatarInk: UInt32 = 0x08_131A
     }
 }

@@ -1,9 +1,11 @@
-// The main window's sidebar in its collapsed and expanded widths.
+// The main window's sidebar: a floating dark island, as an icon rail or with names beside the icons.
 
 import UttrflowUX
+import AppKit
 import SwiftUI
 
 import class Foundation.Bundle
+import struct Foundation.Data
 
 extension AppVersion {
     /// What this bundle says it is, read in the app because `UttrflowUX` has no bundle of its own.
@@ -15,123 +17,353 @@ extension AppVersion {
     }
 }
 
-/// The navigation down the left of the window, an icon rail or the same rows with names beside them.
+/// The navigation down the left of the window, floating on the window's ground and dark in both appearances.
 struct SidebarView: View {
     let presentation: SidebarPresentation
+    /// Who is signed in, for the card at the foot.
+    let account: HomeAccount
+    /// The account's picture, when the provider gave one.
+    var picture: Data?
     /// Whether the names are showing. Remembered across launches by the window.
     var isExpanded: Bool = false
     var onSelect: (SidebarDestination) -> Void
+    var onAccount: () -> Void = {}
+    var onToggle: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isExpanded ? 1 : 3) {
-            // Room for the traffic lights, which sit over the sidebar.
-            Color.clear.frame(height: MainMetrics.titleBarInset)
-            brand
-                .padding(.bottom, isExpanded ? 6 : 10)
-            ForEach(presentation.items) { item in
-                row(item)
-            }
-            Spacer(minLength: 8)
-            version
+        VStack(alignment: .leading, spacing: 0) {
+            // Room for the traffic lights, which sit over the island.
+            Color.clear.frame(height: SidebarMetrics.topInset)
+            header
+                .padding(.bottom, isExpanded ? 22 : 16)
+            rows(.main)
+            heading(.yourWords)
+            rows(.yourWords)
+            Spacer(minLength: 12)
+            rows(.footer)
+            SidebarAccountCard(
+                account: account, picture: picture, version: presentation.version,
+                isSelected: presentation.isAccountSelected, isExpanded: isExpanded,
+                onOpen: onAccount
+            )
+            .padding(.top, 10)
         }
-        // Padding before the width, or the expanded sidebar is 220 points rather than 204.
-        .padding(.horizontal, isExpanded ? 8 : 0)
+        .padding(.horizontal, isExpanded ? 12 : 8)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background { SidebarIslandBackground() }
+        .clipShape(.rect(cornerRadius: SidebarMetrics.radius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: SidebarMetrics.radius, style: .continuous)
+                .strokeBorder(IslandPalette.accent.opacity(0.18), lineWidth: 1)
+        }
+        .environment(\.colorScheme, .dark)
+        .padding([.leading, .vertical], SidebarMetrics.margin)
         .frame(width: isExpanded ? MainMetrics.sidebarWidth : MainMetrics.iconRailWidth)
         .frame(maxHeight: .infinity)
-        .background(Color.railGround)
     }
 
-    /// The product's mark, bare and unaccented, with the name beside it only when the rows have names.
-    private var brand: some View {
-        HStack(spacing: 8) {
-            UttrflowMarkView(height: 21)
-                .foregroundStyle(.primary)
-                .frame(width: 32, height: 32)
-            if isExpanded {
-                Text(presentation.productName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.mainText)
-                    .fixedSize()
+    /// The mark and the product's name, with the control that shows or hides the names.
+    @ViewBuilder private var header: some View {
+        if isExpanded {
+            HStack(spacing: 10) {
+                brand
+                Spacer(minLength: 4)
+                toggle
             }
-        }
-        .frame(maxWidth: .infinity, alignment: isExpanded ? .leading : .center)
-        .accessibilityHidden(true)
-    }
-
-    /// Which build this is, at the foot; the build number rides along where there is room.
-    @ViewBuilder private var version: some View {
-        if presentation.version.isKnown {
-            Text(isExpanded ? presentation.version.full : presentation.version.short)
-                .font(.system(size: isExpanded ? 10.5 : 9))
-                .monospacedDigit()
-                .foregroundStyle(Color.mainDim)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, isExpanded ? 10 : 4)
-                .padding(.bottom, 10)
-                .frame(maxWidth: .infinity, alignment: isExpanded ? .leading : .center)
-                .accessibilityLabel("Version \(presentation.version.full)")
+            .padding(.horizontal, 8)
+        } else {
+            VStack(spacing: 12) {
+                UttrflowMarkView(height: 20)
+                    .foregroundStyle(IslandPalette.ink)
+                toggle
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
-    private func row(_ item: SidebarItem) -> some View {
-        Button {
-            onSelect(item.destination)
-        } label: {
-            content(item)
-                .foregroundStyle(tint(item))
-                .background(
-                    item.isSelected ? Color.railSelection : .clear,
-                    in: .rect(cornerRadius: isExpanded ? 7 : 10)
-                )
+    private var brand: some View {
+        HStack(spacing: 10) {
+            UttrflowMarkView(height: 20)
+                .foregroundStyle(IslandPalette.ink)
+            Text(presentation.productName.lowercased())
+                .font(BrandFont.display(size: 21, weight: .semibold))
+                .tracking(-0.4)
+                .foregroundStyle(IslandPalette.ink)
+                .fixedSize()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(presentation.productName)
+    }
+
+    private var toggle: some View {
+        Button(action: onToggle) {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(IslandPalette.ink.opacity(0.55))
+                .frame(width: 26, height: 22)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help(item.title)
-        .accessibilityAddTraits(item.isSelected ? [.isSelected] : [])
-        .accessibilityLabel(item.badge.map { "\(item.title), \($0) today" } ?? item.title)
+        .help(isExpanded ? "Hide Sidebar" : "Show Sidebar")
+        .accessibilityLabel(isExpanded ? "Hide Sidebar" : "Show Sidebar")
     }
 
-    @ViewBuilder private func content(_ item: SidebarItem) -> some View {
+    /// The heading over a group, or a hairline in the rail, which has no room for words.
+    @ViewBuilder private func heading(_ section: SidebarSection) -> some View {
+        if let title = section.title {
+            if isExpanded {
+                Text(title.uppercased())
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .tracking(1.05)
+                    .foregroundStyle(IslandPalette.ink.opacity(0.4))
+                    .padding(.horizontal, 12)
+                    .padding(.top, 22)
+                    .padding(.bottom, 8)
+                    .accessibilityAddTraits(.isHeader)
+            } else {
+                Rectangle()
+                    .fill(IslandPalette.ink.opacity(0.1))
+                    .frame(width: 24, height: 1)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private func rows(_ section: SidebarSection) -> some View {
+        ForEach(presentation.items(in: section)) { item in
+            SidebarRow(item: item, isExpanded: isExpanded) { onSelect(item.destination) }
+        }
+    }
+}
+
+/// The island's measurements.
+enum SidebarMetrics {
+    /// The gap that floats the island off the window's edges.
+    static let margin: CGFloat = 10
+    static let radius: CGFloat = 18
+    /// From the island's top edge to the logo, clear of the traffic lights.
+    static let topInset: CGFloat = 48
+}
+
+/// The island's ground with the aurora glowing up from its foot.
+struct SidebarIslandBackground: View {
+    var body: some View {
+        IslandPalette.ground
+            .overlay(alignment: .bottomLeading) {
+                AngularGradient(
+                    colors: IslandPalette.aurora + IslandPalette.aurora.prefix(1),
+                    center: .center, startAngle: .degrees(120), endAngle: .degrees(480)
+                )
+                .frame(width: 300, height: 320)
+                .blur(radius: 70)
+                .opacity(0.45)
+                .offset(x: -40, y: 80)
+                .allowsHitTesting(false)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// One destination: icon and name, lit with a teal wash and a bar at its leading edge when selected.
+struct SidebarRow: View {
+    let item: SidebarItem
+    let isExpanded: Bool
+    let onSelect: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onSelect) {
+            content
+                .foregroundStyle(IslandPalette.ink.opacity(item.isSelected ? 1 : 0.72))
+                .background { SidebarSelection(isSelected: item.isSelected, isHovered: isHovered) }
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(item.title)
+        .accessibilityAddTraits(item.isSelected ? [.isSelected] : [])
+        .accessibilityLabel(item.badge.map { "\(item.title), \($0) changes today" } ?? item.title)
+    }
+
+    @ViewBuilder private var content: some View {
         if isExpanded {
-            HStack(spacing: 9) {
+            HStack(spacing: 12) {
                 Image(systemName: item.symbolName)
                     .font(.system(size: 15, weight: .regular))
                     .frame(width: 18)
                 Text(item.title)
-                    .font(.system(size: 13))
+                    .font(.system(size: 14, weight: .medium))
                 Spacer(minLength: 6)
-                // The number itself, which the rail cannot show; collapsed it is a dot.
                 if let badge = item.badge {
                     Text(badge)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11, weight: .semibold))
                         .monospacedDigit()
-                        .foregroundStyle(item.isSelected ? Color.mainText : Color.mainDim)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(IslandPalette.ink.opacity(0.1), in: .capsule)
                 }
             }
-            .padding(.horizontal, 9)
-            .frame(height: 28)
+            .padding(.horizontal, 12)
+            .frame(height: 40)
         } else {
             Image(systemName: item.symbolName)
                 .font(.system(size: 15, weight: .regular))
-                .frame(width: 44, height: 36)
-                .overlay(alignment: .topTrailing) { dot(item) }
+                .frame(width: 44, height: 40)
+                .overlay(alignment: .topTrailing) {
+                    // The count, as a dot, for the width that has no room for a number.
+                    if item.badge != nil {
+                        Circle()
+                            .fill(IslandPalette.accent)
+                            .frame(width: 6, height: 6)
+                            .padding(.top, 8)
+                            .padding(.trailing, 9)
+                    }
+                }
                 .frame(maxWidth: .infinity)
         }
     }
+}
 
-    private func tint(_ item: SidebarItem) -> Color {
-        item.isSelected ? Color.dockActive : Color.railIcon
+/// The selected row's teal wash, edge and leading bar, or a faint wash under the pointer.
+struct SidebarSelection: View {
+    let isSelected: Bool
+    var isHovered = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        if isSelected {
+            shape
+                .fill(
+                    LinearGradient(
+                        colors: [IslandPalette.accent.opacity(0.22), IslandPalette.accent.opacity(0.06)],
+                        startPoint: .leading, endPoint: .trailing)
+                )
+                .overlay { shape.strokeBorder(IslandPalette.accent.opacity(0.25), lineWidth: 1) }
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(IslandPalette.accent)
+                        .frame(width: 3)
+                        .padding(.vertical, 10)
+                }
+        } else {
+            shape.fill(IslandPalette.ink.opacity(isHovered ? 0.05 : 0))
+        }
+    }
+}
+
+/// The person at the foot of the island: their picture or initials, their name and the version.
+struct SidebarAccountCard: View {
+    let account: HomeAccount
+    let picture: Data?
+    let version: AppVersion
+    let isSelected: Bool
+    let isExpanded: Bool
+    let onOpen: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onOpen) {
+            Group {
+                if isExpanded {
+                    HStack(spacing: 12) {
+                        avatar(size: 36)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(name)
+                                .font(.system(size: 14, weight: .medium))
+                                .lineLimit(1)
+                            if version.isKnown {
+                                Text(version.tag)
+                                    .font(.system(size: 12))
+                                    .monospacedDigit()
+                                    .foregroundStyle(IslandPalette.ink.opacity(0.55))
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(12)
+                } else {
+                    avatar(size: 32)
+                        .padding(7)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .foregroundStyle(IslandPalette.ink)
+            .background {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(IslandPalette.ink.opacity(isHovered || isSelected ? 0.1 : 0.06))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? IslandPalette.accent.opacity(0.35) : IslandPalette.ink.opacity(0.08),
+                        lineWidth: 1)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(account.open.title)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityLabel(spokenLabel)
     }
 
-    /// The count, as a dot rather than a number, for the width that has no room for one.
-    @ViewBuilder private func dot(_ item: SidebarItem) -> some View {
-        if item.badge != nil {
-            Circle()
-                .fill(Color.dockActive)
-                .frame(width: 6, height: 6)
-                .padding(.top, 5)
-                .padding(.trailing, 6)
+    /// The picture where there is one, the initials on the lilac-to-teal disc otherwise.
+    @ViewBuilder private func avatar(size: CGFloat) -> some View {
+        switch account {
+        case .signedIn(let initials, _, _):
+            if let picture, let image = NSImage(data: picture) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(.circle)
+            } else {
+                Text(initials)
+                    .font(BrandFont.display(size: size * 0.39, weight: .semibold))
+                    .foregroundStyle(IslandPalette.avatarInk)
+                    .frame(width: size, height: size)
+                    .background(
+                        LinearGradient(
+                            colors: IslandPalette.avatar, startPoint: .topLeading,
+                            endPoint: .bottomTrailing),
+                        in: .circle)
+            }
+        // The same initials, unfilled: a person on this Mac, but not a session.
+        case .onThisMac(let initials, _, _):
+            Text(initials)
+                .font(BrandFont.display(size: size * 0.39, weight: .semibold))
+                .frame(width: size, height: size)
+                .overlay(Circle().strokeBorder(IslandPalette.accent.opacity(0.6), lineWidth: 1.5))
+        case .signedOut:
+            Image(systemName: "person.crop.circle")
+                .font(.system(size: size * 0.6, weight: .regular))
+                .foregroundStyle(IslandPalette.ink.opacity(0.72))
+                .frame(width: size, height: size)
         }
+    }
+
+    private var name: String {
+        switch account {
+        case .signedIn(_, let name, _), .onThisMac(_, let name, _): name
+        case .signedOut(let open): open.title
+        }
+    }
+
+    /// Names the account and the build, because initials cannot be spoken and the version is the bug reporter's fact.
+    private var spokenLabel: String {
+        let who =
+            switch account {
+            case .signedIn(_, let name, let open): "\(open.title), \(name)"
+            case .onThisMac(_, let name, let open): "\(open.title), \(name), on this Mac"
+            case .signedOut(let open): open.title
+            }
+        return version.isKnown ? "\(who). Version \(version.full)" : who
     }
 }

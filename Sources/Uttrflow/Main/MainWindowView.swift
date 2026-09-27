@@ -1,4 +1,4 @@
-// The main window's chrome: sidebar, strip, page header and page switch.
+// The main window's chrome: sidebar, page header and page switch.
 
 import UttrflowUX
 import SwiftUI
@@ -16,26 +16,30 @@ struct MainWindowView: View {
         HStack(spacing: 0) {
             SidebarView(
                 presentation: model.content.sidebar,
-                isExpanded: model.isSidebarExpanded
-            ) { destination in
-                switch destination {
-                case .page(let page):
-                    // Through the app, so the sidebar's highlight and badge are rebuilt with the page.
-                    onIntent(.show(page))
-                case .settings(let tab):
-                    // Settings is a window of its own, and the app owns every window.
-                    onIntent(.go(.settings(tab)))
-                }
-            }
+                account: model.content.home.account,
+                picture: model.content.account.identity?.picture,
+                isExpanded: model.isSidebarExpanded,
+                onSelect: { destination in
+                    switch destination {
+                    case .page(let page):
+                        // Through the app, so the sidebar's highlight and badge are rebuilt with the page.
+                        onIntent(.show(page))
+                    case .settings(let tab):
+                        // Settings is a window of its own, and the app owns every window.
+                        onIntent(.go(.settings(tab)))
+                    }
+                },
+                onAccount: { onIntent(model.content.home.account.open.intent) },
+                onToggle: onToggleSidebar)
             pane
         }
         // The one animation in the window: the sidebar's width moves the page beside it.
         .animation(.snappy(duration: 0.22), value: model.isSidebarExpanded)
-        .background(Color.mainBackground)
+        .background(Color.redesignWindow)
         .foregroundStyle(Color.mainText, Color.mainMuted, Color.mainDim)
         // One tint at the root, so a control added later cannot arrive in the stock blue.
         .tint(Color.dockAccent)
-        // SwiftUI still reserves a safe area for the transparent title bar; the rail keeps its own inset.
+        // SwiftUI still reserves a safe area for the transparent title bar; the island keeps its own inset.
         .ignoresSafeArea(.container, edges: .top)
     }
 
@@ -43,11 +47,8 @@ struct MainWindowView: View {
 
     private var pane: some View {
         VStack(spacing: 0) {
-            MainWindowStrip(
-                account: model.content.home.account,
-                isSidebarExpanded: model.isSidebarExpanded,
-                onToggleSidebar: onToggleSidebar,
-                onIntent: onIntent)
+            // The band under the title bar, which the traffic lights and the window's drag own.
+            Color.clear.frame(height: MainMetrics.toolbarHeight)
             if model.page != .home {
                 OrbitPageHeader(
                     chrome: model.chrome, query: $model.searchQuery,
@@ -114,38 +115,6 @@ struct MainWindowView: View {
             set: {
                 binding.wrappedValue = $0; onDraft()
             })
-    }
-}
-
-/// The strip across the top: traffic lights over the rail at one end, the account chip at the other.
-struct MainWindowStrip: View {
-    let account: HomeAccount
-    var isSidebarExpanded: Bool = false
-    var onToggleSidebar: () -> Void = {}
-    var onIntent: (MainIntent) -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            sidebarToggle
-            Spacer(minLength: 0)
-            AccountChip(account: account, onIntent: onIntent)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: MainMetrics.toolbarHeight)
-    }
-
-    /// The one control in the band; its symbol says which way it goes, as every Mac app's does.
-    private var sidebarToggle: some View {
-        Button(action: onToggleSidebar) {
-            Image(systemName: isSidebarExpanded ? "sidebar.leading" : "sidebar.left")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color.mainMuted)
-                .frame(width: 26, height: 22)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .help(isSidebarExpanded ? "Hide Sidebar" : "Show Sidebar")
-        .accessibilityLabel(isSidebarExpanded ? "Hide Sidebar" : "Show Sidebar")
     }
 }
 

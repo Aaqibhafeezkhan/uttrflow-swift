@@ -10,13 +10,14 @@ sat at the top of a window four times the height of the screen with everything b
 The pages already scroll.
 
 Default size is 1180 × 780 (900 × 620 is cramped once the rail carries four figures); minimum
-760 × 500. The icon rail is 76 points (a 44pt target with room either side), the expanded
-sidebar 204 (eleven rows of 13-point text, the longest "Diagnostics", plus the badge) and the
-figures rail 186. The two rails once shared a width, and at 76 points "Words per minute"
+760 × 500. The sidebar is a dark island floated 10 points off the window's edges: 76 points as
+an icon rail (a 44pt target with room either side) and 232 with its names showing (six rows of
+14-point text, the "Your words" heading and the account card), and the figures rail is 186. The two rails once shared a width, and at 76 points "Words per minute"
 wrapped one word to a line and "2.7K" truncated to "2....".
 
 The sidebar's expanded state is remembered in `UserDefaults` directly, not the settings store:
-it is the window's own memory of how it was left, like the quick panel's position.
+it is the window's own memory of how it was left, like the quick panel's position. With nothing remembered, as
+on a first launch, the sidebar opens with its names showing.
 
 ## The clipboard demonstration
 

@@ -1,4 +1,4 @@
-// Tests for the sidebar: row order, selection, the corrections badge, and the product name.
+// Tests for the sidebar: row order, groups, selection, the corrections badge, the version and the account card.
 import Foundation
 import UttrflowSettings
 import Testing
@@ -22,25 +22,46 @@ extension HistoryFixture {
     }
 }
 
-@Suite("The sidebar's ten destinations")
+@Suite("The sidebar's destinations")
 struct SidebarOrderTests {
-    /// The design's order, pinned: Settings sits ninth though it is not a page.
+    /// The design's order, pinned: Settings sits last though it is not a page.
     @Test("the rows are in the designed order")
     func order() {
         #expect(
             HistoryFixture.sidebar().items.map(\.title) == [
-                "Home", "Dictation", "History", "Dictionary", "Corrections", "Insights", "Snippets",
-                "Style", "Diagnostics", "Settings", "Account",
+                "Home", "History", "Insights", "Dictionary", "Snippets", "Settings",
             ])
     }
 
-    @Test("every page in the window is reachable from the sidebar")
-    func everyPageIsReachable() {
+    /// Those pages stay in the window, reached from elsewhere, until their content moves into Settings.
+    @Test("the sidebar leaves out the pages the design moved off it")
+    func pagesOffTheSidebar() {
         let reached = HistoryFixture.sidebar().items.compactMap { item -> MainTab? in
             guard case .page(let page) = item.destination else { return nil }
             return page
         }
-        #expect(Set(reached) == Set(MainTab.allCases))
+        #expect(
+            Set(MainTab.allCases).subtracting(reached)
+                == [.dictation, .corrections, .style, .diagnostics, .account])
+    }
+
+    @Test("the rows fall into three groups, with a heading over the user's words")
+    func sections() {
+        let sidebar = HistoryFixture.sidebar()
+        #expect(sidebar.items(in: .main).map(\.title) == ["Home", "History", "Insights"])
+        #expect(sidebar.items(in: .yourWords).map(\.title) == ["Dictionary", "Snippets"])
+        #expect(sidebar.items(in: .footer).map(\.title) == ["Settings"])
+        #expect(SidebarSection.yourWords.title == "Your words")
+        #expect(SidebarSection.main.title == nil)
+        #expect(SidebarSection.footer.title == nil)
+    }
+
+    /// The account card is the way to the Account page, so it lights where a row would.
+    @Test("the account card lights on the Account page and only there")
+    func accountCard() {
+        #expect(HistoryFixture.sidebar(selection: .page(.account)).isAccountSelected)
+        #expect(HistoryFixture.sidebar(selection: .page(.account)).items.allSatisfy { !$0.isSelected })
+        #expect(!HistoryFixture.sidebar(selection: .page(.home)).isAccountSelected)
     }
 
     @Test("every row carries a symbol and a name")
@@ -86,10 +107,10 @@ struct SidebarOrderTests {
 
 @Suite("The corrections badge")
 struct SidebarBadgeTests {
-    @Test("today's changes are counted on the Corrections row")
+    @Test("today's changes are counted on the Dictionary row")
     func badge() {
         let items = HistoryFixture.sidebar(correctionsToday: 7).items
-        #expect(items.first { $0.title == "Corrections" }?.badge == "7")
+        #expect(items.first { $0.title == "Dictionary" }?.badge == "7")
     }
 
     /// A badge reading "0" is a badge that has stopped meaning anything.
@@ -102,7 +123,7 @@ struct SidebarBadgeTests {
     @Test("no other row is badged")
     func onlyCorrections() {
         let badged = HistoryFixture.sidebar(correctionsToday: 3).items.filter { $0.badge != nil }
-        #expect(badged.map(\.title) == ["Corrections"])
+        #expect(badged.map(\.title) == ["Dictionary"])
     }
 }
 
