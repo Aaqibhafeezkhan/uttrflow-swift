@@ -22,10 +22,9 @@ on:
     branches: [main]
 
 concurrency:
-  # A force-push or a second commit supersedes the run already going. Nobody is waiting on
-  # the result for a commit that is no longer the tip.
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A new commit supersedes a branch's run; main keeps every run so each merge gets a result.
+  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'tip' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
