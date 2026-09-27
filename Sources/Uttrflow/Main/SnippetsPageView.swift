@@ -77,7 +77,7 @@ struct SnippetRowView: View {
                 .foregroundStyle(PagePalette.text.opacity(0.6))
             Text(row.lastUsed)
                 .font(.system(size: 12))
-                .foregroundStyle(PagePalette.text.opacity(0.5))
+                .foregroundStyle(PagePalette.faint)
                 .lineLimit(1)
             controls
         }

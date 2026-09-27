@@ -48,7 +48,7 @@ struct PageTitleBar: View {
             if let caption = chrome.caption {
                 Text(caption)
                     .font(.system(size: 13))
-                    .foregroundStyle(PagePalette.text.opacity(0.55))
+                    .foregroundStyle(PagePalette.faint)
             }
         }
         .padding(.horizontal, PageMetrics.margin)
@@ -72,7 +72,7 @@ struct PageSearchField: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13))
-                .foregroundStyle(PagePalette.text.opacity(0.45))
+                .foregroundStyle(PagePalette.faint)
             TextField(field.placeholder, text: $query, selection: $selection)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
@@ -175,7 +175,7 @@ struct PageSectionLabel: View {
         Text(text.uppercased())
             .font(.system(size: 10.5, weight: .semibold))
             .tracking(0.84)
-            .foregroundStyle(PagePalette.text.opacity(0.42))
+            .foregroundStyle(PagePalette.faint)
             .accessibilityAddTraits(.isHeader)
     }
 }

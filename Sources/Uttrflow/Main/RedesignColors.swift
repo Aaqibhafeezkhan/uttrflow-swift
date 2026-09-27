@@ -12,6 +12,8 @@ enum IslandPalette {
     static let ground = Color(nsColor: .orbit(R.sidebarIsland))
     /// Text and icons on the island.
     static let ink = Color(rgb: R.textStrong.dark)
+    /// Headings and quiet words on the island.
+    static let quiet = Color(nsColor: .orbit(R.islandQuiet))
     /// The selected row's gradient, left bar and edge.
     static let accent = Color(rgb: R.dictationAccent.dark)
     /// The aurora rising from the island's foot, first stop to last.
@@ -34,6 +36,8 @@ enum PagePalette {
     static let text = Color(nsColor: .orbit(R.textStrong))
     static let soft = Color(nsColor: .orbit(R.textSoft))
     static let quiet = Color(nsColor: .orbit(R.textQuiet))
+    /// Captions, headings and hints drawn in the page's ink, legible on its films too.
+    static let faint = Color(nsColor: .orbit(R.textFaint))
     static let card = Color(nsColor: .orbit(R.cardFill))
     static let hero = Color(nsColor: .orbit(R.heroGround))
     static let waveform = Color(nsColor: .orbit(R.waveformInk))
@@ -46,6 +50,8 @@ enum PagePalette {
     static let dictation = Color(nsColor: .orbit(R.dictationAccent))
     static let suggestion = Color(nsColor: .orbit(R.suggestionAccent))
     static let clipboard = Color(nsColor: .orbit(R.clipboardAccent))
+    /// The clipboard's amber when it is words rather than a mark.
+    static let clipboardInk = Color(nsColor: .orbit(R.clipboardInk))
     static let info = Color(nsColor: .orbit(R.infoAccent))
     static let primaryFill = Color(nsColor: .orbit(R.primaryFill))
     static let primaryInk = Color(nsColor: .orbit(R.primaryInk))

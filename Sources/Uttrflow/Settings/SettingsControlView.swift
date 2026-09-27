@@ -187,7 +187,7 @@ struct SettingsShortcutField: View {
                 if keys.isEmpty {
                     Text("None")
                         .font(.system(size: 12.5))
-                        .foregroundStyle(SettingsPalette.ink(0.5))
+                        .foregroundStyle(PagePalette.faint)
                 } else {
                     SettingsKeys(keys: keys)
                 }

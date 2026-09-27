@@ -157,7 +157,7 @@ struct MainNoticeBar: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(PagePalette.text.opacity(0.45))
+                            .foregroundStyle(PagePalette.faint)
                             .frame(width: 16, height: 16)
                             .contentShape(.rect)
                     }

@@ -67,7 +67,7 @@ struct PageTableHeader: View {
         }
         .font(.system(size: 10.5, weight: .semibold))
         .tracking(0.63)
-        .foregroundStyle(PagePalette.text.opacity(0.4))
+        .foregroundStyle(PagePalette.faint)
         .padding(.horizontal, PageMetrics.rowInset)
         .padding(.vertical, 10)
         .accessibilityHidden(true)

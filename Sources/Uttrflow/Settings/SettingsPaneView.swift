@@ -20,7 +20,7 @@ struct SettingsPaneView: View {
             if let empty = pane.emptySearch {
                 Text(empty)
                     .font(.system(size: 13))
-                    .foregroundStyle(SettingsPalette.ink(0.5))
+                    .foregroundStyle(PagePalette.faint)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 30)
             }
@@ -61,7 +61,7 @@ struct SettingsSectionLabel: View {
         Text(text.uppercased())
             .font(.system(size: 10.5, weight: .semibold))
             .tracking(0.84)
-            .foregroundStyle(SettingsPalette.ink(0.42))
+            .foregroundStyle(PagePalette.faint)
             .padding(.horizontal, 4)
             .accessibilityAddTraits(.isHeader)
     }
@@ -235,7 +235,7 @@ struct SettingsRowView: View {
             .font(.system(size: size))
             .foregroundStyle(
                 recordsHere && row.unavailability == nil
-                    ? SettingsPalette.dictationInk : SettingsPalette.ink(0.5)
+                    ? SettingsPalette.dictationInk : PagePalette.faint
             )
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -277,7 +277,7 @@ struct SettingsTidyExampleView: View {
             Text(label.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(isWritten ? SettingsPalette.dictationInk : SettingsPalette.ink(0.4))
+                .foregroundStyle(isWritten ? SettingsPalette.dictationInk : PagePalette.faint)
             Text(text)
                 .font(BrandFont.display(size: 14, weight: isWritten ? .medium : .regular))
                 .foregroundStyle(isWritten ? PagePalette.text : SettingsPalette.ink(0.6))

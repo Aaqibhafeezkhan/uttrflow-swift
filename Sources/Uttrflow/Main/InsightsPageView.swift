@@ -128,7 +128,7 @@ struct InsightsCalendarCard: View {
                 Text(calendar.title.uppercased())
                     .font(.system(size: 10.5, weight: .semibold))
                     .tracking(0.84)
-                    .foregroundStyle(PagePalette.text.opacity(0.42))
+                    .foregroundStyle(PagePalette.faint)
                 Spacer(minLength: 8)
                 legend
             }
@@ -136,7 +136,7 @@ struct InsightsCalendarCard: View {
                 ForEach(Array(calendar.weekdays.enumerated()), id: \.offset) { _, initial in
                     Text(initial)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(PagePalette.text.opacity(0.35))
+                        .foregroundStyle(PagePalette.faint)
                         .accessibilityHidden(true)
                 }
                 ForEach(0..<calendar.leadingBlanks, id: \.self) { _ in
@@ -168,7 +168,7 @@ struct InsightsCalendarCard: View {
             Text("more")
         }
         .font(.system(size: 11))
-        .foregroundStyle(PagePalette.text.opacity(0.5))
+        .foregroundStyle(PagePalette.faint)
         .accessibilityHidden(true)
     }
 }
@@ -187,7 +187,7 @@ struct InsightsDayTile: View {
             Text(day.number)
                 .font(.system(size: 10, weight: .medium))
                 .monospacedDigit()
-                .foregroundStyle(day.usesDeepInk ? InsightsPalette.deepInk : PagePalette.text.opacity(0.5))
+                .foregroundStyle(day.usesDeepInk ? InsightsPalette.deepInk : PagePalette.faint)
         }
         .help(day.detail)
         .accessibilityElement(children: .ignore)

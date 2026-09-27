@@ -111,7 +111,7 @@ struct SettingsDiagnosticsView: View {
                 Text(row.detail)
                     .font(.system(size: 12))
                     .foregroundStyle(
-                        row.state == .attention ? PagePalette.clipboard : SettingsPalette.ink(0.5)
+                        row.state == .attention ? PagePalette.clipboardInk : PagePalette.faint
                     )
                     .multilineTextAlignment(.trailing)
                     .fixedSize(horizontal: false, vertical: true)
@@ -136,7 +136,7 @@ struct SettingsDiagnosticsView: View {
                     .font(.system(size: 13.5))
                 Text("For a bug report; contains no transcripts")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(SettingsPalette.ink(0.5))
+                    .foregroundStyle(PagePalette.faint)
             }
             Spacer(minLength: 0)
             Button("Copy") { onIntent(presentation.copyAction.intent) }
@@ -187,7 +187,7 @@ struct SettingsDiagnosticsView: View {
                                     .monospacedDigit()
                                 Text(latency.caption)
                                     .font(.system(size: 11.5))
-                                    .foregroundStyle(SettingsPalette.ink(0.5))
+                                    .foregroundStyle(PagePalette.faint)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             GeometryReader { proxy in
@@ -223,7 +223,7 @@ struct SettingsDiagnosticsView: View {
                             Text(empty.title).font(.system(size: 13.5))
                             Text(empty.message)
                                 .font(.system(size: 11.5))
-                                .foregroundStyle(SettingsPalette.ink(0.5))
+                                .foregroundStyle(PagePalette.faint)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer(minLength: 0)
@@ -318,8 +318,8 @@ struct SettingsModelCardView: View {
     @ViewBuilder private var status: some View {
         switch card.state {
         case .good: SettingsStatusView(text: card.status)
-        case .attention: SettingsStatusView(text: card.status, tone: PagePalette.clipboard)
-        case .unknown: SettingsStatusView(text: card.status, tone: SettingsPalette.ink(0.5))
+        case .attention: SettingsStatusView(text: card.status, tone: PagePalette.clipboardInk)
+        case .unknown: SettingsStatusView(text: card.status, tone: PagePalette.faint)
         }
     }
 }

@@ -110,7 +110,7 @@ struct SettingsMenu: View {
                     .foregroundStyle(PagePalette.text)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(SettingsPalette.ink(0.5))
+                    .foregroundStyle(PagePalette.faint)
             }
             .padding(.horizontal, 10)
             .frame(height: 28)
@@ -235,7 +235,7 @@ struct SettingsChipView: View {
                 Button(action: onRemove) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(SettingsPalette.ink(0.5))
+                        .foregroundStyle(PagePalette.faint)
                         .frame(width: 14, height: 14)
                         .contentShape(.rect)
                 }
@@ -314,7 +314,7 @@ struct SettingsApplicationIcon: View {
                 .overlay(
                     Image(systemName: "app")
                         .font(.system(size: 13))
-                        .foregroundStyle(SettingsPalette.ink(0.5)))
+                        .foregroundStyle(PagePalette.faint))
         }
     }
 }

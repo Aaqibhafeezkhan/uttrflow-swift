@@ -100,7 +100,7 @@ struct SidebarView: View {
         Button(action: onToggle) {
             Image(systemName: "sidebar.left")
                 .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(IslandPalette.ink.opacity(0.55))
+                .foregroundStyle(IslandPalette.quiet)
                 .frame(width: 26, height: 22)
                 .contentShape(.rect)
         }
@@ -116,7 +116,7 @@ struct SidebarView: View {
                 Text(title.uppercased())
                     .font(.system(size: 10.5, weight: .semibold))
                     .tracking(1.05)
-                    .foregroundStyle(IslandPalette.ink.opacity(0.4))
+                    .foregroundStyle(IslandPalette.quiet)
                     .padding(.horizontal, 12)
                     .padding(.top, 22)
                     .padding(.bottom, 8)
@@ -298,7 +298,7 @@ struct SidebarAccountCard: View {
                                 Text(version.tag)
                                     .font(.system(size: 12))
                                     .monospacedDigit()
-                                    .foregroundStyle(IslandPalette.ink.opacity(0.55))
+                                    .foregroundStyle(IslandPalette.quiet)
                                     .lineLimit(1)
                             }
                         }

@@ -72,7 +72,7 @@ enum MenuBarColour {
     static let keycap = Color(nsColor: .orbit(M.keycap))
     static let hover = Color(nsColor: .orbit(M.hover))
     static let dictation = Color(nsColor: .orbit(R.dictationAccent))
-    static let amber = Color(nsColor: .orbit(R.clipboardAccent))
+    static let amber = Color(nsColor: .orbit(R.clipboardInk))
     static let live = Color(rgb: BrandPalette.Semantic.recording)
     /// The progress fill, aurora blue into dictation teal.
     static let progress = LinearGradient(
