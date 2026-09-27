@@ -222,7 +222,7 @@ struct DestructiveCommandTests {
         arguments: [
             "echo x > notes.txt", "echo \"\" > notes.txt", "> notes.txt", "sort data.csv >| data.csv",
             "ls 1> listing.txt", "make &> build.log", "echo x >notes.txt", "cat a.txt > b.txt && ls",
-            "make 2>&1 | tee build.log",
+            "make 2>&1 | tee build.log", "make >& build.log", "make >&build.log", "ls -la >&listing.txt && ls",
         ])
     func truncatingRedirectionIsDestructive(_ line: String) {
         #expect(
@@ -236,6 +236,7 @@ struct DestructiveCommandTests {
             "make 2> errors.log", "make 2>&1 | tee", "echo x >&2", "make > /dev/null",
             "make > /dev/null 2>&1", "echo x > /dev/stderr", "make &>> build.log", "sort < data.csv",
             "grep '>' notes.txt", "make | tee -a build.log", "make | tee --append build.log", "make | tee",
+            "make >&2", "make 1>&-", "make >& /dev/null", "make >>& build.log",
         ])
     func harmlessRsyncAndRedirectionAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
