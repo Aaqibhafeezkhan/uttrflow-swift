@@ -29,6 +29,8 @@ public enum DockModelSetup: Sendable, Equatable {
     case loading(Double?)
     /// The load ended without a model that can transcribe.
     case failed
+    /// Incomplete, or failed to load twice, so it must be downloaded again.
+    case broken
     /// Not on disk.
     case missing
 
@@ -37,7 +39,7 @@ public enum DockModelSetup: Sendable, Equatable {
         switch self {
         case .downloading, .loading: nil
         case .failed: "Retry"
-        case .missing: "Download"
+        case .broken, .missing: "Download"
         }
     }
 
@@ -228,6 +230,11 @@ public enum DictationPresenter {
                 accessibilityLabel:
                     "The speech model didn’t load. Dictation can’t start without it. Try loading it again.",
                 setup: .failed)
+        case .broken:
+            DockPresentation(
+                symbolName: "exclamationmark.triangle", primaryLine: load.line, secondaryLine: load.detail,
+                showsWaveform: false, showsProgress: false, isRecording: false,
+                action: .downloadSpeechModel, accessibilityLabel: load.accessibilityLabel, setup: .broken)
         case .missing:
             DockPresentation(
                 symbolName: "exclamationmark.triangle", primaryLine: "Speech model needed",

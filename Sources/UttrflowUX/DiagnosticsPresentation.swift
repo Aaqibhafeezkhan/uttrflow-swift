@@ -154,6 +154,8 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
     public let transformerAvailability: [TransformerKind: Bool]
     /// Absent until the store has been consulted.
     public let speechModel: DiagnosticsModelPresence?
+    /// Whether the speech model can dictate, from the same state Home, the menu bar and the floating button read.
+    public let speechReadiness: SpeechModelReadiness?
     /// What macOS has granted, for every permission asked about.
     public let permissions: [PermissionKind: PermissionStatus]
     /// Every stage timing recorded since the app started.
@@ -173,6 +175,7 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
         speechInUse: SpeechEngineKind? = nil,
         transformerAvailability: [TransformerKind: Bool] = [:],
         speechModel: DiagnosticsModelPresence? = nil,
+        speechReadiness: SpeechModelReadiness? = nil,
         permissions: [PermissionKind: PermissionStatus] = [:],
         measurements: [StageMeasurement] = [],
         cleaning: CleaningRecord? = nil,
@@ -184,6 +187,7 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
         self.speechInUse = speechInUse
         self.transformerAvailability = transformerAvailability
         self.speechModel = speechModel
+        self.speechReadiness = speechReadiness
         self.permissions = permissions
         self.measurements = measurements
         self.cleaning = cleaning
@@ -331,15 +335,54 @@ public enum DiagnosticsPresenter {
                 name: name, chips: chips + [onDevice], status: status, state: state)
         }
         let downloaded = name(for: SpeechEngineKind.whisperKit)
-        guard let model = snapshot.speechModel else {
+        let missing: DiagnosticsState = inUse ? .attention : .unknown
+        switch speechModelCondition(snapshot, inUse: inUse) {
+        case .unchecked:
             return card(downloaded, [], "Not checked yet", .unknown)
+        case .notInstalled:
+            return card(notYetDownloaded, [], "Not downloaded", missing)
+        case .incomplete:
+            return card(notYetDownloaded, [], "Incomplete", missing)
+        case .downloading:
+            return card(notYetDownloaded, [], "Downloading", .unknown)
+        case .loading:
+            return card(downloaded, facts(snapshot.speechModel, locale: locale), "Loading", .unknown)
+        case .failed:
+            return card(downloaded, facts(snapshot.speechModel, locale: locale), "Failed to load", .attention)
+        case .ready:
+            return card(
+                downloaded, facts(snapshot.speechModel, locale: locale), inUse ? "In use" : "Ready", .good)
         }
-        guard model.isInstalled else {
-            return card(notYetDownloaded, [], "Not downloaded", inUse ? .attention : .unknown)
-        }
+    }
+
+    /// The model's size and languages as card chips, empty until the store has been read.
+    private static func facts(_ model: DiagnosticsModelPresence?, locale: Locale) -> [String] {
+        guard let model else { return [] }
         let size = model.bytesOnDisk.map { [MainFormatting.bytes($0, locale: locale)] } ?? []
-        let languages = model.isMultilingual ? "Every language" : "English"
-        return card(downloaded, size + [languages], inUse ? "In use" : "Ready", .good)
+        return size + [model.isMultilingual ? "Every language" : "English"]
+    }
+
+    /// Where the downloaded recogniser stands, as Diagnostics tells it.
+    enum SpeechModelCondition: Equatable {
+        case unchecked, notInstalled, incomplete, downloading, loading, ready
+        /// It failed to load, with the fix every other surface offers for it.
+        case failed(RecoveryAction)
+    }
+
+    /// Reads the shared readiness first and the files on disk second, so Diagnostics never contradicts Home.
+    static func speechModelCondition(_ snapshot: DiagnosticsSnapshot, inUse: Bool) -> SpeechModelCondition {
+        switch snapshot.speechReadiness {
+        case .incomplete: return .incomplete
+        case .notInstalled: return .notInstalled
+        case .downloading: return .downloading
+        // A load, and how it went, is about the recogniser in use, which may not be this one.
+        case .loading where inUse: return .loading
+        case .loadFailed where inUse: return .failed(.retry)
+        case .loadFailedAgain where inUse: return .failed(.downloadSpeechModel)
+        case .ready, .loading, .loadFailed, .loadFailedAgain, nil: break
+        }
+        guard let model = snapshot.speechModel else { return .unchecked }
+        return model.isInstalled ? .ready : .notInstalled
     }
 
     /// The downloadable recogniser's name while its files are missing, so it never claims to be downloaded.
@@ -515,7 +558,9 @@ public enum DiagnosticsPresenter {
 
         let recogniser = snapshot.speechInUse ?? snapshot.engines.speech
         // The downloaded recogniser cannot run without its files, so it is not green while they are missing.
-        let lacksModel = recogniser == .whisperKit && snapshot.speechModel?.isInstalled == false
+        let condition = speechModelCondition(snapshot, inUse: recogniser == .whisperKit)
+        let lacksModel =
+            recogniser == .whisperKit && (condition == .notInstalled || condition == .incomplete)
         let speech = DiagnosticsRow(
             title: "Speech",
             detail: lacksModel ? notYetDownloaded : name(for: recogniser),
@@ -680,28 +725,37 @@ public enum DiagnosticsPresenter {
 
     // MARK: - What is on the disk
 
-    /// The speech model row: not checked, not downloaded, or its size and languages.
+    /// The speech model row: not checked, not downloaded, incomplete, loading, failed to load, or its size and languages.
     static func storageRows(for snapshot: DiagnosticsSnapshot, locale: Locale) -> [DiagnosticsRow] {
-        guard let model = snapshot.speechModel else {
-            return [DiagnosticsRow(title: "Speech model", detail: "Not checked yet", state: .unknown)]
-        }
-        guard model.isInstalled else {
-            // Only the downloaded recogniser needs these files, so its absence is a problem only for it.
-            let needed = (snapshot.speechInUse ?? snapshot.engines.speech) == .whisperKit
-            return [
+        // Only the downloaded recogniser needs these files, so their absence is a problem only for it.
+        let needed = (snapshot.speechInUse ?? snapshot.engines.speech) == .whisperKit
+        let row = { (detail: String, state: DiagnosticsState, fix: RecoveryAction?) in
+            [
                 DiagnosticsRow(
-                    title: "Speech model", detail: "Not downloaded",
-                    state: needed ? .attention : .good,
-                    action: action(.downloadSpeechModel))
+                    title: "Speech model", detail: detail, state: state, action: fix.map { Self.action($0) })
             ]
         }
-
-        let languages = model.isMultilingual ? "every language" : "English"
-        let size = model.bytesOnDisk.map { "\(MainFormatting.bytes($0, locale: locale)), " } ?? ""
-        return [
-            DiagnosticsRow(
-                title: "Speech model", detail: "\(size)on this Mac, \(languages)", state: .good)
-        ]
+        let onDisk = snapshot.speechModel.map { model in
+            let languages = model.isMultilingual ? "every language" : "English"
+            let size = model.bytesOnDisk.map { "\(MainFormatting.bytes($0, locale: locale)), " } ?? ""
+            return "\(size)on this Mac, \(languages)"
+        }
+        switch speechModelCondition(snapshot, inUse: needed) {
+        case .unchecked:
+            return row("Not checked yet", .unknown, nil)
+        case .notInstalled:
+            return row("Not downloaded", needed ? .attention : .good, .downloadSpeechModel)
+        case .incomplete:
+            return row("Incomplete, download it again", needed ? .attention : .good, .downloadSpeechModel)
+        case .downloading:
+            return row("Downloading", .unknown, nil)
+        case .loading:
+            return row([onDisk, "loading"].compactMap(\.self).joined(separator: ", "), .unknown, nil)
+        case .failed(let fix):
+            return row("On this Mac, but it failed to load", .attention, fix)
+        case .ready:
+            return row(onDisk ?? "On this Mac", .good, nil)
+        }
     }
 
     // MARK: - Copying it out

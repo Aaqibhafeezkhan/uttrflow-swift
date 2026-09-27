@@ -35,7 +35,7 @@ struct DockSetupView: View {
                 }
             }
             .help(presentation.accessibilityLabel)
-        case .failed:
+        case .failed, .broken:
             warning(accent: .dockSetupWarning, badgeOpacity: 0.2, width: DockSetupMetrics.failedWidth)
         case .missing:
             warning(accent: .dockSetupAccent, badgeOpacity: 0.18, width: DockSetupMetrics.missingWidth)

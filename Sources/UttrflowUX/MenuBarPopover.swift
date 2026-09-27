@@ -134,7 +134,7 @@ extension MenuBarPresenter {
         return .hint(hint(for: state))
     }
 
-    /// The four speech-model states, each with the words and the one action its design gives it.
+    /// Each speech-model state, with the words and the one action its design gives it.
     static func setupStatus(
         for state: MenuBarState, statusLine: String, fix: MenuBarCommand?
     ) -> MenuBarStatus? {
@@ -153,6 +153,10 @@ extension MenuBarPresenter {
             return MenuBarStatus(
                 title: "Model didn’t load", detail: "Nothing was lost", emphasis: .attention,
                 action: fix, actionEmphasis: .attention)
+        case .loadFailedAgain, .incomplete:
+            return MenuBarStatus(
+                title: "Model is damaged", detail: "Download it again to repair it",
+                emphasis: .attention, action: fix, actionEmphasis: .attention)
         case .notInstalled:
             let offline = "works offline after"
             return MenuBarStatus(
@@ -168,9 +172,14 @@ extension MenuBarPresenter {
         if let action = state.failure?.action {
             return MenuBarCommand(title: menuTitle(for: action), intent: .recover(action.recovery))
         }
-        guard setupAction(for: state.speechModel) != nil else { return nil }
-        let title = state.speechModel == .loadFailed ? "Try again" : "Download"
-        return MenuBarCommand(title: title, intent: .recover(.downloadSpeechModel))
+        guard let setup = setupAction(for: state.speechModel) else { return nil }
+        let title =
+            switch state.speechModel {
+            case .loadFailed: "Try again"
+            case .loadFailedAgain, .incomplete: "Download again"
+            case .ready, .downloading, .loading, .notInstalled: "Download"
+            }
+        return MenuBarCommand(title: title, intent: .recover(setup.recovery))
     }
 
     /// An update's bar: a fraction while it downloads, sliding while it checks or installs.

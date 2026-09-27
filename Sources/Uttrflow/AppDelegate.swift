@@ -74,6 +74,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var speechLoadTicker: Task<Void, Never>?
     /// The recogniser the pipeline transcribes with, which Diagnostics names rather than the setting.
     private var speechInUse: SpeechEngineKind?
+    /// Whether the last load already failed, so a second failure offers a download rather than another reload.
+    private var speechLoadFailedBefore = false
+
+    /// What the model is when it cannot be loaded from disk: never downloaded, or downloaded only in part.
+    private var speechModelAbsence: SpeechModelReadiness {
+        modelStore.isIncomplete(.default) ? .incomplete : .notInstalled
+    }
 
     /// The load as every dictation surface tells it, read from ``speechReadiness`` and nothing else.
     private var speechModelLoad: SpeechModelLoad? {
@@ -355,6 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func repairSpeechModel() {
         try? modelStore.remove(.default)
         speechReadiness = .notInstalled
+        speechLoadFailedBefore = false
         probeSpeechModel()
         refreshSpeechModelSurfaces()
         show(.onboarding)
@@ -362,8 +370,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Loads a model that setup has just installed, so dictation works without a relaunch.
     private func loadSpeechModelIfItArrived() {
-        guard speechReadiness == .notInstalled || speechReadiness == .loadFailed else { return }
-        loadSpeechModel()
+        switch speechReadiness {
+        case .notInstalled, .incomplete, .loadFailed: loadSpeechModel()
+        case .ready, .downloading, .loading, .loadFailedAgain: return
+        }
     }
 
     /// Shows the download everywhere a person might try to dictate, redrawing once per whole percent.
@@ -381,7 +391,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Loads the model once its download ends, whether or not a window is still showing it.
     private func speechModelDownloadEnded() {
-        if case .downloading = speechReadiness { speechReadiness = .notInstalled }
+        if case .downloading = speechReadiness { speechReadiness = speechModelAbsence }
+        // New files deserve a reload before they are called broken.
+        speechLoadFailedBefore = false
         probeSpeechModel()
         loadSpeechModelIfItArrived()
         refreshSpeechModelSurfaces()
@@ -392,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         by load: @escaping @MainActor (DictationPipeline) async -> Void = { await $0.prepare() }
     ) {
         guard modelStore.isInstalled(.default) else {
-            speechReadiness = .notInstalled
+            speechReadiness = speechModelAbsence
             // Nothing to load, so nothing for an automatic update check to compete with.
             updates.modelLoadingSettled()
             return
@@ -415,15 +427,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             await load(pipeline)
             guard let self else { return }
             speechInUse = await pipeline.speechKind
-            let isReady = await pipeline.isReady
-            speechReadiness =
-                isReady ? .ready : modelStore.isInstalled(.default) ? .loadFailed : .notInstalled
+            speechReadiness = settle(isReady: await pipeline.isReady)
             speechLoadTicker?.cancel()
             speechLoadTicker = nil
             refreshSpeechModelSurfaces()
             // The load ended, one way or another; an automatic update check may now start.
             updates.modelLoadingSettled()
         }
+    }
+
+    /// Where a load that has ended leaves the model: ready, missing files, or failed once or twice.
+    private func settle(isReady: Bool) -> SpeechModelReadiness {
+        let settled = SpeechModelReadiness.settled(
+            isReady: isReady, isInstalled: modelStore.isInstalled(.default),
+            isIncomplete: modelStore.isIncomplete(.default), failedBefore: speechLoadFailedBefore)
+        switch settled {
+        case .ready: speechLoadFailedBefore = false
+        case .loadFailed, .loadFailedAgain: speechLoadFailedBefore = true
+        case .downloading, .loading, .incomplete, .notInstalled: break
+        }
+        return settled
     }
 
     /// Redraws everywhere a person might try to dictate, from the load as it stands.
@@ -1174,7 +1197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch speechReadiness {
         case .ready: return .ready
         case .loading: return .unavailable(.modelLoading)
-        case .downloading, .loadFailed, .notInstalled: return .unavailable(.modelNotReady(percent: nil))
+        case .downloading, .loadFailed, .loadFailedAgain, .incomplete, .notInstalled:
+            return .unavailable(.modelNotReady(percent: nil))
         }
     }
 
@@ -1982,7 +2006,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for: DiagnosticsSnapshot(
                     engines: settings.engines, speechInUse: speechInUse,
                     transformerAvailability: transformerAvailability,
-                    speechModel: speechModelPresence, permissions: knownPermissions,
+                    speechModel: speechModelPresence, speechReadiness: speechReadiness,
+                    permissions: knownPermissions,
                     measurements: measurements, cleaning: lastCleaning,
                     suggestionModel: suggestionModel, version: .ofThisBuild,
                     machine: MachineDescription.current)),
@@ -2458,7 +2483,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .retry:
             // A toggle, not a synthesised keypress with no release to close it.
             Task { [weak self] in await self?.controller?.toggleFromControl() }
-        case .downloadSpeechModel where speechReadiness == .loadFailed:
+        case .downloadSpeechModel where speechReadiness == .loadFailed || speechReadiness == .loadFailedAgain:
             repairSpeechModel()
         case .downloadSpeechModel:
             // Onboarding's setup page is the one surface that downloads the model and shows progress.

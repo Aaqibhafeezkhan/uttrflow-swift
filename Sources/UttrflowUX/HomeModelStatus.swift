@@ -56,7 +56,7 @@ public struct HomeModelStatus: Sendable, Equatable {
             accessibilityLabel: "Setting up. Downloading the speech model, \(percent) percent.")
     }
 
-    /// The model on disk and loading, or failed to load, or not on disk at all.
+    /// The model on disk and loading, failed to load, damaged, or not on disk at all.
     public static func load(_ load: SpeechModelLoad) -> HomeModelStatus {
         switch load {
         case .loading:
@@ -75,6 +75,12 @@ public struct HomeModelStatus: Sendable, Equatable {
                 tone: .warning, progress: nil,
                 action: MainAction(title: "Try again", intent: .recover(.retry)), actionTone: .warning,
                 accessibilityLabel: "\(load.status). Nothing was lost. Try loading it again.")
+        case .broken:
+            let repair = "Download it again to repair it."
+            return HomeModelStatus(
+                title: load.status, subtitle: repair, tone: .warning, progress: nil,
+                action: MainAction(title: "Download again", intent: .recover(.downloadSpeechModel)),
+                actionTone: .warning, accessibilityLabel: "\(load.status). \(repair)")
         case .missing:
             return missing(bytes: nil)
         }
