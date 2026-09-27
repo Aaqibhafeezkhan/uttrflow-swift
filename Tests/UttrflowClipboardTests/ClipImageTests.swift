@@ -71,6 +71,23 @@ struct ClipImageTests {
         #expect(await folder.store.clips(keeping: folder.retention).count == 1)
     }
 
+    @Test("the picture existence check does not need to read its bytes")
+    func pictureFileExists() async throws {
+        let folder = try TemporaryFolder()
+        let noticed = NoticedClip(
+            clip: Clip(text: "", kind: .image, copiedAt: Date()),
+            picture: (Self.bytes, 10, 10))
+        _ = try await folder.store.record(noticed, keeping: folder.retention)
+        let image = try #require(await folder.store.clips(keeping: folder.retention).first?.image)
+
+        #expect(await folder.store.hasImage(for: image))
+
+        try FileManager.default.removeItem(
+            at: await folder.store.imagesFolder.appending(path: image.file))
+
+        #expect(!(await folder.store.hasImage(for: image)))
+    }
+
     @Test("copying the same picture again restores a file that has gone, keeping the clip as it was")
     func repeatRestoresTheFile() async throws {
         let folder = try TemporaryFolder()

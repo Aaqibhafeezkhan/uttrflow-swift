@@ -1269,7 +1269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         var missing: Set<Clip.ID> = []
         for clip in clips {
             guard let image = clip.image else { continue }
-            if await clipboard.imageData(for: image) == nil { missing.insert(clip.id) }
+            if !(await clipboard.hasImage(for: image)) { missing.insert(clip.id) }
         }
         return missing
     }

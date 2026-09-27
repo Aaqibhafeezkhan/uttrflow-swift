@@ -330,6 +330,13 @@ public actor ClipboardStore {
         SHA256.hash(data: data).prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Whether a clip's picture file is still present without opening the file.
+    public func hasImage(for image: ClipImage) -> Bool {
+        FileManager.default.fileExists(
+            atPath: imagesFolder.appending(path: image.file, directoryHint: .notDirectory)
+                .path(percentEncoded: false))
+    }
+
     /// The bytes of a clip's picture, or `nil` when the file has gone from under the app.
     public func imageData(for image: ClipImage) -> Data? {
         try? Data(
