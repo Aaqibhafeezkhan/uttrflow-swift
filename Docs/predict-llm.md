@@ -102,7 +102,7 @@ what follows is what each set out to do.
   wired as gate 2 of the `Verifier`. The turn budget is 8 000 ms and the verification budget
   7 000 ms, so a slow answer is drawn rather than dropped.
 - **C — Generation — done.** When the corpus and the machine are empty the model writes the single
-  most likely line, which is drawn inline; the alternatives are fetched behind it and open on ↓.
+  most likely line, which is drawn inline; the alternatives are fetched behind it and open on ⌥↓.
 - **D — Embeddings.** Store a vector per entry (a new column, brute-force cosine over the few
   thousand entries a surface holds) so a phrase close in meaning is recalled, not only one close in
   spelling. (The earlier decision against embeddings was about the dictation dictionary, a

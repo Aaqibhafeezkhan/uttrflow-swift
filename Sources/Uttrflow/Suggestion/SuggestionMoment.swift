@@ -30,7 +30,8 @@ enum SuggestionMoment {
             hasSelection: snapshot.hasSelection, isComposing: snapshot.isComposing,
             isSecure: snapshot.isSecure, isProse: snapshot.isProse,
             millisecondsSinceKeystroke: millisecondsSinceKeystroke,
-            canDraw: snapshot.placement == .inlineGhost, markedText: snapshot.markedText)
+            canDraw: snapshot.placement == .inlineGhost, markedText: snapshot.markedText,
+            isCommandLine: TerminalApplications.contains(snapshot.bundleIdentifier))
     }
 
     /// Where in the field the line sits: the text before it, exactly as much as the model is shown.

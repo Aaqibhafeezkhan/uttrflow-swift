@@ -39,7 +39,8 @@ public enum CaptureGate {
         case .refuseQuietly: return .consentDeclined
         case .proceed: break
         }
-        guard text.count >= minimumLength else { return .tooShort }
+        // A list marker alone, such as `- ` or `1.` ending a list, is too short to be an item.
+        guard text.count >= minimumLength, !ListMarker.isAlone(text) else { return .tooShort }
         if looksLikeSensitiveValue(text, from: reading) { return .sensitiveValue }
         if looksLikeSecret(text) { return .looksLikeSecret }
         // A destructive command is never stored, so it can never be one keystroke from running.
