@@ -41,6 +41,63 @@ enum CompletionText {
         return changed ? typed + String(kept) : line
     }
 
+    /// The fewest words in a row a continuation must share with the screen to be a copy rather than the person's own line.
+    static let copiedRun = 5
+
+    /// Whether the continuation repeats a run of screen words the person's own lines do not hold, counting only words the typed text does not finish.
+    static func copiesContext(_ line: String, typed: String, context: [String], ownLines: [String]) -> Bool {
+        let added = words(of: line).filter { $0.end > typed.count }.map(\.text)
+        guard added.count >= copiedRun else { return false }
+        let screen = Set(
+            context.flatMap { $0.split(whereSeparator: \.isNewline) }.flatMap {
+                runs(of: words(of: String($0)).map(\.text))
+            })
+        let own = Set(ownLines.flatMap { runs(of: words(of: $0).map(\.text)) })
+        return runs(of: added).contains { screen.contains($0) && !own.contains($0) }
+    }
+
+    /// Every run of `copiedRun` words in a row, each joined by one space.
+    private static func runs(of words: [String]) -> [String] {
+        guard words.count >= copiedRun else { return [] }
+        return (0...(words.count - copiedRun)).map { words[$0..<($0 + copiedRun)].joined(separator: " ") }
+    }
+
+    /// The words of a text lowercased, each with the character offset it ends at.
+    private static func words(of text: String) -> [(text: String, end: Int)] {
+        var found: [(text: String, end: Int)] = []
+        var word = ""
+        for (offset, character) in text.enumerated() {
+            if character.isLetter || character.isNumber || character == "'" || character == "’" {
+                word.append(contentsOf: character.lowercased())
+            } else if !word.isEmpty {
+                found.append((word, offset))
+                word = ""
+            }
+        }
+        if !word.isEmpty { found.append((word, text.count)) }
+        return found
+    }
+
+    /// The lines a pass keeps once each is unsigned; prose that copies the screen is dropped.
+    static func finished(_ lines: [String], typed: String, in situation: GenerationSituation) -> [String] {
+        let register = Register.infer(from: situation, typed: typed)
+        let context = contextNeverCopied(in: situation)
+        var seen: Set<String> = []
+        return lines.compactMap { line in
+            guard
+                let kept = SignOff.unsigned(
+                    line, typed: typed, screen: context, ownLines: situation.recentLines)
+            else { return nil }
+            // A command or a query reuses the paths and names on screen, so only prose is held to its own words.
+            if register.endsAtSentence {
+                guard !copiesContext(kept, typed: typed, context: context, ownLines: situation.recentLines)
+                else { return nil }
+            }
+            guard seen.insert(kept).inserted else { return nil }
+            return kept
+        }
+    }
+
     /// The comma-separated parts of one screen label long enough to be a label's own, as they compare.
     private static func labelParts(of label: String) -> [String] {
         label.split(separator: ", ").map { fold(String($0)) }.filter { $0.count >= shortestLabelPart }

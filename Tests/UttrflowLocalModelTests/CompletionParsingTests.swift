@@ -229,6 +229,78 @@ struct ContextNeverCopiedTests {
     }
 }
 
+/// A chat whose last message a reply could echo, with this person's own short replies.
+private let deckChat = GenerationSituation(
+    application: "Chat", field: "Message", windowTitle: "Sam",
+    surroundings: """
+        Sam: morning, quick one
+        Me: hey, what's up
+        Sam: the client call moved to 3
+        Sam: Can you send the deck by Friday?
+        """,
+    recentLines: ["hey, what's up", "on it", "sounds good", "will do"], isMultiline: true)
+
+@Suite("A suggestion never copies a run of screen words")
+struct CopiedRunTests {
+    @Test("A reply that repeats the other person's last message is refused on either model's path")
+    func anEchoedMessageIsRefused() {
+        let context = CompletionText.contextNeverCopied(in: deckChat)
+        #expect(
+            CompletionText.copiesContext(
+                "Can you send the deck by Friday?", typed: "Can you", context: context, ownLines: []))
+        #expect(
+            CompletionText.finished(["Can you send the deck by Friday?"], typed: "Can you", in: deckChat)
+                .isEmpty)
+        // A word the typed text only began still counts as the model's, so a mid-word cut is no way round it.
+        #expect(
+            CompletionText.finished(["Can you send the deck by Friday?"], typed: "Can you se", in: deckChat)
+                .isEmpty)
+    }
+
+    @Test("Fewer than five words in a row, or words the person typed themselves, are not a copy")
+    func shortRunsAndTypedWordsAreKept() {
+        let context = CompletionText.contextNeverCopied(in: deckChat)
+        #expect(
+            !CompletionText.copiesContext(
+                "Can you send the deck later", typed: "Can you", context: context, ownLines: []))
+        #expect(
+            !CompletionText.copiesContext(
+                "Can you send the deck by Friday?", typed: "Can you send the deck", context: context,
+                ownLines: []))
+        #expect(
+            CompletionText.finished(["yes I can send the deck by monday"], typed: "yes I", in: deckChat)
+                == ["yes I can send the deck by monday"])
+    }
+
+    @Test("A run the person has written here before is theirs to repeat")
+    func aRunInTheirOwnLinesIsKept() {
+        let context = CompletionText.contextNeverCopied(in: deckChat)
+        #expect(
+            !CompletionText.copiesContext(
+                "Can you send the deck by Friday?", typed: "Can you", context: context,
+                ownLines: ["can you send the deck by friday"]))
+    }
+
+    @Test("A command may reuse a path the screen shows, however many words it splits into")
+    func aCommandMayReuseTheScreen() {
+        let shell = GenerationSituation(
+            application: "Terminal", preceding: "$ ls projects/uttrflow/app/Sources/Login/Session",
+            recentLines: [
+                "git commit -m 'fix: ship it'", "ls -la ~/src/*.swift", "docker compose -f ./a.yml up -d",
+            ])
+        let line = "cd projects/uttrflow/app/Sources/Login/Session"
+        #expect(CompletionText.finished([line], typed: "cd ", in: shell) == [line])
+    }
+
+    @Test("A run is read within one line of the screen, never across two")
+    func runsDoNotCrossLines() {
+        #expect(
+            !CompletionText.copiesContext(
+                "ok we moved to 3 sam the deck", typed: "ok", context: ["we moved to 3\nSam: the deck"],
+                ownLines: []))
+    }
+}
+
 /// A mail the person is replying to, signed by its sender.
 private let incoming =
     "From: Sam\nHi, could you share the invoice for August when you get a chance? Thanks, Sam"

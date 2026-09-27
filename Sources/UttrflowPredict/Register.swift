@@ -114,6 +114,9 @@ public struct Register: Sendable, Equatable {
         return isConversational ? max(budget, Self.replyTokens) : budget
     }
 
+    /// Whether a line here is prose, a reply or a document's sentence, which ends at its first sentence end.
+    public var endsAtSentence: Bool { !writesAddresses && symbolShare <= Self.symbolicShare }
+
     /// The facts as short phrases the model reads, so it matches the register instead of guessing it.
     public var hints: [String] {
         var hints = [isMultiline ? "a multi-line field" : "a single-line field"]
