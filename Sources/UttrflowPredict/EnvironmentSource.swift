@@ -64,10 +64,12 @@ public actor EnvironmentIndex {
     /// The longest a listing that keeps failing is left alone, so a program that never answers is asked rarely.
     public static let longestBackoffInSeconds = 600.0
 
-    /// Values and the moment they stop being believed; a failed read is remembered too, so it is not repeated every keystroke.
+    /// The last answer, when it stops being believed, and when the machine is next asked; a failed read is remembered too, so it is not repeated every keystroke.
     private struct Cached {
         let values: [String]?
         let expires: Date
+        /// When the machine is next asked, which a failed read puts off without touching the answer before it.
+        let retry: Date
         /// How many reads in a row came back with nothing, which is what the backoff doubles on.
         let failures: Int
     }
@@ -106,7 +108,7 @@ public actor EnvironmentIndex {
         // A machine-wide answer is kept under one key, or every directory pays for its own PATH scan.
         let key = Key(kind: kind, directory: kind.isMachineWide ? "" : directory)
         let entry = cached[key]
-        if entry.map({ $0.expires <= now }) ?? true { refresh(key, now: now) }
+        if entry.map({ $0.retry <= now }) ?? true { refresh(key, now: now) }
         return entry?.values
     }
 
@@ -128,12 +130,19 @@ public actor EnvironmentIndex {
         }
     }
 
-    /// Believes an answer for the kind's lifetime, and leaves a read that keeps failing alone for longer each time.
+    /// Believes an answer for the kind's lifetime; a failed read keeps the answer before it and is retried later each time.
     private func record(_ key: Key, values: [String]?, now: Date) {
-        let failures = values == nil ? (cached[key]?.failures ?? 0) + 1 : 0
-        cached[key] = Cached(
-            values: values, expires: now.addingTimeInterval(Self.lifetime(of: key.kind, failures: failures)),
-            failures: failures)
+        let previous = cached[key]
+        if let values {
+            let expires = now.addingTimeInterval(key.kind.lifetimeInSeconds)
+            cached[key] = Cached(values: values, expires: expires, retry: expires, failures: 0)
+        } else {
+            let failures = (previous?.failures ?? 0) + 1
+            cached[key] = Cached(
+                values: previous?.values, expires: previous?.expires ?? now,
+                retry: now.addingTimeInterval(Self.lifetime(of: key.kind, failures: failures)),
+                failures: failures)
+        }
         refreshing[key] = nil
     }
 

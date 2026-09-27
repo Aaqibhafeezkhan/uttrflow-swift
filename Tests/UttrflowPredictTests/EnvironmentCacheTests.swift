@@ -104,3 +104,40 @@ struct EnvironmentSlowReadTests {
         #expect(await reader.reads == 1, "the answer is believed for its full lifetime from when it landed")
     }
 }
+
+/// A machine that answers each read with the next of a script, repeating the last once it runs out.
+private actor ScriptedEnvironment: EnvironmentReading {
+    private var answers: [[String]?]
+    private(set) var reads = 0
+
+    init(_ answers: [[String]?]) { self.answers = answers }
+
+    func values(of kind: EnvironmentKind, in directory: String) async -> [String]? {
+        reads += 1
+        return answers.count > 1 ? answers.removeFirst() : answers.first ?? nil
+    }
+}
+
+@Suite("What a failed or slow read does to the answer before it")
+struct EnvironmentFailedReadTests {
+    static let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @Test("one failed read keeps the last good listing, and only puts off the next read")
+    func aFailedReadKeepsTheLastAnswer() async {
+        let reader = ScriptedEnvironment([["git", "ls"], nil])
+        let index = EnvironmentIndex(reader: reader)
+        let lifetime = EnvironmentIndex.programLifetimeInSeconds
+
+        _ = await index.values(of: .executable, in: "/one", now: Self.now)
+        await index.settle()
+        let stale = Self.now.addingTimeInterval(lifetime + 0.5)
+        #expect(await index.values(of: .executable, in: "/one", now: stale) == ["git", "ls"])
+        await index.settle()
+        #expect(await reader.reads == 2, "the stale answer asked the machine again, and that read failed")
+
+        let afterFailure = stale.addingTimeInterval(0.5)
+        #expect(await index.values(of: .executable, in: "/one", now: afterFailure) == ["git", "ls"])
+        await index.settle()
+        #expect(await reader.reads == 2, "the failure backs off the retry, not the answer")
+    }
+}
