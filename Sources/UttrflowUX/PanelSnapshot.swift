@@ -26,7 +26,7 @@ public enum PanelScope: String, Sendable, Equatable, CaseIterable, Codable {
     /// What the tab is drawn with; ``uttrflow`` uses the mark itself, since no SF Symbol says "this app".
     public var glyph: PanelTabGlyph {
         switch self {
-        case .history: .symbol("doc.on.clipboard")
+        case .history: .symbol("clipboard")
         case .uttrflow: .brandMark
         // A pin, not a star: the row draws a pin for the same idea, and a star means "favourite" here.
         case .pinned: .symbol("pin")

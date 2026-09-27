@@ -79,6 +79,30 @@ struct PanelThumbnailsTests {
         #expect(counter.files == [file])
     }
 
+    @Test("a view starts from the cached picture and a miss is awaited, not polled")
+    func pictureIsAwaited() async {
+        let picture = Self.bitmap()
+        let (thumbnails, counter) = thumbnails([file: picture])
+
+        #expect(thumbnails.cached(file) == nil)
+        #expect(await thumbnails.picture(for: file) === picture)
+        #expect(thumbnails.cached(file) === picture)
+        #expect(await thumbnails.picture(for: file) === picture)
+        #expect(counter.calls == 1)
+    }
+
+    /// The row crops to fill, so the shorter edge is the one that must reach the drawn size.
+    @Test("a picture is decoded large enough that its crop is never stretched")
+    func coversTheCrop() {
+        let edge = PanelThumbnails.maxPixel
+
+        #expect(PanelThumbnailSource.longestEdge(width: 1000, height: 1000, covering: edge) == edge)
+        #expect(PanelThumbnailSource.longestEdge(width: 2000, height: 1000, covering: edge) == edge * 2)
+        #expect(PanelThumbnailSource.longestEdge(width: 1000, height: 3000, covering: edge) == edge * 3)
+        #expect(PanelThumbnailSource.longestEdge(width: 10_000, height: 100, covering: edge) == edge * 4)
+        #expect(PanelThumbnailSource.longestEdge(width: 40, height: 20, covering: edge) == edge)
+    }
+
     /// A clip whose file has been deleted should not cost a trip to the disk on every frame.
     @Test("remembers that a picture is gone")
     func remembersAMiss() async {
