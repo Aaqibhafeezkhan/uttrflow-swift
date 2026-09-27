@@ -208,8 +208,6 @@ enum BrandPalette {
         static let cardEdge = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.08, lightOpacity: 0)
         /// Words on a button filled with an accent, near-black in both appearances.
         static let onAccentInk = BrandTone(dark: 0x0B_0C10, light: 0x10_1316)
-        /// The unfilled track of the floating button's download ring.
-        static let dockRingTrack = BrandLayer(tone: textStrong, darkOpacity: 0.18, lightOpacity: 0.16)
         /// A primary button's fill: white when dark, ink when light.
         static let primaryFill = BrandTone(dark: 0xFF_FFFF, light: 0x10_1316)
         /// The words on a primary button.
