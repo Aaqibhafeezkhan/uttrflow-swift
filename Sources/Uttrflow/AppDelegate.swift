@@ -1878,7 +1878,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     // The name macOS knows, read here so a test decides who is greeted.
                     systemName: NSFullUserName(),
                     shortcut: shortcut, settings: settings, now: now,
-                    speechModel: speechModelLoad)),
+                    speechModel: speechModelLoad, speechDownload: speechReadiness.download)),
             sidebar: SidebarPresenter.sidebar(
                 for: SidebarSnapshot(
                     // The page the window shows; Settings is a window and lights nothing.

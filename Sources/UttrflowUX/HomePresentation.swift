@@ -29,8 +29,6 @@ public struct HomePresentation: Sendable, Equatable {
     public let status: HomeStatus
     /// Who is signed in, and the way to the page about them; always present.
     public let account: HomeAccount
-    /// The speech model loading, or failed to; absent once it can transcribe.
-    public let speechModel: HomeSpeechModelNotice?
     /// The part of the day, which picks the greeting and the picture beside the hero.
     public let mood: HomeMood
     /// Today's date over the greeting: "Sunday 15 June".
@@ -59,7 +57,6 @@ public struct HomePresentation: Sendable, Equatable {
         demonstration: HomeDemonstration?,
         status: HomeStatus,
         account: HomeAccount,
-        speechModel: HomeSpeechModelNotice?,
         mood: HomeMood,
         dateLine: String,
         hero: HomeHero,
@@ -79,7 +76,6 @@ public struct HomePresentation: Sendable, Equatable {
         self.demonstration = demonstration
         self.status = status
         self.account = account
-        self.speechModel = speechModel
         self.mood = mood
         self.dateLine = dateLine
         self.hero = hero
@@ -87,31 +83,6 @@ public struct HomePresentation: Sendable, Equatable {
         self.activity = activity
         self.viewAll = viewAll
         self.search = search
-    }
-}
-
-/// The card saying the speech model is loading or did not, drawn from the one load every surface reads.
-public struct HomeSpeechModelNotice: Sendable, Equatable {
-    /// The heading.
-    public let title: String
-    /// The sentence under it, with the estimate only once the load has run long enough to need one.
-    public let message: String
-    /// Whether the load is still going, so a spinner is drawn rather than a warning.
-    public let isLoading: Bool
-    /// Another attempt, offered only when the load failed.
-    public let action: MainAction?
-    /// What VoiceOver reads for the card as a whole.
-    public let accessibilityLabel: String
-
-    /// Builds the notice for a load.
-    public init(_ load: SpeechModelLoad) {
-        title = load.title
-        message = load.message
-        isLoading = load.isLoading
-        action = load.recovery.map {
-            MainAction(title: MainPresenter.title(for: $0), intent: .recover($0))
-        }
-        accessibilityLabel = load.accessibilityLabel
     }
 }
 
@@ -276,8 +247,10 @@ public struct HomeSnapshot: Sendable, Equatable {
     public let settings: Settings
     /// The clock the page is drawn against.
     public let now: Date
-    /// The speech model's load, or `nil` when it can transcribe or was never on disk.
+    /// The speech model's load, or `nil` when it can transcribe or is downloading.
     public let speechModel: SpeechModelLoad?
+    /// How far the speech model's download has got, from 0 to 1; `nil` when nothing is downloading.
+    public let speechDownload: Double?
 
     /// Builds a snapshot; everything but the shortcut and the clock defaults to empty.
     public init(
@@ -289,7 +262,8 @@ public struct HomeSnapshot: Sendable, Equatable {
         shortcut: String,
         settings: Settings = .default,
         now: Date,
-        speechModel: SpeechModelLoad? = nil
+        speechModel: SpeechModelLoad? = nil,
+        speechDownload: Double? = nil
     ) {
         self.permissions = permissions
         self.entries = entries
@@ -300,6 +274,13 @@ public struct HomeSnapshot: Sendable, Equatable {
         self.settings = settings
         self.now = now
         self.speechModel = speechModel
+        self.speechDownload = speechDownload
+    }
+
+    /// What the hero says about the speech model, the download first; `nil` once it can transcribe.
+    var modelStatus: HomeModelStatus? {
+        if let speechDownload { return .downloading(speechDownload) }
+        return speechModel.map(HomeModelStatus.load)
     }
 }
 
@@ -321,12 +302,13 @@ public enum HomePresenter {
         let blocked = MainPresenter.obstruction(in: snapshot.permissions)
         let listed = Array(kept.prefix(shown))
         let hour = calendar.component(.hour, from: snapshot.now)
+        let modelStatus = snapshot.modelStatus
 
         return HomePresentation(
             greeting: greeting(for: snapshot, calendar: calendar),
             // A model that is not ready blocks dictation as surely as a permission, so neither invites talking.
             subtitle: subtitle(
-                today: today, kept: kept, blocked: blocked != nil || snapshot.speechModel != nil,
+                today: today, kept: kept, blocked: blocked != nil || modelStatus != nil,
                 locale: locale),
             // No figures while a permission is missing; numbers above "cannot listen" argue with themselves.
             figures: blocked == nil
@@ -344,12 +326,14 @@ public enum HomePresenter {
             nextStep: blocked,
             hint: hint(shortcut: snapshot.shortcut, settings: snapshot.settings),
             demonstration: blocked == nil ? demonstration(for: snapshot.settings) : nil,
-            status: status(blocked: blocked != nil, speechModel: snapshot.speechModel),
+            status: status(
+                blocked: blocked != nil, speechModel: snapshot.speechModel,
+                download: snapshot.speechDownload),
             account: account(for: snapshot),
-            speechModel: blocked == nil ? snapshot.speechModel.map(HomeSpeechModelNotice.init) : nil,
             mood: .at(hour: hour),
             dateLine: HomeDashboard.dateLine(snapshot.now, calendar: calendar, locale: locale),
-            hero: HomeDashboard.hero(canStart: blocked == nil && snapshot.speechModel == nil),
+            hero: HomeDashboard.hero(
+                canStart: blocked == nil && modelStatus == nil, modelStatus: modelStatus),
             // No figures while a permission is missing, for the same reason as the figures above.
             tiles: blocked == nil
                 ? HomeDashboard.tiles(
@@ -425,8 +409,13 @@ public enum HomePresenter {
     // MARK: - Whether it can hear you
 
     /// Ready or not, with the model named when it is the reason; never "Listening", which means the microphone is open.
-    static func status(blocked: Bool, speechModel: SpeechModelLoad? = nil) -> HomeStatus {
+    static func status(
+        blocked: Bool, speechModel: SpeechModelLoad? = nil, download: Double? = nil
+    ) -> HomeStatus {
         if blocked { return HomeStatus(text: "Not ready", isReady: false) }
+        if let download {
+            return HomeStatus(text: HomeModelStatus.downloading(download).title, isReady: false)
+        }
         if let speechModel { return HomeStatus(text: speechModel.status, isReady: false) }
         return HomeStatus(text: "Ready", isReady: true)
     }

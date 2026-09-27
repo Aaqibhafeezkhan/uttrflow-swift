@@ -1,0 +1,90 @@
+// What home's hero says in place of its waveform while the speech model cannot transcribe.
+public import UttrflowCore
+
+/// The colour of the dot beside the status: dictation's teal while setup runs, amber once it needs a hand.
+public enum HomeModelTone: String, Sendable, Equatable, CaseIterable {
+    case dictation
+    case warning
+}
+
+/// The thin bar under the status: filled to a known share, or sliding while nothing measures the wait.
+public enum HomeModelProgress: Sendable, Equatable {
+    case fraction(Double)
+    case sliding
+}
+
+/// The speech model's state, drawn in the hero where the waveform would be.
+public struct HomeModelStatus: Sendable, Equatable {
+    /// "Setting up… 42%", beside the dot.
+    public let title: String
+    /// The line under the title.
+    public let subtitle: String
+    /// The dot's colour.
+    public let tone: HomeModelTone
+    /// The bar under the status, absent once there is nothing to wait for.
+    public let progress: HomeModelProgress?
+    /// The button drawn in place of the start pill; absent while the pill waits, dimmed, for setup to end.
+    public let action: MainAction?
+    /// The button's fill: amber to load again, teal to download.
+    public let actionTone: HomeModelTone
+    /// What VoiceOver reads for the block as a whole.
+    public let accessibilityLabel: String
+
+    /// Builds a status from its parts.
+    public init(
+        title: String, subtitle: String, tone: HomeModelTone, progress: HomeModelProgress?,
+        action: MainAction?, actionTone: HomeModelTone = .dictation, accessibilityLabel: String
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.tone = tone
+        self.progress = progress
+        self.action = action
+        self.actionTone = actionTone
+        self.accessibilityLabel = accessibilityLabel
+    }
+
+    /// The download under way, at a share from 0 to 1.
+    public static func downloading(_ fraction: Double) -> HomeModelStatus {
+        let percent = MenuBarPresenter.percentage(of: fraction)
+        return HomeModelStatus(
+            title: "Setting up… \(percent)%", subtitle: "Downloading the speech model",
+            tone: .dictation, progress: .fraction(min(max(fraction, 0), 1)), action: nil,
+            accessibilityLabel: "Setting up. Downloading the speech model, \(percent) percent.")
+    }
+
+    /// The model on disk and loading, or failed to load, or not on disk at all.
+    public static func load(_ load: SpeechModelLoad) -> HomeModelStatus {
+        switch load {
+        case .loading:
+            let subtitle =
+                load.showsEstimate ? load.detail : "Loading the speech model, usually a few seconds"
+            return HomeModelStatus(
+                title: "Getting ready…", subtitle: subtitle, tone: .dictation, progress: .sliding,
+                action: nil, accessibilityLabel: load.accessibilityLabel)
+        case .failed:
+            return HomeModelStatus(
+                title: load.status, subtitle: "Nothing was lost. Try loading it again.",
+                tone: .warning, progress: nil,
+                action: MainAction(title: "Try again", intent: .recover(.retry)), actionTone: .warning,
+                accessibilityLabel: "\(load.status). Nothing was lost. Try loading it again.")
+        case .missing:
+            return HomeModelStatus(
+                title: "Speech model not installed", subtitle: "Dictation needs it · works offline after",
+                tone: .warning, progress: nil,
+                action: MainAction(
+                    title: "Download speech model", intent: .recover(.downloadSpeechModel)),
+                accessibilityLabel:
+                    "Speech model not installed. Dictation needs it, and works offline once it is downloaded."
+            )
+        }
+    }
+}
+
+extension SpeechModelReadiness {
+    /// How far the download has got, zero while it is unmeasured; `nil` when nothing is downloading.
+    public var download: Double? {
+        guard case .downloading(let fraction) = self else { return nil }
+        return fraction ?? 0
+    }
+}

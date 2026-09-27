@@ -27,9 +27,6 @@ struct HomePageContent: View {
         VStack(alignment: .leading, spacing: 16) {
             topBar
             HomeHeroCard(hero: presentation.hero, mood: presentation.mood, onIntent: onIntent)
-            if let notice = presentation.speechModel {
-                HomeSpeechModelCard(notice: notice, onIntent: onIntent)
-            }
             if let step = presentation.nextStep {
                 MainCard { MainEmptyStateView(state: step, onIntent: onIntent) }
             }
@@ -200,42 +197,5 @@ struct HomeStatTileView: View {
         case .pace: "bolt.fill"
         case .leftAsDictated: "target"
         }
-    }
-}
-
-/// The speech model loading, or failed to: a spinner with no fraction, since nothing reports how far it has got.
-struct HomeSpeechModelCard: View {
-    let notice: HomeSpeechModelNotice
-    var onIntent: (MainIntent) -> Void
-
-    var body: some View {
-        MainCard {
-            HStack(alignment: .top, spacing: 13) {
-                Group {
-                    if notice.isLoading {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 18))
-                            .foregroundStyle(Color.dockWarning)
-                    }
-                }
-                .frame(width: 22, height: 22)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(notice.title)
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(notice.message)
-                        .font(.system(size: MainMetrics.bodySize))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if let action = notice.action {
-                    MainActionButton(action: action, isProminent: true, onIntent: onIntent)
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(notice.accessibilityLabel)
     }
 }
