@@ -205,7 +205,7 @@ public enum DestructiveCommand {
         "trino", "presto", "spark-sql", "hive", "beeline", "cqlsh", "impala-shell", "vsql", "redshift",
     ]
 
-    /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, or changes discarded by a checkout, switch or restore.
+    /// Whether a git clause throws work away for good: a forced, deleting, mirroring or pruning push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, or changes discarded by a checkout, switch or restore.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
         let head = subcommandIndex(arguments)
         // The flags of the clause's own subcommand, so the same word as a message or path is not one.
@@ -216,7 +216,7 @@ public enum DestructiveCommand {
         if let flags = flags(after: "push"),
             flags.contains(where: {
                 $0.hasPrefix("--force") || $0 == "-f" || $0 == "--delete" || $0 == "-d" || $0.hasPrefix("+")
-                    || ($0.hasPrefix(":") && $0.count > 1)
+                    || ($0.hasPrefix(":") && $0.count > 1) || $0 == "--mirror" || $0 == "--prune"
             })
         {
             return true

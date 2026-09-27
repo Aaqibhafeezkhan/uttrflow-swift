@@ -289,4 +289,22 @@ struct DestructiveCommandTests {
     func ordinaryCompoundCommands(_ line: String) {
         #expect(!DestructiveCommand.matches(line), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A push that deletes or rewrites remote refs the local repository lacks is destructive.",
+        arguments: [
+            "git push --mirror origin", "git push --mirror", "git push --prune origin",
+            "git push --prune origin refs/heads/*:refs/heads/*", "git -C repo push --mirror backup",
+        ])
+    func mirroringPushIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A fetch that prunes and a push naming its refs plainly are ordinary.",
+        arguments: ["git fetch --prune", "git fetch --prune origin", "git remote prune origin", "git push origin main"])
+    func pruningFetchIsOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
