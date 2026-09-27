@@ -58,11 +58,11 @@ struct DockContrastTests {
         #expect(ratio(ink.dark, darkKeycap) >= 4.5)
     }
 
-    @Test("the inserted tick clears 3:1 on a light desktop and a dark one")
-    func insertedTick() {
-        let tick = BrandPalette.Semantic.successInk
-        #expect(ratio(tick.light, lightGlass) >= 3)
-        #expect(ratio(tick.dark, darkGlass) >= 3)
+    @Test("the inserted return arrow clears 3:1 on a light desktop and a dark one")
+    func insertedArrow() {
+        let arrow = BrandPalette.Redesign.dictationAccent
+        #expect(ratio(arrow.light, lightGlass) >= 3)
+        #expect(ratio(arrow.dark, darkGlass) >= 3)
     }
 
     /// The tones these replace on the dock, which is the failure the issue measured.

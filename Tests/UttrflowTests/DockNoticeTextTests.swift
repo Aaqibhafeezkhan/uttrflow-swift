@@ -80,4 +80,18 @@ struct DockNoticeTextTests {
             DockView.hoverText(for: presentation, primaryLine: SpeechModelLoad.refusal)
                 == SpeechModelLoad.refusal)
     }
+
+    @Test("names a denied microphone in one short line, and leaves every other failure on the wide form")
+    func pillLineOnlyForTheMicrophone() {
+        let microphone = DictationPresenter.dock(
+            for: .failed(DictationFailure(PermissionError.microphoneDenied)))
+        let retry = DictationPresenter.dock(
+            for: .failed(
+                DictationFailure(
+                    message: "Recording stopped unexpectedly. Try again.", recovery: .retry,
+                    severity: .recoverable)))
+
+        #expect(DockView.pillLine(for: microphone) == "Microphone is off")
+        #expect(DockView.pillLine(for: retry) == nil)
+    }
 }

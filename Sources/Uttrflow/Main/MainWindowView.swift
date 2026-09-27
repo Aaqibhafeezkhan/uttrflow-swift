@@ -55,7 +55,8 @@ struct MainWindowView: View {
             .overlay(alignment: .topTrailing) {
                 if let notice = model.content.notice {
                     MainNoticeBar(notice: notice, onIntent: onIntent)
-                        .padding(.top, 20)
+                        // Below every page's title and search row, so the notice covers content, never the header.
+                        .padding(.top, Self.noticeTopInset)
                         .padding(.trailing, 20)
                         // Fades in place under Reduce Motion rather than sliding from the top.
                         .transition(
@@ -65,6 +66,9 @@ struct MainWindowView: View {
             }
             .animation(.easeOut(duration: 0.2), value: model.content.notice)
     }
+
+    /// Clears the tallest header, Home's greeting beside its search field, which ends 90 points down.
+    private static let noticeTopInset: CGFloat = 98
 
     /// Settings when it is showing, which draws its own title and search, or the selected page.
     @ViewBuilder private var shownPane: some View {

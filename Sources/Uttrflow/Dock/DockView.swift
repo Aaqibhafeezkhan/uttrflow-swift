@@ -233,19 +233,28 @@ struct DockView: View {
 
     // MARK: - Notices
 
-    /// Finished: a 26-point disc for an insertion, a small pill with words for the quiet outcomes, and the wide form for the one that needs an action.
+    /// Finished: a 26-point disc for an insertion, a small pill with words for the quiet outcomes and short failures, and the wide form for the rest.
     @ViewBuilder
     private func notice(_ presentation: DockPresentation, primaryLine: String) -> some View {
         switch presentation.symbolName {
         case "checkmark":
-            badgeForm { MarkTick() }
+            badgeForm { InsertedMark() }
         case "waveform.slash":
             quietNotice(Self.restingWords(for: presentation) ?? primaryLine)
         case "doc.on.clipboard":
             clipboardNotice(presentation)
         default:
-            blocked(presentation, primaryLine: primaryLine)
+            if let line = Self.pillLine(for: presentation) {
+                pill(presentation, line: line, primaryLine: primaryLine)
+            } else {
+                blocked(presentation, primaryLine: primaryLine)
+            }
         }
+    }
+
+    /// The one line a failure with a short name shows in place of its sentence, or `nil` for the wide form.
+    static func pillLine(for presentation: DockPresentation) -> String? {
+        presentation.action == .openSystemSettings(.microphone) ? "Microphone is off" : nil
     }
 
     /// The words a quiet outcome shows without the pointer over it, or `nil` for a form that shows none.
@@ -342,6 +351,39 @@ struct DockView: View {
         .frame(width: DockMetrics.noticeMaxWidth)
         .frame(minHeight: DockMetrics.noticeHeight)
         .glass(cornerRadius: DockMetrics.noticeHeight / 2)
+        .help(Self.hoverText(for: presentation, primaryLine: primaryLine))
+        .padding(DockMetrics.gripHitPadding)
+    }
+
+    /// A failure with a short name: the warning disc, one line and a trailing Fix, with the full sentence on hover.
+    private func pill(_ presentation: DockPresentation, line: String, primaryLine: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: presentation.symbolName)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.dockSetupWarning)
+                .frame(width: DockMetrics.noticeBadgeSize, height: DockMetrics.noticeBadgeSize)
+                .background(Color.dockSetupWarning.opacity(0.2), in: .circle)
+            Text(line)
+                .font(.system(size: DockSetupMetrics.warningTextSize))
+                .fixedSize()
+            if let action = presentation.action {
+                Button {
+                    onRecovery(action)
+                } label: {
+                    Text("Fix")
+                        .font(.system(size: DockSetupMetrics.warningTextSize))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.primary.opacity(0.14), in: .rect(cornerRadius: 6))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .glass(cornerRadius: DockSetupMetrics.warningRadius)
         .help(Self.hoverText(for: presentation, primaryLine: primaryLine))
         .padding(DockMetrics.gripHitPadding)
     }
@@ -512,44 +554,41 @@ private struct SettlingBars: View {
     }
 }
 
-/// A tick, drawn on the mark's own grid so its weight sits with everything around it.
-private struct Tick: Shape {
-    /// The mark's own 100-unit grid, which is what makes this stroke the same weight as the mark.
-    private static let box = UttrflowMark.gridBox
+/// A return arrow on a 24-unit grid: down the right, round the corner, and left into its head.
+private struct ReturnArrow: Shape {
+    static let grid: CGFloat = 24
 
     func path(in rect: CGRect) -> Path {
-        let scale = min(rect.width / Self.box.width, rect.height / Self.box.height)
-        let originX = rect.midX - Self.box.midX * scale
-        let originY = rect.midY - Self.box.midY * scale
+        let scale = min(rect.width, rect.height) / Self.grid
         func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: originX + x * scale, y: originY + y * scale)
+            CGPoint(x: rect.minX + x * scale, y: rect.minY + y * scale)
         }
-        // Short arm, a corner rather than a turn, then the long arm: the three points of a check.
         var path = Path()
-        path.move(to: at(20, 54))
-        path.addLine(to: at(42, 76))
-        path.addLine(to: at(82, 26))
+        path.move(to: at(20, 4))
+        path.addLine(to: at(20, 11))
+        path.addArc(tangent1End: at(20, 15), tangent2End: at(4, 15), radius: 4 * scale)
+        path.addLine(to: at(4, 15))
+        path.move(to: at(9, 10))
+        path.addLine(to: at(4, 15))
+        path.addLine(to: at(9, 20))
         return path
     }
 }
 
-/// Inserted: the tick drawn on, so the panel confirms in the one glyph everybody reads as done.
-private struct MarkTick: View {
+/// Inserted: a teal return arrow drawn on inside the disc's ring, the key that puts words in.
+private struct InsertedMark: View {
     @State private var drawn = false
 
     var body: some View {
-        Tick()
+        ReturnArrow()
             .trim(from: 0, to: drawn ? 1 : 0)
             .stroke(
-                Color.dockSuccessInk,
+                Color.dockSetupAccent,
                 style: StrokeStyle(
-                    lineWidth: UttrflowMark.lineWidth(forHeight: DockMetrics.markTickHeight),
+                    lineWidth: DockMetrics.returnGlyphLine * DockMetrics.returnGlyphSize / ReturnArrow.grid,
                     lineCap: .round, lineJoin: .round)
             )
-            .frame(
-                width: DockMetrics.markTickHeight * UttrflowMark.aspectRatio,
-                height: DockMetrics.markTickHeight
-            )
+            .frame(width: DockMetrics.returnGlyphSize, height: DockMetrics.returnGlyphSize)
             .task {
                 withAnimation(MotionBudget.current().allowing(.easeOut(duration: 0.26))) { drawn = true }
             }
@@ -607,7 +646,9 @@ extension DockMetrics {
     static let meterArrivalInterval: TimeInterval = 0.05
     /// How strongly a quiet bar is drawn; opacity carries the loud threshold. See Docs/app-dock.md.
     static let meterQuietOpacity: CGFloat = 0.62
-    static let markTickHeight: CGFloat = 14
+    /// The inserted disc's return arrow, and its stroke on the arrow's 24-unit grid.
+    static let returnGlyphSize: CGFloat = 13
+    static let returnGlyphLine: CGFloat = 1.8
 
     /// The working bars at full height, the same three the idle orb wears.
     static let workingBarHeights: [CGFloat] = [8, 14, 10]
@@ -697,8 +738,6 @@ extension Color {
     static let dockWarningInk = Color(nsColor: .orbit(BrandPalette.Semantic.cautionInk))
     /// The failure disc under a white glyph.
     static let dockWarningFill = Color(rgb: BrandPalette.Semantic.warningFill)
-    /// The tick on the dock's glass, deepened on a light desktop.
-    static let dockSuccessInk = Color(nsColor: .orbit(BrandPalette.Semantic.successInk))
 
     /// The accent as text on a surface that follows the appearance; `dockAccent` is for fills.
     static let accentInk = Color(nsColor: .orbit(BrandPalette.Teal.ink))
