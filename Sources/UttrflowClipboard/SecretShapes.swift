@@ -22,7 +22,7 @@ public enum SecretShapes {
         }
         if literals.pem, text.contains(pemHeader) { return true }
         if literals.jwt, hasJSONWebToken(text) { return true }
-        if literals.url, hasCredentialledURL(text) { return true }
+        if literals.url, hasCredentialledURL(text) || hasBearerURL(text) { return true }
         if VendorKeyWindows.matches(text, pattern: vendorKey, tally: patternTally) { return true }
         if NamedSecretStems.present(in: text), hasNamedSecret(text) { return true }
         if CardNumberShape.matches(text) { return true }
@@ -46,6 +46,13 @@ public enum SecretShapes {
         var read = 0
         defer { tally?.record(read) }
         return CredentialledURLScan.matches(text, read: &read)
+    }
+
+    /// A chat webhook, or a URL signed or carrying a token, which acts for whoever holds it.
+    static func hasBearerURL(_ text: String) -> Bool {
+        var read = 0
+        defer { tally?.record(read) }
+        return BearerURLShape.matches(text, read: &read)
     }
 
     /// Keys whose issuers gave them a prefix, each with a minimum length so prose about `sk-` is not one.

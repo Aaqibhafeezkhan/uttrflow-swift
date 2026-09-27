@@ -5,20 +5,61 @@ enum CardNumberShape {
     /// Whether a card number stands anywhere in the text, on its own rather than inside a longer number.
     static func matches(_ text: String) -> Bool {
         CardNumberRuns.candidates(in: text, tally: SecretShapes.patternTally).contains { run in
-            text[run].matches(of: candidate).contains { match in
-                standsAlone(match.range, in: text) && isCardNumber(match.output.0.filter(\.isNumber))
+            // The run with two characters either side, which is all `standsAlone` looks at.
+            let lower = text.index(run.lowerBound, offsetBy: -2, limitedBy: text.startIndex)
+            let upper = text.index(run.upperBound, offsetBy: 2, limitedBy: text.endIndex)
+            let context = (lower ?? text.startIndex)..<(upper ?? text.endIndex)
+            guard let printed = printedForm(of: text[context]) else {
+                return hasCardNumber(in: text[run], of: text)
             }
+            let before = text.distance(from: context.lowerBound, to: run.lowerBound)
+            let after = text.distance(from: run.upperBound, to: context.upperBound)
+            let start = printed.index(printed.startIndex, offsetBy: before)
+            let end = printed.index(printed.endIndex, offsetBy: -after)
+            return hasCardNumber(in: printed[start..<end], of: printed)
+        }
+    }
+
+    /// Whether the pattern finds a card number in `run` that stands alone in `text`, which holds it.
+    static func hasCardNumber(in run: Substring, of text: String) -> Bool {
+        run.matches(of: candidate).contains { match in
+            standsAlone(match.range, in: text) && isCardNumber(match.output.0.filter(\.isNumber))
         }
     }
 
     /// Digits unbroken, or in printed groups with one separator throughout; `issuers` rules on length.
     nonisolated(unsafe) static let candidate =
         #/
-        [0-9]{4}([\x20\-])[0-9]{4}\1[0-9]{4}\1[0-9]{4}(?:\1[0-9]{3})?   # 4-4-4-4 and 4-4-4-4-3
-        | [0-9]{4}([\x20\-])[0-9]{6}\2[0-9]{4,5}                     # 4-6-5 and 4-6-4
-        | [0-9]{4}([\x20\-])[0-9]{3}\3[0-9]{3}\3[0-9]{3}              # 4-3-3-3
+        [0-9]{4}([\x20\-.])[0-9]{4}\1[0-9]{4}\1[0-9]{4}(?:\1[0-9]{3})?   # 4-4-4-4 and 4-4-4-4-3
+        | [0-9]{4}([\x20\-.])[0-9]{6}\2[0-9]{4,5}                     # 4-6-5 and 4-6-4
+        | [0-9]{4}([\x20\-.])[0-9]{3}\3[0-9]{3}\3[0-9]{3}              # 4-3-3-3
         | [0-9]{13,19}
         /#
+
+    /// The spaces besides U+0020 that group a card's digits: tab, no-break, the typographic widths and ideographic.
+    static let otherSpaces: Set<UInt32> = Set([0x09, 0xA0, 0x1680, 0x202F, 0x205F, 0x3000])
+        .union(0x2000...0x200A)
+
+    /// Fullwidth digits zero to nine, which some input methods type.
+    static let fullwidthDigits: ClosedRange<UInt32> = 0xFF10...0xFF19
+
+    /// The text with fullwidth digits as ASCII and every other space as U+0020, character for character; `nil` when nothing changes.
+    static func printedForm(of text: Substring) -> String? {
+        guard text.unicodeScalars.contains(where: { isRewritten($0.value) }) else { return nil }
+        return String(
+            text.map { character -> Character in
+                let scalars = character.unicodeScalars
+                guard scalars.count == 1, let value = scalars.first?.value, isRewritten(value) else {
+                    return character
+                }
+                return fullwidthDigits.contains(value)
+                    ? Character(Unicode.Scalar(UInt8(value - fullwidthDigits.lowerBound) + 0x30)) : " "
+            })
+    }
+
+    private static func isRewritten(_ value: UInt32) -> Bool {
+        fullwidthDigits.contains(value) || otherSpaces.contains(value)
+    }
 
     /// What joins a number to more of itself in a date, a decimal, a time or an id; a space does not.
     private static let joiners: Set<Character> = ["-", ".", "/", ":", "_"]
