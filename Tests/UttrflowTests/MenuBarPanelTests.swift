@@ -1,7 +1,8 @@
-// Tests that the menu bar popover's panel takes the keyboard and closes on Escape.
+// Tests that the menu bar popover's panel takes the keyboard, closes on Escape, and empties when closed.
 
 import AppKit
 import Testing
+import UttrflowUX
 
 @testable import Uttrflow
 
@@ -28,5 +29,24 @@ struct MenuBarPanelTests {
         panel.onCancel = { cancelled += 1 }
         panel.cancelOperation(nil)
         #expect(cancelled == 1)
+    }
+
+    @Test("draws nothing while closed, so a sliding bar cannot keep running behind the hidden panel")
+    func emptyWhileClosed() {
+        let loading = MenuBarPresenter.present(MenuBarState(speechModel: .loading))
+        let bar = MenuBarController(initial: loading)
+        defer { bar.removeFromMenuBar() }
+        #expect(!bar.isPopoverContentHosted)
+        bar.openMenu()
+        #expect(bar.isPopoverShown)
+        #expect(bar.isPopoverContentHosted)
+        bar.closePopover()
+        #expect(!bar.isPopoverShown)
+        #expect(!bar.isPopoverContentHosted)
+        bar.update(with: loading)
+        #expect(!bar.isPopoverContentHosted)
+        bar.openMenu()
+        #expect(bar.isPopoverContentHosted)
+        bar.closePopover()
     }
 }

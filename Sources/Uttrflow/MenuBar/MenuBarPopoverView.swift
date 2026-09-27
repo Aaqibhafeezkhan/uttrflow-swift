@@ -9,6 +9,8 @@ struct MenuBarPopoverView: View {
     let presentation: MenuBarPresentation
     /// Carries a chosen command back to the controller.
     let onCommand: (MenuBarIntent) -> Void
+    /// Whether the panel is on screen; a closed popover draws nothing, so no animation outlives it.
+    var isShown = true
     /// The control that has the keyboard, by its place in ``MenuBarKeyboard``.
     @FocusState private var focus: Int?
     /// Whether a key has moved the focus, which is when its ring is drawn.
@@ -22,8 +24,12 @@ struct MenuBarPopoverView: View {
     static let shadowMargin: CGFloat = 28
 
     var body: some View {
+        if isShown { content }
+    }
+
+    private var content: some View {
         let keyboard = MenuBarKeyboard(presentation)
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             MenuBarHeaderView(
                 header: presentation.header, onCommand: onCommand, focus: $focus, showsFocus: usesKeyboard)
             buttonRow(keyboard).padding(.top, 14)
@@ -366,35 +372,5 @@ private struct MenuBarRowView: View {
         }
         .accessibilityLabel(row.title)
         .accessibilityHint("Pastes at the cursor. Option-click copies it.")
-    }
-}
-
-// MARK: - Right-click menu
-
-/// The right-click menu's switches, windows and Quit, drawn from the same items the icon's menu shows.
-private struct MenuBarMenuItems: View {
-    let items: [MenuBarItem]
-    let onCommand: (MenuBarIntent) -> Void
-
-    var body: some View {
-        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-            switch item {
-            case .status, .sectionHeader:
-                EmptyView()
-            case .separator:
-                Divider()
-            case .command(let command):
-                if command.isChecked {
-                    Button {
-                        onCommand(command.intent)
-                    } label: {
-                        Label(command.title, systemImage: "checkmark")
-                    }
-                    .disabled(!command.isEnabled)
-                } else {
-                    Button(command.title) { onCommand(command.intent) }.disabled(!command.isEnabled)
-                }
-            }
-        }
     }
 }

@@ -35,6 +35,8 @@ final class DockViewModel {
     private(set) var recordingStartedAt: Date?
     /// Whether the idle button collapses to a grip, from the "Shrink it to a grip" setting.
     var shrinksToGrip = true
+    /// Whether the panel is on screen; a hidden button draws nothing, so its meter and spinners stop.
+    var isShown = true
 
     /// The only way the presentation changes; starts the clock on the first recording presentation.
     func show(_ presentation: DockPresentation, now: Date = Date()) {
@@ -123,7 +125,9 @@ struct DockView: View {
 
     @ViewBuilder private var form: some View {
         let presentation = model.presentation
-        if presentation.showsWaveform {
+        if !model.isShown {
+            EmptyView()
+        } else if presentation.showsWaveform {
             listening()
         } else if presentation.showsProgress {
             working()
@@ -189,7 +193,7 @@ struct DockView: View {
         HStack(spacing: 2.5) {
             ForEach([6.0, 11.0, 7.0], id: \.self) { height in
                 Capsule()
-                    .fill(.primary.opacity(0.5))
+                    .fill(.primary.opacity(0.55))
                     .frame(width: 2.5, height: height)
             }
         }
@@ -292,33 +296,33 @@ struct DockView: View {
             .padding(DockMetrics.gripHitPadding)
     }
 
-    /// Copied rather than typed: ⌘V and the words saying so at rest, with the reason and the fix under the pointer.
+    /// Copied rather than typed: ⌘V and the words saying so at rest, the blocked form with its fix under the pointer.
+    @ViewBuilder
     private func clipboardNotice(_ presentation: DockPresentation) -> some View {
-        HStack(spacing: 8) {
-            keycap("⌘V")
-                .foregroundStyle(Color.dockWarningInk)
-            if model.isHovering, let action = presentation.action {
-                Text("Typing is blocked — paste it")
-                    .font(.system(size: DockMetrics.footnoteSize + 1))
-                    .opacity(0.6)
-                    .fixedSize()
-                Button("Fix") { onRecovery(action) }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .fixedSize()
-            } else if let words = Self.restingWords(for: presentation) {
-                Text(words)
-                    .font(.system(size: DockMetrics.footnoteSize + 1))
-                    .opacity(0.72)
-                    .fixedSize()
+        if model.isHovering, presentation.action != nil {
+            pill(
+                presentation, line: Self.blockedLine, primaryLine: presentation.primaryLine ?? "",
+                symbolName: "exclamationmark.triangle", width: DockMetrics.blockedWidth)
+        } else {
+            HStack(spacing: 8) {
+                keycap("⌘V")
+                    .foregroundStyle(Color.dockWarningInk)
+                if let words = Self.restingWords(for: presentation) {
+                    Text(words)
+                        .font(.system(size: DockMetrics.footnoteSize + 1))
+                        .opacity(0.72)
+                        .fixedSize()
+                }
             }
+            .padding(.horizontal, 9)
+            .frame(height: DockMetrics.clipboardHeight)
+            .glass(cornerRadius: DockMetrics.clipboardHeight / 2)
+            .padding(DockMetrics.gripHitPadding)
         }
-        .padding(.horizontal, 9)
-        .frame(height: DockMetrics.clipboardHeight)
-        .glass(cornerRadius: DockMetrics.clipboardHeight / 2)
-        .animation(MotionBudget.current().allowing(.spring(duration: 0.26)), value: model.isHovering)
-        .padding(DockMetrics.gripHitPadding)
     }
+
+    /// What the copied notice says under the pointer when typing was refused.
+    static let blockedLine = "Typing is blocked — paste it"
 
     /// The one state with something for the reader to do, and the only wide form; the message wraps rather than truncates.
     private func blocked(_ presentation: DockPresentation, primaryLine: String) -> some View {
@@ -355,17 +359,21 @@ struct DockView: View {
         .padding(DockMetrics.gripHitPadding)
     }
 
-    /// A failure with a short name: the warning disc, one line and a trailing Fix, with the full sentence on hover.
-    private func pill(_ presentation: DockPresentation, line: String, primaryLine: String) -> some View {
+    /// A failure with a short name: the warning disc, the line and a trailing Fix, with the full sentence on hover.
+    private func pill(
+        _ presentation: DockPresentation, line: String, primaryLine: String, symbolName: String? = nil,
+        width: CGFloat? = nil
+    ) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: presentation.symbolName)
+            Image(systemName: symbolName ?? presentation.symbolName)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Color.dockSetupWarning)
                 .frame(width: DockMetrics.noticeBadgeSize, height: DockMetrics.noticeBadgeSize)
                 .background(Color.dockSetupWarning.opacity(0.2), in: .circle)
             Text(line)
                 .font(.system(size: DockSetupMetrics.warningTextSize))
-                .fixedSize()
+                .fixedSize(horizontal: width == nil, vertical: true)
+                .frame(maxWidth: width == nil ? nil : .infinity, alignment: .leading)
             if let action = presentation.action {
                 Button {
                     onRecovery(action)
@@ -383,6 +391,7 @@ struct DockView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .frame(width: width)
         .glass(cornerRadius: DockSetupMetrics.warningRadius)
         .help(Self.hoverText(for: presentation, primaryLine: primaryLine))
         .padding(DockMetrics.gripHitPadding)
@@ -469,6 +478,8 @@ enum DockMetrics {
     static let noticeVerticalPadding: CGFloat = 8
     static let noticeSpacing: CGFloat = 12
     static let noticeBadgeSize: CGFloat = 22
+    /// The blocked form's width, which wraps its line onto two.
+    static let blockedWidth: CGFloat = 200
     /// The most lines a message may wrap to; every failure message is measured against it in the tests.
     static let noticeMaxLines = 3
     /// The width the message wraps within, beside the badge.
