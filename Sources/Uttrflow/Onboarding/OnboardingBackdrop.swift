@@ -9,20 +9,49 @@ struct OnboardingBackdrop: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            Color(rgb: BrandPalette.Onboarding.windowGround)
-            OnboardingAurora(mood: mood)
-                .id(mood)
-                .transition(.opacity)
-            LinearGradient(
-                colors: [.clear, Color(rgb: BrandPalette.Onboarding.windowGround).opacity(0.3)],
-                startPoint: .top, endPoint: .bottom)
+            OnboardingSky(mood: mood)
             OnboardingGrain()
             UttrflowMarkView(height: 470)
                 .foregroundStyle(.white.opacity(0.12))
                 .offset(x: -40, y: 70)
         }
-        .animation(.easeInOut(duration: 0.6), value: mood)
         .clipped()
+        .accessibilityHidden(true)
+    }
+}
+
+/// The ground, the mood's aurora and the veil: what the card's glass sees through.
+struct OnboardingSky: View {
+    let mood: OnboardingMood
+    /// How saturated the aurora is drawn; the card's glass draws it richer than the window does.
+    var saturation: Double = 1
+
+    var body: some View {
+        ZStack {
+            Color(rgb: BrandPalette.Onboarding.windowGround)
+            OnboardingAurora(mood: mood, saturation: saturation)
+                .id(mood)
+                .transition(.opacity)
+            LinearGradient(
+                colors: [.clear, Color(rgb: BrandPalette.Onboarding.windowGround).opacity(0.3)],
+                startPoint: .top, endPoint: .bottom)
+        }
+        .animation(.easeInOut(duration: 0.6), value: mood)
+    }
+}
+
+/// The card's glass: the sky behind the card, saturated as frosted glass does, under the violet-black tint.
+struct OnboardingCardGlass: View {
+    let mood: OnboardingMood
+
+    var body: some View {
+        GeometryReader { proxy in
+            let card = proxy.frame(in: .named(OnboardingMetrics.windowSpace))
+            OnboardingSky(mood: mood, saturation: OnboardingMetrics.glassSaturation)
+                .frame(width: OnboardingMetrics.windowWidth, height: OnboardingMetrics.windowHeight)
+                .offset(x: -card.minX, y: -card.minY)
+        }
+        .overlay(OnboardingInk.glass.opacity(OnboardingMetrics.glassTint))
         .accessibilityHidden(true)
     }
 }
@@ -30,6 +59,7 @@ struct OnboardingBackdrop: View {
 /// One mood's conic gradient, blurred soft and turning once every forty seconds when the Mac allows motion.
 private struct OnboardingAurora: View {
     let mood: OnboardingMood
+    let saturation: Double
     /// Whether its window is the one being used; starts still so a window opened behind others never moves.
     @State private var attended = false
 
@@ -74,7 +104,15 @@ private struct OnboardingAurora: View {
             case .offline: BrandPalette.Onboarding.offlineAurora
             case .done: BrandPalette.Onboarding.doneAurora
             }
-        return (values + values.prefix(1)).map { Color(rgb: $0) }
+        return (values + values.prefix(1)).map { Self.saturated($0, by: saturation) }
+    }
+
+    /// A stop saturated as a CSS `saturate()` filter does, so blurring it after gives the same colours.
+    static func saturated(_ rgb: UInt32, by amount: Double) -> Color {
+        let channels = [16, 8, 0].map { Double((rgb >> UInt32($0)) & 0xFF) / 255 }
+        let luma = 0.213 * channels[0] + 0.715 * channels[1] + 0.072 * channels[2]
+        let pushed = channels.map { min(1, max(0, luma + amount * ($0 - luma))) }
+        return Color(.sRGB, red: pushed[0], green: pushed[1], blue: pushed[2])
     }
 
     /// Where the gradient turns about; the moods that ask sit a little up and left of centre.
