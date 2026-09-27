@@ -31,12 +31,16 @@ actor ReloadableWeights<Modules: Sendable> {
     func load(from directory: URL) async throws -> Modules? {
         let asked = unloadsAsked
         let previous = last
-        let step = Task { () throws -> Modules in
+        let step = Task { () throws -> Modules? in
             await previous?.value
+            // A load an unload overtook, or one its caller stopped, reads nothing.
+            guard self.unloadsAsked == asked else { return nil }
+            try Task.checkCancellation()
             return try await self.fill(from: directory)
         }
         last = Task { _ = try? await step.value }
-        let loaded = try await step.value
+        let loaded = try await withTaskCancellationHandler(
+            operation: { try await step.value }, onCancel: { step.cancel() })
         return unloadsAsked == asked ? loaded : nil
     }
 

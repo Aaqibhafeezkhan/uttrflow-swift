@@ -134,6 +134,19 @@ Whether a registration that succeeded is delivered is a window-server question n
 can answer: a key event posted from a test process did not fire a Carbon hot key even with a
 single registrant, so delivery is checked by pressing the key on a real build.
 
+## A dictation shortcut that could not be armed
+
+When `controller.start(binding:)` throws, because another app holds the combination or
+Accessibility access is off, `ShortcutArming` keeps the error as its own state. It is not a
+dictation, so it never goes through `render(_:)`: nothing is counted in telemetry, nothing is
+logged as a failed dictation, no sweep runs, and nothing dismisses it after a few seconds. The
+menu bar popover's header and the floating button's hover hint show the reason, the same places
+that report secure keyboard entry, and they keep showing it until an arming works. Secure input
+is shown first when both apply, since it blocks every binding. Arming is retried each time
+Uttrflow becomes active, and turning dictation off forgets the failure. A recording already under
+way keeps its own presentation, because the popover shows an unheard shortcut only while nothing
+is being dictated.
+
 ## Secure keyboard entry hides the shortcut
 
 While any process has secure event input on, macOS stops passing key down and key up events to

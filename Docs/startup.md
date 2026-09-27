@@ -131,9 +131,13 @@ guess paced to a typical cold load, from `SpeechModelLoadEstimate`
 | Menu bar popover | The same heading as home over a bar filled to the estimate. |
 | A dictation refused during the load | **Speech model still loading…**, and under it the same time left: *About 1 min left*. Holding: *Almost ready*. |
 
-The app redraws these surfaces once a second while the load runs, from `AppDelegate`'s ticker,
-which starts at `estimateAfter` and ends with the load; nothing ticks once the model is ready.
-The bars ease between ticks, and under Reduce Motion they step instead.
+The floating button and the menu bar redraw once a second while the load runs, from
+`AppDelegate`'s ticker, which starts at `estimateAfter` and ends with the load; nothing ticks once
+the model is ready. The home hero is not redrawn by that ticker, because redrawing the main window
+rebuilds every page from the whole history. Its status block (`HomeModelStatusView`) carries the
+load's start and runs its own `TimelineView`, so only that block redraws: once a second while its
+window is in use, and every 15 seconds while it is not. The bars ease between ticks, and under
+Reduce Motion they step instead.
 
 The refusal lives in `DictationPipeline.startRecording`, which declines while its own `prepare()`
 is running. A pipeline nobody prepared still records and loads on demand, as before. When the
@@ -143,6 +147,13 @@ again; closing setup loads whatever it installed. A model counts as installed on
 a load reads is there, so a load that still fails is damage the store cannot see from outside, and
 a fresh copy is the repair. The notice a failed load raises in the pipeline keeps **Try Again**,
 which loads again rather than starting a dictation.
+
+A load that never returns is a failed load too. `prepare()` waits at most
+`StageTimeout.speechModelLoad`, 300 seconds, about twice the 154-second cold load measured above.
+It then fails with `modelLoadFailed`, and the surfaces show the same recovery as any failed load:
+**Try Again** the first time, **Download** after a second failure. It stops waiting instead of
+cancelling and waiting for the cancel, because a blocked recogniser load does not answer a cancel.
+The abandoned load finishes whenever it can, and a load that finishes late is ignored.
 
 ## What is still true
 

@@ -294,6 +294,10 @@ public struct HomeSnapshot: Sendable, Equatable {
     var modelStatus: HomeModelStatus? {
         if let speechDownload { return .downloading(speechDownload, bytes: speechModelBytes) }
         if speechModel == .missing { return .missing(bytes: speechModelBytes) }
+        if case .loading(let elapsed) = speechModel {
+            return HomeModelStatus.load(.loading(elapsed: elapsed))
+                .began(at: now.addingTimeInterval(-(elapsed / .seconds(1))))
+        }
         return speechModel.map(HomeModelStatus.load)
     }
 }

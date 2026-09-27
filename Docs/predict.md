@@ -248,9 +248,10 @@ application still does the work for every message that was sent, on the thread t
 handles the user's typing. So one read asks each question once — the field's names in one
 batched message, the caret, the window and the frames once each — and the whole read stops
 at the next question once `FieldReadBudget.allowanceInNanoseconds` (40 ms) has passed. A
-field whose read ran over is then asked nothing at all for a rest that starts at 10 s and
-doubles on each further overrun up to 5 minutes (`SlowFields`); a read that keeps to the
-budget ends the rest. A very long web text area, whose caret questions each run into the
+field's first overrun is forgiven, because the first read in a new process is a cold start
+(about 60 ms in a browser once its full tree is switched on); a second overrun leaves the
+field alone for a rest that starts at 10 s and doubles on each further overrun up to
+5 minutes (`SlowFields`), and a read that keeps to the budget ends the rest. A very long web text area, whose caret questions each run into the
 timeout, therefore costs its application one read per rest rather than one per turn, and
 draws no suggestion.
 

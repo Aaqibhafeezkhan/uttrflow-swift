@@ -244,8 +244,10 @@ reclaims on its own.
 
 The suggestion model is what the budget is about. On an 8 GB Mac its 3 GB is close to half of
 all memory, which is why nothing loads it for somebody who never asked, and why turning the
-feature off gives it back. `AppDelegate` releases it when the switch goes off, after any load
-still running has landed, and `MLXCandidateScorer.release()` swaps out the weights (keeping the modules
+feature off gives it back. `AppDelegate` releases it when the switch goes off or memory is pressed. A
+load still running is stopped first rather than waited out: the download is cancelled, and the
+weights are not read (or, when the read had begun, not kept for the warm-up), so neither a fetch nor
+a 2.5 GB read runs on after the release. Then `MLXCandidateScorer.release()` swaps out the weights (keeping the modules
 and tokenizer, see "Reloads no longer quantise" below), drops the warmed instructions and the
 vocabulary, and empties MLX's cache. Measured with
 `uttrflow-bakeoff gpu-memory --release`:
@@ -931,6 +933,17 @@ with time: 3,420 leaked nodes and 583 KB at one minute, the same at 92 minutes.
 | `OnboardingFlow` cycle | 2.4 KB per onboarding controller | ours | fixed |
 | `mlx::core::array::ArrayDesc` cycles | 0.4–1.7 MB on the first load only | MLX | reloads fixed here, first load upstream |
 | `NSXPCConnection` cycles (AppIntents daemon) | 4.7 KB | the system | not ours |
+| CoreAudio `ListenerBinding` / `ParameterListenerBinding` (148 nodes) | 9.5 KB | ours, the cue engine | fixed size, by design |
+
+**The cue engine's listener bindings.** `ShapedSoundPlayer.prewarm(_:)`
+(`Sources/UttrflowAudio/RecordingCue+Engine.swift`) builds one `AVAudioEngine`, starts it once
+and pauses it, and `pauseWhenIdle()` only pauses it between cues, so it lives as long as the
+process. CoreAudio reports the listener bindings that engine registers as 148 leaks of 9,472
+bytes. The count is the same after prewarm and after eight cues, and it drops to zero when the
+engine is torn down by a rebuild, so it is the engine being alive, not growth. Tearing it down
+when idle would remove the group, but the next cue would then have to build the engine before
+it sounds, about 150 ms by the comment on `prewarm`, and that delay has not been measured on the
+cue path. The engine is kept.
 
 **The onboarding cycle.** `OnboardingModel` set `flow.onChange` to a closure that captured
 `self` weakly but the `flow` argument strongly, so the flow held a closure that held the flow.

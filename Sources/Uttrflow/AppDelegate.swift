@@ -435,7 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             try? await Task.sleep(for: SpeechModelLoad.estimateAfter)
             while !Task.isCancelled {
                 guard let self, speechReadiness == .loading else { return }
-                refreshSpeechModelSurfaces()
+                refreshSpeechModelEstimate()
                 try? await Task.sleep(for: SpeechModelLoadEstimate.redrawInterval)
             }
         }
@@ -468,10 +468,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Redraws everywhere a person might try to dictate, from the load as it stands.
     private func refreshSpeechModelSurfaces() {
-        refreshMenuBar()
-        dock.update(with: dockPresentation(for: lastDictationState))
+        refreshSpeechModelEstimate()
         // Guarded here, since the redraw also wakes the updater, which launch starts last on purpose.
         if mainWindow != nil { redrawMainWindow() }
+    }
+
+    /// Moves the estimate on in the menu bar and the floating button; home's hero moves its own.
+    private func refreshSpeechModelEstimate() {
+        refreshMenuBar()
+        dock.update(with: dockPresentation(for: lastDictationState))
     }
 
     /// The floating button for a state, with the speech model's load drawn in.
@@ -782,7 +787,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         suggestionModel = .failed
     }
 
-    /// Lets the weights go once the feature is off, after any load still in flight. See `Docs/performance.md`.
+    /// Lets the weights go once the feature is off, stopping any load still in flight. See `Docs/performance.md`.
     private func releaseTheModel() {
         guard isModelPreparing || suggestionModel == .failed else { return }
         isModelPreparing = false
@@ -790,6 +795,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         suggestionModel = .notAsked
         let previous = modelPreparation
         let releaseModel = releaseModel
+        // A load still in flight is stopped rather than waited out, so no download or read runs on after the release.
+        previous?.cancel()
         modelPreparation = Task {
             await previous?.value
             await releaseModel?()
@@ -872,7 +879,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func applicationDidBecomeActive(_ notification: Notification) {
         // Whatever held the combination may have quit while the user was away.
         if !unarmedShortcuts.isEmpty { startWatchingForClaimedShortcuts() }
-        guard shortcutFailure != nil else { return }
+        guard shortcutArming.failure != nil else { return }
         startWatchingForTheShortcut()
     }
 
@@ -1034,8 +1041,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
-    /// Why the shortcut is not armed, or `nil` when it is. Retried on the way back in.
-    private var shortcutFailure: HotkeyError?
+    /// Why the shortcut is not armed, shown until it is; retried on the way back in.
+    private lazy var shortcutArming = ShortcutArming { [weak self] in self?.showShortcutUnheard() }
     /// Claimed shortcuts the window server refused, so a row never shows a key that does nothing.
     private var unarmedShortcuts: Set<ShortcutAction> = [] {
         didSet {
@@ -1048,19 +1055,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func startWatchingForTheShortcut() {
         guard let controller else { return }
         guard surfaces.listensForDictation else {
-            shortcutFailure = nil
+            shortcutArming.disarm()
             Task { await controller.stop() }
             return
         }
         let binding = settings.hotkey
-        Task { [weak self] in
-            do throws(HotkeyError) {
-                try await controller.start(binding: binding)
-                self?.shortcutFailure = nil
-            } catch {
-                self?.shortcutFailure = error
-                // Said, not swallowed, and retried when the app is next activated.
-                self?.render(.failed(DictationFailure(error)))
+        let arming = shortcutArming
+        // Kept as its own state on the menu bar and floating button, never shown as a failed dictation.
+        Task {
+            await arming.arm { () throws(HotkeyError) in try await controller.start(binding: binding) }
+            if let failure = arming.failure {
+                let reason = SuggestionLog.failure(failure)
+                Self.log.error("the dictation shortcut is not armed: \(reason, privacy: .public)")
             }
         }
     }
@@ -1839,13 +1845,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard secureInput.check() else { return }
         let now = secureInput.isBlocking ? "on" : "off"
         Self.log.notice("secure keyboard entry \(now, privacy: .public)")
+        showShortcutUnheard()
+    }
+
+    /// Redraws both surfaces that say why the shortcut cannot be heard.
+    private func showShortcutUnheard() {
         dock.setShortcutUnheard(shortcutUnheard)
         refreshMenuBar()
     }
 
     /// Why the shortcut cannot be heard, for both surfaces that say so.
     private var shortcutUnheard: String? {
-        secureInput.isBlocking ? SecureInputWatch.notice : nil
+        ShortcutArming.unheard(
+            secureInputBlocking: secureInput.isBlocking, failure: shortcutArming.failure)
     }
 
     /// Translates the pipeline's state into the menu's vocabulary, deciding nothing.

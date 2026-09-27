@@ -44,18 +44,22 @@ final class SlowFields: Sendable {
         rests.withLock { ($0[key]?.until ?? 0) > now }
     }
 
-    /// Records a read of this field that ran past its budget, doubling its rest each time up to the longest.
+    /// Records a read of this field that ran past its budget: the first is forgiven as a cold start, then the rest doubles up to the longest.
     func ranOver(_ key: Key, at now: UInt64) {
         rests.withLock { rests in
             let length =
-                rests[key].map { min($0.length * 2, Self.longestRestInNanoseconds) }
-                ?? Self.firstRestInNanoseconds
+                rests[key].map(Self.nextRest) ?? 0
             rests[key] = Rest(until: now + length, length: length)
             guard rests.count > Self.capacity,
-                let oldest = rests.min(by: { $0.value.until < $1.value.until })?.key
+                let oldest = rests.filter({ $0.key != key }).min(by: { $0.value.until < $1.value.until })?.key
             else { return }
             rests[oldest] = nil
         }
+    }
+
+    /// The rest after one more overrun: the first rest after a forgiven one, then double the last, up to the longest.
+    private static func nextRest(after rest: Rest) -> UInt64 {
+        rest.length == 0 ? firstRestInNanoseconds : min(rest.length * 2, longestRestInNanoseconds)
     }
 
     /// Records a read of this field that kept to its budget, which ends any backing off.
