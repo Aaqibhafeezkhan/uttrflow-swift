@@ -1914,7 +1914,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     now: now)),
             insights: InsightsPresenter.page(
                 for: InsightsSnapshot(
-                    entries: entries, settings: settings, now: now)),
+                    entries: entries, settings: settings,
+                    range: InsightsRange(rawValue: scope(for: .insights)), now: now)),
             snippets: SnippetsPresenter.page(
                 for: SnippetsSnapshot(
                     snippets: knownSnippets, draft: snippetDraft, refusal: snippetRefusal,

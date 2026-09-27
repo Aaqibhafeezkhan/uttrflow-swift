@@ -1,4 +1,4 @@
-// Tests for the Insights page: the chart, the figures, the places, the wait, and the average line.
+// Tests for the Insights page: the calendar, the range switch, the figures, and the wait.
 import Foundation
 import UttrflowHistory
 import UttrflowSettings
@@ -7,7 +7,7 @@ import Testing
 @testable import UttrflowUX
 
 extension HistoryFixture {
-    /// One dictation on each of the last `days` days, so the page has the week of evidence it waits for.
+    /// One dictation on each of `days` days in a row, so the page has the week of evidence it waits for.
     static func aWeek(
         words: Int = 10, seconds: Int? = nil, days: Int = 7, from first: Int = 0,
         application: String? = "Slack", measured: Bool = true
@@ -25,169 +25,335 @@ extension HistoryFixture {
         }
     }
 
-    /// The Insights page over these inputs, with the fixed clock and region.
+    /// The fixture's calendar with the week starting on Monday, as the region's own does.
+    static var mondayFirst: Calendar {
+        var calendar = calendar
+        calendar.firstWeekday = 2
+        return calendar
+    }
+
+    /// Settings keeping history for `days` days.
+    static func keeping(_ days: Int) -> Settings {
+        var settings = Settings.default
+        settings.transcriptRetentionDays = days
+        return settings
+    }
+
+    /// The Insights page over these inputs, with the fixed clock, a Monday-first week and the region.
     static func insights(
         entries: [HistoryEntry] = [],
-        settings: Settings = .default
+        settings: Settings = .default,
+        range: InsightsRange? = nil,
+        calendar: Calendar = mondayFirst
     ) -> InsightsPresentation {
-        // The page reads only the entries.
         InsightsPresenter.page(
-            for: InsightsSnapshot(entries: entries, settings: settings, now: now),
+            for: InsightsSnapshot(entries: entries, settings: settings, range: range, now: now),
             calendar: calendar, locale: locale)
     }
 }
 
-@Suite("Insights once there is a week to compare")
-struct InsightsChartTests {
-    @Test("one bar per day of the window, oldest first")
-    func bars() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
-        #expect(page.days.count == Settings.defaultRetentionDays)
-        #expect(page.days.last?.isToday == true)
-        #expect(page.emptyState == nil)
-        #expect(page.chartTitle == "Words dictated")
-        #expect(page.chartCaption.hasPrefix("70 words · "))
+@Suite("The calendar's days")
+struct InsightsCalendarBucketingTests {
+    @Test("one tile per day of the range, oldest first, ending today")
+    func oneTilePerDay() throws {
+        let week = try #require(HistoryFixture.insights(entries: HistoryFixture.aWeek()).calendar)
+        #expect(week.days.count == 7)
+        #expect(week.days.last?.isToday == true)
+        #expect(week.days.filter(\.isToday).count == 1)
+        #expect(week.days.map(\.date) == week.days.map(\.date).sorted())
+        #expect(week.days.last?.number == "15")
+        #expect(week.days.first?.id == week.days.first?.date)
+
+        let month = try #require(
+            HistoryFixture.insights(
+                entries: HistoryFixture.aWeek(), settings: HistoryFixture.keeping(30)
+            ).calendar)
+        #expect(month.days.count == 30)
+
+        let quarter = try #require(
+            HistoryFixture.insights(
+                entries: HistoryFixture.aWeek(), settings: HistoryFixture.keeping(90), range: .quarter
+            ).calendar)
+        #expect(quarter.days.count == 90)
     }
 
-    /// A gap in a bar chart is information; a missing bar is a mystery.
-    @Test("a day nobody spoke on is drawn as a silent day rather than left out")
-    func silentDays() {
-        // A fortnight's window with only the last week spoken on, so half the chart is silent days.
-        var settings = Settings.default
-        settings.transcriptRetentionDays = 14
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(), settings: settings)
-
-        #expect(page.days.count == 14)
-        #expect(page.days.filter(\.isSilent).count == 7)
-        #expect(page.days.prefix(7).filter(\.isSilent).count == 7)
-        #expect(page.days.filter(\.isSilent).map(\.words) == Array(repeating: 0, count: 7))
-    }
-
-    @Test("each bar is a share of the busiest day")
-    func fractions() {
-        var entries = HistoryFixture.aWeek(words: 10)
-        entries.append(
-            HistoryEntry(
-                id: UUID(), text: String(repeating: "word ", count: 90),
-                when: HistoryFixture.now, applicationName: "Slack"))
-
-        let page = HistoryFixture.insights(entries: entries)
-        #expect(page.days.last?.fraction == 1)
-        #expect(page.days.allSatisfy { $0.fraction >= 0 && $0.fraction <= 1 })
-        #expect(page.days.last?.words == 100)
-        #expect(page.days.first?.id == page.days.first?.label)
-    }
-
-    /// The window is the user's own retention setting, not this page's to widen, so the control names it.
-    @Test("the scope names the window and offers nothing to pick")
-    func scope() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
-        #expect(page.chrome.scope?.title == "Last 7 days")
-        #expect(page.chrome.scope?.isSelectable == false)
-    }
-
-    @Test("a shorter retention shortens the window")
-    func retention() {
-        var settings = Settings.default
-        settings.transcriptRetentionDays = 30
-        let page = HistoryFixture.insights(
-            entries: HistoryFixture.aWeek(days: 20), settings: settings)
-        #expect(page.days.count == 30)
-        #expect(page.chrome.scope?.title == "Last 30 days")
-    }
-}
-
-@Suite("The figures Insights can vouch for")
-struct InsightsFiguresTests {
-    /// The "languages you spoke" card and "time saved" tile have no source, so both are absent.
-    @Test("nothing is charted that has not been measured")
-    func nothingInvented() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(measured: false))
-        #expect(page.figures.isEmpty)
-        #expect(page.footnote?.contains("no “time saved” figure") == true)
-    }
-
-    @Test("pace appears once something has been timed")
-    func pace() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(words: 10, seconds: 10))
-        let figure = page.figures.first { $0.caption == "Words per minute" }
-        #expect(figure?.value == "60")
-        #expect(figure?.comment == "Days you did not dictate are skipped.")
-    }
-
-    /// A line that dives to the floor because nobody spoke would read as the user getting worse.
-    @Test("the pace trend has a point per day that had one, oldest first")
-    func trend() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(seconds: 10))
-        #expect(page.paceTrend.count == 7)
-        #expect(HistoryFixture.insights(entries: HistoryFixture.aWeek()).paceTrend.isEmpty)
-    }
-
-    @Test("accuracy appears once something records what was changed")
-    func accuracy() {
-        let page = HistoryFixture.insights(
-            entries: (0..<7).map { day in
-                HistoryFixture.measured(
-                    "Word word word", spokenWords: 4,
-                    changes: [HistoryFixture.change("word", "Word", over: 0..<1)], daysAgo: day)
-            })
-
-        let figure = page.figures.first { $0.caption == DictationPresenter.accuracyTitle }
-        #expect(figure?.value == "75.0%")
-        #expect(figure?.meters.map(\.label) == ["Now"])
-        // The page borrows the Dictation page's wording, so one arithmetic is described one way.
-        #expect(figure?.comment == DictationPresenter.accuracyCaption)
-    }
-
-    @Test("no record of changes means no accuracy figure")
-    func accuracyNeedsARecord() {
-        let page = HistoryFixture.insights(
-            entries: HistoryFixture.aWeek(seconds: 10, measured: false))
-        #expect(!page.figures.contains { $0.caption == DictationPresenter.accuracyTitle })
-    }
-}
-
-@Suite("Where the words went")
-struct InsightsPlacesTests {
-    @Test("the apps are listed busiest first, as shares of what is known")
-    func places() {
+    /// Fifty dictations in one afternoon are one tile holding all their words.
+    @Test("dictations on the same day add up on one tile")
+    func sameDaySums() throws {
         let entries =
-            HistoryFixture.aWeek(days: 6, from: 0, application: "Slack")
-            + HistoryFixture.aWeek(days: 2, from: 5, application: "Code")
-        let page = HistoryFixture.insights(entries: entries)
-
-        #expect(page.places.map(\.application.name) == ["Slack", "Code"])
-        #expect(page.places.first?.percentage == "75%")
-        #expect(page.places.map(\.share).reduce(0, +) == 1)
-        #expect(page.places.first?.id == "Slack")
+            HistoryFixture.aWeek(words: 10)
+            + [HistoryFixture.entry("one two three", minutesAgo: 60)]
+        let calendar = try #require(HistoryFixture.insights(entries: entries).calendar)
+        #expect(calendar.days.last?.words == 13)
+        #expect(calendar.days.first?.words == 10)
     }
 
-    /// Left out of the total as well as the list, so the shares are of what is actually known.
-    @Test("a dictation that went nowhere known is not counted")
-    func unknownDestination() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(application: nil))
-        #expect(page.places.isEmpty)
+    /// The day is the calendar's, so a minute either side of midnight lands on different tiles.
+    @Test("a dictation is counted on the day it was said, by the calendar's midnight")
+    func midnight() throws {
+        let startOfToday = HistoryFixture.calendar.startOfDay(for: HistoryFixture.now)
+        let late = HistoryEntry(
+            id: UUID(), text: "late night words", when: startOfToday.addingTimeInterval(-60),
+            applicationName: "Slack")
+        let early = HistoryEntry(
+            id: UUID(), text: "early", when: startOfToday.addingTimeInterval(60),
+            applicationName: "Slack")
+        let entries = HistoryFixture.aWeek(words: 1, days: 7, from: 2) + [late, early]
+        let calendar = try #require(
+            HistoryFixture.insights(
+                entries: entries, settings: HistoryFixture.keeping(30), range: .week
+            ).calendar)
+
+        #expect(calendar.days[6].words == 1, "today holds only the dictation after midnight")
+        #expect(calendar.days[5].words == 3, "yesterday holds the one before")
     }
 
-    @Test("a blank application name is no name at all")
-    func blankName() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(application: "   "))
-        #expect(page.places.isEmpty)
+    /// A gap is information; a missing tile would be a mystery.
+    @Test("a day nobody spoke on is a bare tile rather than left out")
+    func silentDays() throws {
+        let calendar = try #require(
+            HistoryFixture.insights(
+                entries: HistoryFixture.aWeek(), settings: HistoryFixture.keeping(30)
+            ).calendar)
+        let silent = calendar.days.filter(\.isSilent)
+
+        #expect(silent.count == 23)
+        #expect(silent.allSatisfy { $0.shade == 0 && $0.words == 0 && !$0.usesDeepInk })
+        #expect(silent.first?.detail.hasPrefix("No dictation · ") == true)
+    }
+
+    @Test("dictations older than the range are not on it")
+    func outsideTheRange() throws {
+        let entries = HistoryFixture.aWeek(words: 10, days: 20)
+        let week = try #require(
+            HistoryFixture.insights(
+                entries: entries, settings: HistoryFixture.keeping(30), range: .week
+            ).calendar)
+        #expect(week.days.reduce(0) { $0 + $1.words } == 70)
     }
 }
 
-@Suite("Insights before there is enough to chart")
+@Suite("The calendar's shading")
+struct InsightsCalendarShadeTests {
+    /// The busiest day is fully teal; a quiet day keeps a floor so it still reads as spoken on.
+    @Test("each tile is a share of the busiest day, over a floor")
+    func shades() throws {
+        var entries = HistoryFixture.aWeek(words: 10)
+        entries.append(HistoryFixture.entry(String(repeating: "word ", count: 90)))
+        let calendar = try #require(HistoryFixture.insights(entries: entries).calendar)
+        let today = try #require(calendar.days.last)
+        let quiet = try #require(calendar.days.first)
+
+        #expect(today.words == 100)
+        #expect(today.fraction == 1)
+        #expect(abs(today.shade - 1) < 1e-9)
+        #expect(today.usesDeepInk)
+        #expect(quiet.fraction == 0.1)
+        #expect(abs(quiet.shade - (0.15 + 0.85 * 0.1)) < 1e-9)
+        #expect(!quiet.usesDeepInk)
+    }
+
+    @Test("the deep ink starts past sixty per cent of the busiest day")
+    func deepInk() {
+        let day = { (fraction: Double) in
+            InsightsCalendarDay(
+                date: HistoryFixture.now, number: "1", words: 1, fraction: fraction, isToday: false,
+                detail: "")
+        }
+        #expect(!day(0.6).usesDeepInk)
+        #expect(day(0.61).usesDeepInk)
+    }
+
+    @Test("a tile's share and a calendar's blanks are kept in range")
+    func clamps() {
+        let tile = InsightsCalendarDay(
+            date: HistoryFixture.now, number: "1", words: 5, fraction: 3, isToday: false, detail: "")
+        #expect(tile.fraction == 1)
+        #expect(
+            InsightsCalendarDay(
+                date: HistoryFixture.now, number: "1", words: 5, fraction: -1, isToday: false,
+                detail: ""
+            ).fraction == 0)
+        #expect(InsightsCalendar(title: "", weekdays: [], leadingBlanks: 9, days: []).leadingBlanks == 6)
+        #expect(InsightsCalendar(title: "", weekdays: [], leadingBlanks: -2, days: []).leadingBlanks == 0)
+    }
+
+    @Test("the legend steps from less to more")
+    func legend() {
+        #expect(InsightsCalendar.legend == InsightsCalendar.legend.sorted())
+        #expect(InsightsCalendar.legend.count == 4)
+    }
+
+    @Test("a tile says how many words, with the thousands grouped")
+    func detail() throws {
+        let entries =
+            HistoryFixture.aWeek(words: 1, from: 1)
+            + [HistoryFixture.entry(String(repeating: "word ", count: 1_284))]
+        let calendar = try #require(HistoryFixture.insights(entries: entries).calendar)
+        #expect(calendar.days.last?.detail.hasPrefix("1,284 words · 15") == true)
+        #expect(calendar.days.first?.detail.hasPrefix("1 word · ") == true)
+    }
+}
+
+@Suite("The calendar's weeks")
+struct InsightsCalendarWeekTests {
+    /// Sunday 15 June 2025 is today, so a week back starts on Monday 9 June.
+    @Test("a week starting on the first weekday needs no blanks")
+    func mondayWeek() throws {
+        let calendar = try #require(HistoryFixture.insights(entries: HistoryFixture.aWeek()).calendar)
+        #expect(calendar.leadingBlanks == 0)
+        #expect(calendar.weeks == 1)
+        #expect(calendar.weekdays == ["M", "T", "W", "T", "F", "S", "S"])
+        #expect(calendar.title == "June")
+    }
+
+    @Test("the grid starts on the calendar's own first weekday")
+    func sundayFirst() throws {
+        var sundayFirst = HistoryFixture.calendar
+        sundayFirst.firstWeekday = 1
+        let calendar = try #require(
+            HistoryFixture.insights(entries: HistoryFixture.aWeek(), calendar: sundayFirst).calendar)
+        #expect(calendar.weekdays.first == "S")
+        #expect(calendar.leadingBlanks == 1)
+        #expect(calendar.weeks == 2)
+    }
+
+    /// Thirty days back from 15 June is Saturday 17 May, five cells into a Monday-first week.
+    @Test("a month lines its first day up under its weekday and names both months")
+    func month() throws {
+        let calendar = try #require(
+            HistoryFixture.insights(
+                entries: HistoryFixture.aWeek(), settings: HistoryFixture.keeping(30)
+            ).calendar)
+        #expect(calendar.leadingBlanks == 5)
+        #expect(calendar.days.first?.number == "17")
+        #expect(calendar.weeks == 5)
+        #expect(calendar.title == "May – June")
+    }
+
+    @Test("a quarter names its first and last months and runs to thirteen weeks")
+    func quarter() throws {
+        let calendar = try #require(
+            HistoryFixture.insights(
+                entries: HistoryFixture.aWeek(), settings: HistoryFixture.keeping(90), range: .quarter
+            ).calendar)
+        #expect(calendar.title == "March – June")
+        #expect(calendar.leadingBlanks == 1, "18 March is a Tuesday")
+        #expect(calendar.weeks == 13)
+    }
+}
+
+@Suite("The range switch")
+struct InsightsRangeTests {
+    @Test("three ranges, in order, each named by its days")
+    func ranges() {
+        #expect(InsightsRange.allCases.map(\.days) == [7, 30, 90])
+        #expect(InsightsRange.allCases.map(\.title) == ["7 days", "30 days", "90 days"])
+        #expect(InsightsRange.allCases.map(\.id) == ["7", "30", "90"])
+        #expect(InsightsRange(rawValue: "") == nil)
+    }
+
+    @Test("a month is shown by default where history reaches that far")
+    func defaultIsAMonth() {
+        let page = HistoryFixture.insights(
+            entries: HistoryFixture.aWeek(), settings: HistoryFixture.keeping(90))
+        #expect(page.ranges.filter(\.isSelected).map(\.range) == [.month])
+        #expect(page.ranges.allSatisfy { $0.isAvailable })
+        #expect(page.ranges.map(\.id) == ["7", "30", "90"])
+        #expect(page.ranges.map(\.title) == ["7 days", "30 days", "90 days"])
+    }
+
+    /// History kept for a week has nothing to show further back, so the switch says so.
+    @Test("a range beyond what is kept cannot be picked, and says why")
+    func beyondRetention() throws {
+        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(), range: .month)
+        #expect(page.ranges.filter(\.isSelected).map(\.range) == [.week])
+        #expect(page.ranges.map(\.isAvailable) == [true, false, false])
+        let reason = try #require(page.ranges[1].unavailableReason)
+        #expect(reason.contains("History is kept for 7 days"))
+        #expect(reason.contains("30 days"))
+        #expect(page.calendar?.days.count == 7)
+    }
+
+    @Test("the picked range is shown when it is in reach")
+    func picked() {
+        let page = HistoryFixture.insights(
+            entries: HistoryFixture.aWeek(), settings: HistoryFixture.keeping(30), range: .week)
+        #expect(page.ranges.filter(\.isSelected).map(\.range) == [.week])
+        #expect(page.ranges.map(\.isAvailable) == [true, true, false])
+    }
+
+    /// A week is always offered, even to history kept for a day, so the switch is never empty.
+    @Test("a week is in reach however short the retention")
+    func weekAlwaysOffered() {
+        for days in [1, 3, 7] {
+            #expect(InsightsPresenter.reaches(.week, retention: days))
+            #expect(InsightsPresenter.chosen(nil, retention: days) == .week)
+        }
+        #expect(InsightsPresenter.chosen(.quarter, retention: 30) == .month)
+        #expect(InsightsPresenter.chosen(.quarter, retention: 90) == .quarter)
+    }
+}
+
+@Suite("The figures beside the calendar")
+struct InsightsFiguresTests {
+    @Test("words, dictations, words per minute and the streak, in that order")
+    func order() {
+        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(words: 10, seconds: 10))
+        #expect(page.figures.map(\.caption) == ["words", "dictations", "words / min", "streak"])
+        #expect(page.figures.map(\.value) == ["70", "7", "60", "7 days"])
+    }
+
+    @Test("the words and dictations are the range's, grouped by thousands")
+    func withinTheRange() {
+        let entries = HistoryFixture.aWeek(words: 500, days: 20)
+        let week = HistoryFixture.insights(
+            entries: entries, settings: HistoryFixture.keeping(30), range: .week)
+        let month = HistoryFixture.insights(
+            entries: entries, settings: HistoryFixture.keeping(30), range: .month)
+        #expect(week.figures.prefix(2).map(\.value) == ["3,500", "7"])
+        #expect(month.figures.prefix(2).map(\.value) == ["10,000", "20"])
+    }
+
+    /// Nothing timed means no pace to give, and a dash says so rather than a zero.
+    @Test("words per minute is a dash until something is timed")
+    func untimedPace() {
+        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
+        #expect(page.figures.first { $0.caption == "words / min" }?.value == "—")
+    }
+
+    /// The streak is Home's, so the two pages cannot disagree about it.
+    @Test("the streak is the one Home counts")
+    func streakIsHomes() {
+        let entries = HistoryFixture.aWeek(days: 4, from: 1) + HistoryFixture.aWeek(days: 5, from: 6)
+        let page = HistoryFixture.insights(entries: entries, settings: HistoryFixture.keeping(30))
+        let home = HomeDashboard.streak(
+            in: entries, now: HistoryFixture.now, calendar: HistoryFixture.mondayFirst)
+        #expect(page.figures.last?.value == MainFormatting.count(home, "day", "days"))
+        #expect(page.figures.last?.value == "4 days", "yesterday back to the first gap")
+    }
+
+    @Test("the header names the page and where its figures come from")
+    func chrome() {
+        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
+        #expect(page.chrome.title == "Insights")
+        #expect(page.chrome.caption?.hasSuffix("Measured on this Mac.") == true)
+        #expect(page.chrome.scope == nil)
+        #expect(page.emptyState == nil)
+    }
+}
+
+@Suite("Insights before there is enough to show")
 struct InsightsWaitingTests {
     /// A baseline drawn from three days is noise wearing a number's clothes, so the page waits.
-    @Test("fewer than seven days of speaking means the charts wait")
+    @Test("fewer than seven days of speaking means the calendar waits")
     func waits() {
         let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(days: 2))
-        #expect(page.days.isEmpty)
+        #expect(page.calendar == nil)
+        #expect(page.ranges.isEmpty)
         #expect(page.figures.isEmpty)
-        #expect(page.places.isEmpty)
-        #expect(page.chartCaption.isEmpty)
-        #expect(page.footnote == nil)
         #expect(page.emptyState?.title == "Not enough to chart yet")
+        #expect(page.chrome.title == "Insights")
     }
 
     @Test("the wait is measured in days spoken on, not dictations")
@@ -227,67 +393,5 @@ struct InsightsWaitingTests {
         #expect(
             HistoryFixture.insights().emptyState?.footnote?.contains("rather than guessing")
                 == true)
-    }
-}
-
-@Suite("The line a bar means something against")
-struct InsightsAverageTests {
-    /// A column of bars answers "which day was biggest"; the average turns each bar into a statement.
-    @Test("averages the words across every charted day")
-    func averagesTheWindow() throws {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
-        let average = try #require(page.average)
-        let total = page.days.reduce(0) { $0 + $1.words }
-
-        #expect(average.words == Int((Double(total) / Double(page.days.count)).rounded()))
-        #expect(average.label.hasSuffix("a day"))
-    }
-
-    /// Silent days count; dropping them would flatter the figure into "your average dictating day".
-    @Test("counts the silent days in the average")
-    func silentDaysCount() throws {
-        // A month with one week of dictating in it, since the chart needs seven spoken days to appear.
-        var settings = Settings.default
-        settings.transcriptRetentionDays = 30
-        let page = HistoryFixture.insights(
-            entries: HistoryFixture.aWeek(words: 20, days: 7), settings: settings)
-        let average = try #require(page.average)
-        let spoken = page.days.filter { !$0.isSilent }
-        let acrossSpokenOnly = spoken.reduce(0) { $0 + $1.words } / max(spoken.count, 1)
-
-        #expect(spoken.count == 7)
-        #expect(page.days.count == 30, "the window is the retention setting")
-        #expect(acrossSpokenOnly == 20, "each day spoken on had twenty words")
-        // The whole window averages far lower than the week inside it: a quiet month reads as quiet.
-        #expect(average.words < acrossSpokenOnly)
-        #expect(average.words == Int((20.0 * 7 / 30).rounded()))
-    }
-
-    /// The tallest bar is `fraction == 1`, so the line is measured against that day, not an invented scale.
-    @Test("sits on the same scale as the bars")
-    func sharesTheBarsScale() throws {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
-        let average = try #require(page.average)
-
-        #expect(average.fraction > 0 && average.fraction <= 1)
-        #expect(page.days.contains { $0.fraction >= average.fraction })
-    }
-
-    @Test("there is no line before there is a chart")
-    func noneBeforeTheChart() {
-        #expect(HistoryFixture.insights().average == nil)
-    }
-}
-
-@Suite("How much was said where")
-struct InsightsPlaceWordsTests {
-    /// The share says how the day was divided; the count says how much of it there was.
-    @Test("each place carries the words said in it, not only its share")
-    func placesCarryWords() throws {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
-        let place = try #require(page.places.first)
-
-        #expect(place.words.hasSuffix("words") || place.words.hasSuffix("word"))
-        #expect(place.words.first?.isNumber == true)
     }
 }
