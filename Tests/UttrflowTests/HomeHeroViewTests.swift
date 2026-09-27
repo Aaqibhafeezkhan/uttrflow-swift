@@ -62,6 +62,13 @@ struct HomeHeroViewTests {
         #expect(HomeTileGrid.rows(count: 0, width: four) == 0)
     }
 
+    @Test("each rail dot takes the colour of the line where it sits: teal, blue, then lilac")
+    func railDots() {
+        #expect((0..<3).map { HomeActivityCard.railStop(at: $0, of: 3) } == [0, 1, 2])
+        #expect((0..<2).map { HomeActivityCard.railStop(at: $0, of: 2) } == [0, 2])
+        #expect(HomeActivityCard.railStop(at: 0, of: 1) == 0)
+    }
+
     @Test("an account picture is decoded to avatar size and kept for the same bytes")
     func accountPicture() async throws {
         let image = try #require(await MoodPictures.picture(for: .evening)?.image)
