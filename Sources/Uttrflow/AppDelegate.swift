@@ -2044,6 +2044,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             putOnClipboard(text, used: nil)
             sayCopiedForMainWindow()
         case .insert(let text): insert(text, used: nil)
+        case .dictate:
+            // Through the controller, which plays the cues and keeps one answer to what a control does.
+            Task { [weak self] in await self?.controller?.toggleFromControl() }
+        case .search:
+            carryOut(.show(.history))
+            mainWindow?.focusSearch()
         case .show(let page):
             // A notice describes the button that was pressed on the page being left, so it goes with it.
             actionNotice = nil

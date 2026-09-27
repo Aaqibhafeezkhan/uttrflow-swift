@@ -74,7 +74,7 @@ struct HomeGreetingTests {
 
     @Test(
         "the time of day is the one it actually is",
-        arguments: [(6, "Good morning"), (13, "Good afternoon"), (19, "Good evening"), (2, "Good evening")]
+        arguments: [(6, "Good morning"), (13, "Good afternoon"), (19, "Good evening"), (2, "Working late")]
     )
     func timeOfDay(hour: Int, expected: String) {
         #expect(HistoryFixture.home(at: HistoryFixture.atHour(hour)).greeting == expected)
