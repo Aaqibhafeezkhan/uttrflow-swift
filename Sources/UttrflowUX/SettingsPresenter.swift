@@ -197,9 +197,9 @@ public enum SettingsPresenter {
             let binding = settings.shortcuts.first(for: .dictate)
         else { return nil }
         return SettingsRow(
-            id: "handsFree",
+            id: SettingsToggleField.handsFreeEnabled.rawValue,
             label: "Hands-free",
-            control: .status("On"),
+            control: .toggle(field: .handsFreeEnabled, isOn: settings.handsFreeEnabled),
             badge: "NEW",
             keyedExplanation: SettingsKeyedSentence(
                 before: "Double-tap", keys: SettingsShortcut.keycaps(for: binding),
@@ -1021,6 +1021,7 @@ public enum SettingsPresenter {
     static func value(of field: SettingsToggleField, in settings: Settings) -> Bool {
         switch field {
         case .dictationEnabled: settings.dictationEnabled
+        case .handsFreeEnabled: settings.handsFreeEnabled
         case .clipboardEnabled: settings.clipboardEnabled
         case .showsFloatingButton: settings.showsFloatingButton
         case .shrinksToGripWhenIdle: settings.shrinksToGripWhenIdle

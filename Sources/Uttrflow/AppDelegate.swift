@@ -960,6 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             monitor: ActivationMonitor(),
             cue: cue,
             activation: settings.hotkeyActivation,
+            handsFreeEnabled: settings.handsFreeEnabled,
             clock: ContinuousClock(),
             onAdvice: { [weak self] advice in
                 Task { @MainActor in self?.recordingAdviceChanged(to: advice) }
@@ -2482,6 +2483,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if updated.hotkeyActivation != previous.hotkeyActivation {
             let activation = updated.hotkeyActivation
             Task { [weak self] in await self?.controller?.setActivation(activation) }
+        }
+        if updated.handsFreeEnabled != previous.handsFreeEnabled {
+            let enabled = updated.handsFreeEnabled
+            Task { [weak self] in await self?.controller?.setHandsFreeEnabled(enabled) }
         }
         telemetry?.setEnabled(updated.sharesUsageStatistics)
         // As above: a switch that drew itself and changed nothing.
