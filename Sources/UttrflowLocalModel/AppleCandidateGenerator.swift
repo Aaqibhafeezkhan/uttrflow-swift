@@ -47,9 +47,7 @@ public actor AppleCandidateGenerator: PassShowing {
                 CompletionText.trimmed($0, typed: typed, echoing: context)
             }
         }
-        completions = completions.compactMap {
-            SignOff.unsigned($0, typed: typed, screen: context, ownLines: situation.recentLines)
-        }
+        completions = CompletionText.finished(completions, typed: typed, in: situation)
         return GenerationPass(text: response.content.line, stopReason: "structured", completions: completions)
     }
 }

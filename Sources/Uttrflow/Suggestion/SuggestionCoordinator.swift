@@ -100,6 +100,8 @@ final class SuggestionCoordinator {
     private var isStopped = false
     /// Set while a dictation is under way, when no turn may start.
     private var isDictating = DictationInProgress.shared.isDictating
+    /// Set when a paste or a dictation put text in the field that capture has not yet been told was never typed.
+    private var insertionPending = false
     private var again: SuggestionReason?
     private let ownBundleIdentifier = Bundle.main.bundleIdentifier
     /// Called when the user turns the feature off everywhere, so the choice is persisted and can be undone.
@@ -220,6 +222,9 @@ final class SuggestionCoordinator {
     /// Keystrokes elsewhere, the application in front changing, and a clock for the pauses.
     private func watchForActivity() {
         let keys = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            let pastes = Self.isPaste(event)
+            // A paste, the person's or this app's own, puts words in the line that were never typed.
+            if pastes { MainActor.assumeIsolated { self?.insertionPending = true } }
             // A key this app inserted must not wake another turn, or the feature types on its own.
             if let cgEvent = event.cgEvent, SyntheticEvent.isOurs(cgEvent) { return }
             let text = Self.typedText(characters: event.characters, modifiers: event.modifierFlags)
@@ -250,8 +255,15 @@ final class SuggestionCoordinator {
         }
     }
 
+    /// Whether a key-down is ⌘V under any layout, which pastes text rather than typing it.
+    nonisolated static func isPaste(_ event: NSEvent) -> Bool {
+        event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers?.lowercased() == "v"
+    }
+
     /// Withdraws the ghost and holds every turn while a dictation is under way, so its models have the GPU.
     func dictationChanged(isDictating: Bool) {
+        // A dictation that ends leaves its words in the field, and they are not this person's typing.
+        if self.isDictating, !isDictating { insertionPending = true }
         self.isDictating = isDictating
         guard isDictating else { return }
         again = nil
@@ -780,7 +792,7 @@ final class SuggestionCoordinator {
             _ = try? await capture.handle(.applicationDeactivated(at: moment), in: leaving)
         }
         let line = snapshot.learnableLine
-        let events: [CaptureEvent]
+        var events: [CaptureEvent]
         if case .returnPressed = reason {
             let prior = handed.flatMap { $0.reading == reading ? $0.line : nil } ?? ""
             events = ReturnCatchUp.events(read: line, handed: prior, at: moment)
@@ -788,6 +800,11 @@ final class SuggestionCoordinator {
         } else {
             events = [reason.event(holding: line, at: moment)]
             if case .keystroke = events[0] { handed = (line, reading) }
+        }
+        // Only a turn that read the line can tell capture the line holds inserted text.
+        if insertionPending, reason != .tick {
+            insertionPending = false
+            events = CaptureEvent.marking(events, insertedAt: moment)
         }
         var outcome: CaptureOutcome?
         for event in events { outcome = try? await capture.handle(event, in: reading) }
