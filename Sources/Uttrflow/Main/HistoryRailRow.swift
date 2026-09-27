@@ -3,7 +3,7 @@
 import UttrflowUX
 import SwiftUI
 
-/// A dictation or a lost recording beside the day's rail; the hover buttons are only hidden, never removed.
+/// A dictation or a lost recording beside the day's rail; the hover buttons hide only their glyphs, never themselves.
 struct HistoryRailRow: View {
     let row: HistoryRow
     /// Where the row sits in its day, so the rail's line fades from the first row to the last.
@@ -31,7 +31,6 @@ struct HistoryRailRow: View {
             if !offered.isEmpty && !row.more.isEmpty { Divider() }
             ForEach(row.more) { menuItem($0) }
         }
-        .rowActions(offered + row.more, onIntent: onIntent)
     }
 
     /// What the row's buttons do, offered again in its context menu and to VoiceOver.
@@ -111,6 +110,7 @@ struct HistoryRailRow: View {
         }
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .contain)
+        .rowActions(offered + row.more, onIntent: onIntent)
     }
 
     /// The card's film, a little brighter when pointed at and tinted amber for a recording.
@@ -169,7 +169,7 @@ struct HistoryRailRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Hidden, not removed, and still hit-testable, so a VoiceOver user can activate these.
+    /// Only the glyphs wait for the pointer or the keyboard; the buttons stay reachable by VoiceOver.
     private var actions: some View {
         HStack(spacing: 5) {
             ForEach(row.actions) { action in
@@ -182,10 +182,14 @@ struct HistoryRailRow: View {
                             action.intent == .flagDictation(row.id) && row.isFlagged
                                 ? PagePalette.clipboard : PagePalette.text.opacity(0.7))
                 }
-                .buttonStyle(HomeQuietButtonStyle(isSquare: true))
+                .buttonStyle(
+                    HomeQuietButtonStyle(
+                        isSquare: true,
+                        isShown: RowReveal.isDrawn(isHovered: isHovered, focusedControl: focusedControl))
+                )
                 .help(action.title)
                 .accessibilityLabel(action.title)
-                .revealedInRow(action.id, isHovered: isHovered, focusedControl: $focusedControl)
+                .focused($focusedControl, equals: action.id)
             }
         }
     }
