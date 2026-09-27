@@ -61,7 +61,7 @@ struct AccountBanner: View {
                 Text(identity.name)
                     .font(BrandFont.display(size: 30, weight: .semibold))
                     .tracking(-0.9)
-                    .foregroundStyle(PagePalette.text)
+                    .foregroundStyle(ProfilePalette.bannerInk)
                     .accessibilityAddTraits(.isHeader)
                 if let email = identity.emailAddress {
                     Text(email)
@@ -260,6 +260,7 @@ enum ProfilePalette {
         startPoint: UnitPoint(x: 0.25, y: 0.07), endPoint: UnitPoint(x: 0.75, y: 0.93))
     static let avatarRing = Color(nsColor: .orbit(R.avatarRing))
     static let bannerGround = Color(nsColor: .orbit(R.bannerGround))
+    static let bannerInk = Color(nsColor: .orbit(R.bannerInk))
     static let bannerSoft = Color(nsColor: .orbit(R.bannerSoft))
     static let glassFill = Color(nsColor: .orbit(R.glassFill))
     static let glassEdge = Color(nsColor: .orbit(R.glassEdge))

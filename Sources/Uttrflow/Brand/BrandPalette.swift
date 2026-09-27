@@ -170,8 +170,10 @@ enum BrandPalette {
         static let avatarRing = BrandLayer(tone: textStrong, darkOpacity: 0.08, lightOpacity: 0.072)
         /// The profile banner's ground under its aurora, dark in both appearances.
         static let bannerGround = BrandTone(0x10_101A)
+        /// The name on the profile banner, white in both appearances because the banner stays dark.
+        static let bannerInk = BrandTone(0xFF_FFFF)
         /// The address under the name on the profile banner.
-        static let bannerSoft = BrandLayer(tone: textStrong, darkOpacity: 0.75, lightOpacity: 0.675)
+        static let bannerSoft = BrandLayer(tone: bannerInk, darkOpacity: 0.75, lightOpacity: 0.75)
         /// A glass panel's white film, which all but vanishes on the light page.
         static let glassFill = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.05, lightOpacity: 0.05)
         /// The white hairline round a glass panel, which all but vanishes on the light page.
