@@ -68,10 +68,20 @@ public struct InsightsCalendarDay: Sendable, Equatable, Identifiable {
     public var id: Date { date }
     /// A day with nothing said, drawn as a bare tile.
     public var isSilent: Bool { words == 0 }
-    /// The teal's opacity: a floor so a quiet day still reads as spoken on, rising to full on the busiest.
-    public var shade: Double { isSilent ? 0 : 0.15 + 0.85 * fraction }
-    /// Whether the deep ink reads better than the page's ink on this tile; the two cross at 0.6 in dark.
-    public var usesDeepInk: Bool { shade > 0.6 }
+    /// The teal's opacity, from a floor to full, stepping over the band where no number ink reaches 4.5:1.
+    public var shade: Double {
+        if isSilent { return 0 }
+        let smooth = 0.15 + 0.85 * fraction
+        guard smooth > Self.inkCeiling, smooth < Self.deepInkFloor else { return smooth }
+        return smooth < (Self.inkCeiling + Self.deepInkFloor) / 2 ? Self.inkCeiling : Self.deepInkFloor
+    }
+    /// Whether the number is drawn in the deep ink, which is on every tile at or past ``deepInkFloor``.
+    public var usesDeepInk: Bool { shade >= Self.deepInkFloor }
+
+    /// The deepest shade the page's ink still clears 4.5:1 on in dark. See `Docs/redesign-tokens.md`.
+    public static let inkCeiling = 0.5
+    /// The palest shade the deep ink clears 4.5:1 on in dark.
+    public static let deepInkFloor = 0.72
 
     /// Builds a tile; the fraction is clamped to 0…1.
     public init(
@@ -89,7 +99,7 @@ public struct InsightsCalendarDay: Sendable, Equatable, Identifiable {
 /// The range laid out as weeks, first weekday on the left.
 public struct InsightsCalendar: Sendable, Equatable {
     /// The shades the legend steps through, from less to more.
-    public static let legend: [Double] = [0.15, 0.4, 0.65, 0.9]
+    public static let legend: [Double] = [0.15, 0.4, 0.72, 0.9]
 
     /// The months the range spans: "August – September".
     public let title: String
@@ -122,18 +132,22 @@ public struct InsightsSnapshot: Sendable, Equatable {
     public let range: InsightsRange?
     /// The clock the page is drawn against.
     public let now: Date
+    /// Whether ``entries`` has been read from the store yet; false only before the first reading.
+    public let hasReadHistory: Bool
 
     /// Builds a snapshot; entries and settings default to empty, the range to the presenter's choice.
     public init(
         entries: [HistoryEntry] = [],
         settings: Settings = .default,
         range: InsightsRange? = nil,
-        now: Date
+        now: Date,
+        hasReadHistory: Bool = true
     ) {
         self.entries = entries
         self.settings = settings
         self.range = range
         self.now = now
+        self.hasReadHistory = hasReadHistory
     }
 }
 
@@ -141,9 +155,9 @@ public struct InsightsSnapshot: Sendable, Equatable {
 public struct InsightsPresentation: Sendable, Equatable {
     /// The title and caption across the top.
     public let chrome: MainPageChrome
-    /// The range switch. Empty exactly when ``emptyState`` is set.
+    /// The range switch. Empty when ``emptyState`` is set or the history is still being read.
     public let ranges: [InsightsRangeOption]
-    /// The calendar. Absent exactly when ``emptyState`` is set.
+    /// The calendar. Absent when ``emptyState`` is set or the history is still being read.
     public let calendar: InsightsCalendar?
     /// Words, dictations, words per minute and the streak, in that order.
     public let figures: [MainStatistic]
@@ -183,6 +197,11 @@ public enum InsightsPresenter {
         let chrome = MainPageChrome(
             title: "Insights",
             caption: "Where the words went, and how fast they arrived. Measured on this Mac.")
+        // Before the store has answered, only the header is drawn, not "0 of 7 days".
+        guard snapshot.hasReadHistory else {
+            return InsightsPresentation(
+                chrome: chrome, ranges: [], calendar: nil, figures: [], emptyState: nil)
+        }
 
         guard spoken.count >= daysBeforeCharting else {
             return InsightsPresentation(
@@ -321,10 +340,11 @@ public enum InsightsPresenter {
         inRange: [HistoryEntry], range: InsightsRange, calendar: Calendar, locale: Locale
     ) -> [MainStatistic] {
         let streak = longestStreak(in: inRange, calendar: calendar)
+        let total = inRange.totalWords
         return [
-            MainStatistic(value: inRange.totalWords.formatted(.number.locale(locale)), caption: "words"),
+            MainStatistic(value: total.formatted(.number.locale(locale)), caption: "words"),
             MainStatistic(
-                value: dailyAverage(of: inRange, over: range).formatted(.number.locale(locale)),
+                value: dailyAverage(of: total, over: range).formatted(.number.locale(locale)),
                 caption: "a day"),
             MainStatistic(
                 value: DictationPresenter.pace(of: inRange).map { "\($0)" } ?? "—",
@@ -334,8 +354,8 @@ public enum InsightsPresenter {
     }
 
     /// Words in the range over every day it covers, silent days included, to the nearest word.
-    static func dailyAverage(of inRange: [HistoryEntry], over range: InsightsRange) -> Int {
-        Int((Double(inRange.totalWords) / Double(range.days)).rounded())
+    static func dailyAverage(of words: Int, over range: InsightsRange) -> Int {
+        Int((Double(words) / Double(range.days)).rounded())
     }
 
     /// The most days in a row with a dictation, anywhere in the entries given.
