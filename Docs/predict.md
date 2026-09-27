@@ -494,16 +494,19 @@ than as one strong answer. Below the threshold the answer is a `.choice` of at m
 command whose acceptance cannot be undone by pressing Backspace — is never shown without
 full separation, and never appears among the alternatives of a `.choice` at any score.
 
-Before any of that, `Quieting.reason` runs seven ordered predicates and returns the first
-that fires: turned off here, secure field, a field that reports no caret to draw at, text
-selected, caret not at the end of its line, three suggestions typed past in this field
-already, or a prose writer who has not yet paused for 400 ms. It returns *which* rule fired, so the diagnostics can say why nothing
+Before any of that, `Quieting.reason` runs its ordered predicates and returns the first
+that fires: turned off here, secure field, marked text, a field that reports no caret to
+draw at, text selected, caret not at the end of its line, a word that opens the
+application's own mention, emoji, channel or slash-command picker (`AppPicker`, never on a
+terminal's command line), three suggestions typed past in this field already, or a prose
+writer who has not yet paused for 400 ms. It returns *which* rule fired, so the diagnostics can say why nothing
 was drawn instead of leaving silence indistinguishable from a broken feature.
 
 Composition does not gate. `PredictionContext.isComposing` is still read and carried, but
 `Quieting.reason` never consults it, and no reason is named for it. Every other silence does
 carry its reason: `SuggestionUpdate.silence` is set wherever the session or the engine
-settles on nothing — an empty or over-long line, a minimised field, the gates leaving
+settles on nothing — an empty or over-long line, a list line holding only its marker
+(`ListMarker`), a minimised field, the gates leaving
 nothing, evidence too thin, a budget overrun — and the coordinator logs that, never a reason
 recomputed from outside. [predict-ime.md](predict-ime.md) has what the composition signal
 reaches and what a gate on it cost.
