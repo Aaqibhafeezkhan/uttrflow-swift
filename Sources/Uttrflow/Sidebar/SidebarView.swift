@@ -232,9 +232,10 @@ struct SidebarRow: View {
 struct SidebarSelection: View {
     let isSelected: Bool
     var isHovered = false
+    var cornerRadius: CGFloat = 12
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         if isSelected {
             shape
                 .fill(
@@ -295,14 +296,17 @@ struct SidebarAccountCard: View {
             }
             .foregroundStyle(IslandPalette.ink)
             .background {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(IslandPalette.ink.opacity(isHovered || isSelected ? 0.1 : 0.06))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? IslandPalette.accent.opacity(0.35) : IslandPalette.ink.opacity(0.08),
-                        lineWidth: 1)
+                // Lit exactly as a selected row is, so Profile reads as the current page.
+                if isSelected {
+                    SidebarSelection(isSelected: true, cornerRadius: 14)
+                } else {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(IslandPalette.ink.opacity(isHovered ? 0.1 : 0.06))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(IslandPalette.ink.opacity(0.08), lineWidth: 1)
+                        }
+                }
             }
             .contentShape(.rect)
         }
