@@ -147,6 +147,12 @@ struct SnippetEditorView: View {
     @Binding var draft: SnippetDraft
     var onIntent: (MainIntent) -> Void
 
+    /// Which field has the caret; the trigger for a new snippet, the text for one being edited.
+    @FocusState private var focused: Field?
+
+    /// The card's two fields.
+    enum Field { case trigger, text }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -158,9 +164,12 @@ struct SnippetEditorView: View {
             }
             PageEditorField(label: editor.triggerLabel, symbolName: "mic", tint: PagePalette.dictation) {
                 TextField("", text: trigger).textFieldStyle(.plain)
+                    .focused($focused, equals: .trigger)
+                    .onSubmit { focused = .text }
             }
             PageEditorField(label: editor.textLabel, symbolName: "keyboard", tint: PagePalette.suggestion) {
                 TextEditor(text: text)
+                    .focused($focused, equals: .text)
                     .scrollContentBackground(.hidden)
                     .scrollIndicators(.never)
                     .lineSpacing(3)
@@ -174,6 +183,8 @@ struct SnippetEditorView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageCard(edge: PagePalette.dictation.opacity(0.35))
+        .onAppear { focused = editor.editing == nil ? .trigger : .text }
+        .onExitCommand { onIntent(editor.cancel.intent) }
     }
 
     /// Rebuilt from what is in the fields now, not from the presentation drawn a keystroke ago.

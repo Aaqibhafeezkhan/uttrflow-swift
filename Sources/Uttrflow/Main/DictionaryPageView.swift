@@ -239,6 +239,12 @@ struct DictionaryEditorView: View {
     @Binding var draft: DictionaryDraft
     var onIntent: (MainIntent) -> Void
 
+    /// Which field has the caret; the spelling takes it as the card opens.
+    @FocusState private var focused: Field?
+
+    /// The card's two fields.
+    enum Field { case word, pronunciation }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -253,12 +259,16 @@ struct DictionaryEditorView: View {
                 tint: PagePalette.dictation
             ) {
                 TextField("", text: word).textFieldStyle(.plain)
+                    .focused($focused, equals: .word)
+                    .onSubmit(submit)
             }
             VStack(alignment: .leading, spacing: 5) {
                 PageEditorField(
                     label: editor.pronunciationLabel, symbolName: "ear", tint: PagePalette.suggestion
                 ) {
                     TextField("", text: pronunciation).textFieldStyle(.plain)
+                        .focused($focused, equals: .pronunciation)
+                        .onSubmit(submit)
                 }
                 Text(editor.pronunciationHint)
                     .font(.system(size: 11.5))
@@ -271,6 +281,13 @@ struct DictionaryEditorView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageCard(edge: PagePalette.dictation.opacity(0.35))
+        .onAppear { focused = .word }
+        .onExitCommand { onIntent(editor.cancel.intent) }
+    }
+
+    /// Return saves a word that can be saved, and does nothing to one that cannot.
+    private func submit() {
+        if editor.canSave { onIntent(save.intent) }
     }
 
     /// Rebuilt from what is in the fields now, not from the presentation drawn a keystroke ago.
