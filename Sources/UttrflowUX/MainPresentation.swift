@@ -14,6 +14,10 @@ public enum MainIntent: Sendable, Equatable {
     case copy(String)
     /// Put this text back into whatever the user is typing in.
     case insert(String)
+    /// Start a dictation, or stop the one running; the same toggle the menu bar and the Dock use.
+    case dictate
+    /// Open History with the caret in its search field.
+    case search
 
     /// This dictation came out wrong: the honest input to teaching.
     case flagDictation(UUID)

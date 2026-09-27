@@ -31,6 +31,20 @@ public struct HomePresentation: Sendable, Equatable {
     public let account: HomeAccount
     /// The speech model loading, or failed to; absent once it can transcribe.
     public let speechModel: HomeSpeechModelNotice?
+    /// The part of the day, which picks the greeting and the picture beside the hero.
+    public let mood: HomeMood
+    /// Today's date over the greeting: "Sunday 15 June".
+    public let dateLine: String
+    /// The card across the top.
+    public let hero: HomeHero
+    /// The four stat tiles; empty while a permission is missing.
+    public let tiles: [HomeStatTile]
+    /// The last few dictations on the rail, newest first; empty while a permission is missing.
+    public let activity: [HomeActivityRow]
+    /// The way to History, offered once there is anything to see there.
+    public let viewAll: MainAction?
+    /// The search field in the top bar, which opens History's search.
+    public let search: MainAction
 
     /// Builds a page from its parts.
     public init(
@@ -45,7 +59,14 @@ public struct HomePresentation: Sendable, Equatable {
         demonstration: HomeDemonstration?,
         status: HomeStatus,
         account: HomeAccount,
-        speechModel: HomeSpeechModelNotice? = nil
+        speechModel: HomeSpeechModelNotice?,
+        mood: HomeMood,
+        dateLine: String,
+        hero: HomeHero,
+        tiles: [HomeStatTile],
+        activity: [HomeActivityRow],
+        viewAll: MainAction?,
+        search: MainAction
     ) {
         self.greeting = greeting
         self.subtitle = subtitle
@@ -59,6 +80,13 @@ public struct HomePresentation: Sendable, Equatable {
         self.status = status
         self.account = account
         self.speechModel = speechModel
+        self.mood = mood
+        self.dateLine = dateLine
+        self.hero = hero
+        self.tiles = tiles
+        self.activity = activity
+        self.viewAll = viewAll
+        self.search = search
     }
 }
 
@@ -292,6 +320,7 @@ public enum HomePresenter {
             in: kept, now: snapshot.now, calendar: calendar)
         let blocked = MainPresenter.obstruction(in: snapshot.permissions)
         let listed = Array(kept.prefix(shown))
+        let hour = calendar.component(.hour, from: snapshot.now)
 
         return HomePresentation(
             greeting: greeting(for: snapshot, calendar: calendar),
@@ -317,7 +346,21 @@ public enum HomePresenter {
             demonstration: blocked == nil ? demonstration(for: snapshot.settings) : nil,
             status: status(blocked: blocked != nil, speechModel: snapshot.speechModel),
             account: account(for: snapshot),
-            speechModel: blocked == nil ? snapshot.speechModel.map(HomeSpeechModelNotice.init) : nil)
+            speechModel: blocked == nil ? snapshot.speechModel.map(HomeSpeechModelNotice.init) : nil,
+            mood: .at(hour: hour),
+            dateLine: HomeDashboard.dateLine(snapshot.now, calendar: calendar, locale: locale),
+            hero: HomeDashboard.hero(canStart: blocked == nil && snapshot.speechModel == nil),
+            // No figures while a permission is missing, for the same reason as the figures above.
+            tiles: blocked == nil
+                ? HomeDashboard.tiles(
+                    kept: kept, today: today, now: snapshot.now, calendar: calendar, locale: locale)
+                : [],
+            activity: blocked == nil
+                ? kept.prefix(HomeDashboard.activityShown).map {
+                    HomeDashboard.activity(for: $0, calendar: calendar, locale: locale)
+                } : [],
+            viewAll: kept.isEmpty ? nil : MainAction(title: "View all", intent: .show(.history)),
+            search: HomeDashboard.search)
     }
 
     // MARK: - Showing the clipboard rather than mentioning it
@@ -419,17 +462,11 @@ public enum HomePresenter {
 
     // MARK: - Saying hello
 
-    /// "Good morning, Naveen"; the name is the account's, else the Mac's, and never invented.
+    /// "Good morning, Naveen", or "Working late" after 23:00; the name is the account's, else the Mac's, and never invented.
     static func greeting(for snapshot: HomeSnapshot, calendar: Calendar) -> String {
         let name = (snapshot.account?.displayName ?? snapshot.systemName)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let hour = calendar.component(.hour, from: snapshot.now)
-        let timeOfDay =
-            switch hour {
-            case 5..<12: "Good morning"
-            case 12..<18: "Good afternoon"
-            default: "Good evening"
-            }
+        let timeOfDay = HomeMood.at(hour: calendar.component(.hour, from: snapshot.now)).salutation
         guard let name, !name.isEmpty else { return timeOfDay }
         // The first name only. "Good morning, Naveen Bhatt" is a form letter.
         return "\(timeOfDay), \(firstWord(of: name))"

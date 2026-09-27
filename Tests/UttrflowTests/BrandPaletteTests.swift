@@ -210,6 +210,12 @@ struct RedesignTokenTests {
         #expect(relativeLuminance(Self.dockGlass.light) > 0.8)
     }
 
+    @Test("the avatar's initials clear 4.5:1 on both ends of its disc")
+    func avatarInkClearsAA() {
+        #expect(contrastRatio(R.avatarInk, BrandPalette.Purple.light) >= 4.5)
+        #expect(contrastRatio(R.avatarInk, BrandPalette.Teal.primary) >= 4.5)
+    }
+
     @Test("the sidebar island stays dark in the light appearance")
     func islandStaysDark() {
         #expect(relativeLuminance(R.sidebarIsland.tone.light) < 0.02)

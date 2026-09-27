@@ -117,10 +117,15 @@ final class MainWindowController {
 
     init(content: MainContent, defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        // Absent means collapsed, which is what `bool(forKey:)` answers for a key never written.
         model = MainWindowModel(
             content: content,
-            isSidebarExpanded: defaults.bool(forKey: Self.sidebarExpandedKey))
+            isSidebarExpanded: Self.isSidebarExpanded(
+                stored: defaults.object(forKey: Self.sidebarExpandedKey)))
+    }
+
+    /// Whether the sidebar opens with its names showing: yes, unless it was left collapsed.
+    static func isSidebarExpanded(stored value: Any?) -> Bool {
+        value as? Bool ?? true
     }
 
     /// Whether Find has anywhere to put the caret: a window on screen, on a page that has a search field.
@@ -179,6 +184,9 @@ final class MainWindowController {
         window.title = MainPresenter.windowTitle
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        // An empty unified toolbar sets the traffic lights inside the sidebar island, clear of its corner.
+        window.toolbar = NSToolbar(identifier: "main")
+        window.toolbarStyle = .unified
         window.contentMinSize = MainMetrics.minimumWindowSize
         // Kept rather than released, so reopening returns the user to the page they left.
         window.isReleasedWhenClosed = false

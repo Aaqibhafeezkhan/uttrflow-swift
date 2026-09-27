@@ -11,6 +11,21 @@ public enum SidebarDestination: Sendable, Equatable, Hashable {
     case settings(SettingsTab)
 }
 
+/// Which group a sidebar row sits in, top to bottom.
+public enum SidebarSection: String, Sendable, Equatable, CaseIterable {
+    /// The pages about what was said.
+    case main
+    /// The pages about the user's own words.
+    case yourWords
+    /// Settings, pinned to the foot above the account card.
+    case footer
+
+    /// The heading over the group; absent for groups drawn without one.
+    public var title: String? {
+        self == .yourWords ? "Your words" : nil
+    }
+}
+
 /// One row of the sidebar.
 public struct SidebarItem: Sendable, Equatable, Identifiable {
     /// Where the row leads.
@@ -23,6 +38,8 @@ public struct SidebarItem: Sendable, Equatable, Identifiable {
     public let badge: String?
     /// Whether this is the page the window is showing.
     public let isSelected: Bool
+    /// The group the row sits in.
+    public let section: SidebarSection
 
     /// The destination, which is unique.
     public var id: SidebarDestination { destination }
@@ -33,13 +50,15 @@ public struct SidebarItem: Sendable, Equatable, Identifiable {
         title: String,
         symbolName: String,
         badge: String? = nil,
-        isSelected: Bool
+        isSelected: Bool,
+        section: SidebarSection = .main
     ) {
         self.destination = destination
         self.title = title
         self.symbolName = symbolName
         self.badge = badge
         self.isSelected = isSelected
+        self.section = section
     }
 }
 
@@ -99,6 +118,11 @@ public struct AppVersion: Sendable, Equatable {
     /// Whether there is a version to show.
     public var isKnown: Bool { !short.isEmpty }
 
+    /// "v26.0926.0", the version as a release tag names it, or nothing where there is no version.
+    public var tag: String {
+        isKnown ? "v\(short)" : ""
+    }
+
     /// "0.2.0 (3)", or nothing at all where there is no version to show.
     public var full: String {
         guard isKnown else { return "" }
@@ -114,12 +138,23 @@ public struct SidebarPresentation: Sendable, Equatable {
     public let items: [SidebarItem]
     /// Drawn at the foot: the one fact a bug reporter needs and cannot be expected to remember.
     public let version: AppVersion
+    /// Whether the window is showing the Account page, which the account card lights for.
+    public let isAccountSelected: Bool
 
-    /// Builds the sidebar; unknown version unless given one.
-    public init(productName: String, items: [SidebarItem], version: AppVersion = .unknown) {
+    /// Builds the sidebar; unknown version and an unlit account card unless given otherwise.
+    public init(
+        productName: String, items: [SidebarItem], version: AppVersion = .unknown,
+        isAccountSelected: Bool = false
+    ) {
         self.productName = productName
         self.items = items
         self.version = version
+        self.isAccountSelected = isAccountSelected
+    }
+
+    /// The rows in one group, in order.
+    public func items(in section: SidebarSection) -> [SidebarItem] {
+        items.filter { $0.section == section }
     }
 }
 
@@ -128,11 +163,10 @@ public enum SidebarPresenter {
     /// The name over the rows.
     public static let productName = "Uttrflow"
 
-    /// Every row in the design's order; written out since Settings sits among the pages but is not one.
+    /// Every row in the design's order; the account card, not a row, leads to the Account page.
     public static let order: [SidebarDestination] = [
-        .page(.home), .page(.dictation), .page(.history), .page(.dictionary), .page(.corrections),
-        .page(.insights), .page(.snippets), .page(.style), .page(.diagnostics),
-        .settings(.general), .page(.account),
+        .page(.home), .page(.history), .page(.insights), .page(.dictionary), .page(.snippets),
+        .settings(.general),
     ]
 
     /// Draws the sidebar from a snapshot.
@@ -144,7 +178,8 @@ public enum SidebarPresenter {
         SidebarPresentation(
             productName: productName,
             items: order.map { item(for: $0, in: snapshot) },
-            version: snapshot.version)
+            version: snapshot.version,
+            isAccountSelected: snapshot.selection == .page(.account))
     }
 
     // MARK: - Rows
@@ -156,7 +191,17 @@ public enum SidebarPresenter {
             title: title(for: destination),
             symbolName: symbolName(for: destination),
             badge: badge(for: destination, in: snapshot),
-            isSelected: isSelected(destination, given: snapshot.selection))
+            isSelected: isSelected(destination, given: snapshot.selection),
+            section: section(for: destination))
+    }
+
+    /// The group a row sits in.
+    static func section(for destination: SidebarDestination) -> SidebarSection {
+        switch destination {
+        case .settings: .footer
+        case .page(.dictionary), .page(.snippets): .yourWords
+        case .page: .main
+        }
     }
 
     /// Lights the page the main window is showing; Settings never lights, since it is its own window.
@@ -200,13 +245,13 @@ public enum SidebarPresenter {
         case .settings: "gearshape"
         case .page(let page):
             switch page {
-            case .home: "house"
+            case .home: "house.fill"
             case .dictation: "mic"
             case .history: "clock"
-            case .dictionary: "character.book.closed"
+            case .dictionary: "square.split.1x2"
             case .corrections: "arrow.left.arrow.right"
             case .insights: "chart.bar"
-            case .snippets: "doc.on.doc"
+            case .snippets: "chevron.left.forwardslash.chevron.right"
             case .style: "sparkles"
             case .diagnostics: "gauge.with.dots.needle.bottom.50percent"
             case .account: "person.crop.circle"
@@ -214,9 +259,9 @@ public enum SidebarPresenter {
         }
     }
 
-    /// The corrections count, on that row only and only when it is non-zero.
+    /// Today's corrections, on the Dictionary row only and only when there are any.
     static func badge(for destination: SidebarDestination, in snapshot: SidebarSnapshot) -> String? {
-        guard destination == .page(.corrections), snapshot.correctionsToday > 0 else { return nil }
+        guard destination == .page(.dictionary), snapshot.correctionsToday > 0 else { return nil }
         return "\(snapshot.correctionsToday)"
     }
 }
