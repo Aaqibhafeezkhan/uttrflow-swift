@@ -155,6 +155,25 @@ struct MemoryPressureTests {
         #expect(app.memoryPressure.isReleased)
     }
 
+    @Test("a repeated calm keeps the countdown that is already running")
+    func repeatedCalmKeepsCountdown() async {
+        let steps = Steps()
+        let sandbox = Sandbox()
+        let app = app(steps, in: sandbox)
+        app.memoryPressure = SuggestionModelPressure(firstWait: .milliseconds(200), longestWait: .seconds(1_800))
+        app.settingsChanged(to: settings(suggesting: true))
+        await app.modelPreparation?.value
+        app.memoryPressureChanged(to: .warning)
+        app.memoryPressureChanged(to: .normal)
+        let first = app.pressureReload
+        app.memoryPressureChanged(to: .normal)
+        #expect(app.pressureReload == first)
+        await first?.value
+        await app.modelPreparation?.value
+        #expect(await steps.all == ["load", "release", "load"])
+        #expect(!app.memoryPressure.isReleased)
+    }
+
     @Test("pressure on a Mac that never loaded the model does nothing")
     func nothingToRelease() async {
         let steps = Steps()
