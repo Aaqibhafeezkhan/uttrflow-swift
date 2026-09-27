@@ -202,6 +202,8 @@ struct InsightsWaitingTests {
         #expect(empty?.progress?.leading == "2 of 7 days")
         #expect(empty?.progress?.trailing.hasPrefix("Charts appear on ") == true)
         #expect(empty?.progress?.fraction == 2.0 / 7.0)
+        #expect(empty?.progress?.steps == 7)
+        #expect(empty?.progress?.stepsDone == 2)
         #expect(empty?.message.contains("Uttrflow has 2.") == true)
     }
 

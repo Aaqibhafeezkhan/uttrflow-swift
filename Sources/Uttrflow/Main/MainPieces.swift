@@ -387,41 +387,44 @@ struct MainIconButton: View {
     }
 }
 
-/// What a page shows instead of content: a symbol, a sentence, at most one way on, and any figures.
+/// What a page shows instead of content: its colour glowing behind a small scene, a title, a sentence and one way on.
 struct MainEmptyStateView: View {
     let state: MainEmptyState
     var onIntent: (MainIntent) -> Void
 
+    private var accent: Color { state.scene.accent.color }
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 12)
-            Image(systemName: state.symbolName)
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(Color.dockAccent)
-                .frame(width: 82, height: 82)
-                .background(Color.dockAccent.opacity(0.14), in: .circle)
-                .overlay(Circle().strokeBorder(Color.dockAccentTint, lineWidth: 1))
-            Text(state.title)
-                .font(.system(size: 17, weight: .semibold))
-                .padding(.top, 18)
-            Text(state.message)
-                .font(.system(size: MainMetrics.bodySize))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 410)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 9)
-            if let progress = state.progress {
-                MainProgressView(progress: progress).padding(.top, 20)
+            VStack(spacing: 12) {
+                MainEmptyStateScene(
+                    scene: state.scene, symbolName: state.symbolName, progress: state.progress
+                )
+                .frame(height: 56)
+                Text(state.title)
+                    .font(BrandFont.display(size: 20, weight: .semibold))
+                    .foregroundStyle(PagePalette.text)
+                    .multilineTextAlignment(.center)
+                Text(state.message)
+                    .font(.system(size: 13.5))
+                    .lineSpacing(3)
+                    .foregroundStyle(PagePalette.text.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let progress = state.progress {
+                    MainEmptyStateSteps(progress: progress, color: accent)
+                }
+                if !state.chips.isEmpty {
+                    MainChipsRow(chips: state.chips).padding(.top, 6)
+                }
+                if let action = state.action {
+                    MainEmptyStateButton(action: action, glow: accent, onIntent: onIntent)
+                        .padding(.top, 6)
+                }
             }
-            if !state.chips.isEmpty {
-                MainChipsRow(chips: state.chips).padding(.top, 20)
-            }
-            if let action = state.action {
-                MainActionButton(action: action, isProminent: true, onIntent: onIntent)
-                    .controlSize(.large)
-                    .padding(.top, 18)
-            }
+            .background { glow }
             Spacer(minLength: 12)
             if let footnote = state.footnote {
                 MainFootnote(text: footnote, isCentred: true)
@@ -431,25 +434,17 @@ struct MainEmptyStateView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(state.title). \(state.message)")
     }
-}
 
-/// How far off a page is from having something to draw.
-struct MainProgressView: View {
-    let progress: MainProgress
-
-    var body: some View {
-        VStack(spacing: 8) {
-            MainBar(fraction: progress.fraction, height: 7)
-            HStack {
-                Text(progress.leading)
-                Spacer(minLength: 8)
-                Text(progress.trailing)
-            }
-            .font(.system(size: MainMetrics.footnoteSize))
-            .foregroundStyle(.secondary)
-        }
-        .frame(width: 280)
-        .accessibilityElement(children: .combine)
+    /// The page's colour, soft and wide, centred a little above the words.
+    private var glow: some View {
+        EllipticalGradient(
+            colors: [accent.opacity(0.2), accent.opacity(0.07), accent.opacity(0)],
+            center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5
+        )
+        .frame(width: 560, height: 400)
+        .offset(y: -30)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

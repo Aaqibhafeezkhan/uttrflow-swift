@@ -109,8 +109,10 @@ public struct MainEmptyState: Sendable, Equatable {
     public let progress: MainProgress?
     /// The small print under the whole pane.
     public let footnote: String?
+    /// The small picture above the title, and the colour that glows behind it.
+    public let scene: MainEmptyScene
 
-    /// Builds an empty state; everything after the message is optional.
+    /// Builds an empty state; everything after the message is optional, and the scene follows the symbol.
     public init(
         symbolName: String,
         title: String,
@@ -118,7 +120,8 @@ public struct MainEmptyState: Sendable, Equatable {
         action: MainAction? = nil,
         chips: [MainStatistic] = [],
         progress: MainProgress? = nil,
-        footnote: String? = nil
+        footnote: String? = nil,
+        scene: MainEmptyScene? = nil
     ) {
         self.symbolName = symbolName
         self.title = title
@@ -127,6 +130,55 @@ public struct MainEmptyState: Sendable, Equatable {
         self.chips = chips
         self.progress = progress
         self.footnote = footnote
+        self.scene = scene ?? MainEmptyScene(symbolName: symbolName)
+    }
+}
+
+/// The colour a page is known by: dictation, suggestions, the clipboard, or information.
+public enum MainAccent: Sendable, Equatable, CaseIterable {
+    case dictation
+    case suggestion
+    case clipboard
+    case info
+}
+
+/// The small picture an empty page draws above its title, so each page is recognisable before it has content.
+public enum MainEmptyScene: Sendable, Equatable {
+    /// The shortcut's keys beside a waveform, for a page that fills as the user dictates.
+    case dictation
+    /// One of the user's own words on a chip, for the dictionary.
+    case word(String)
+    /// A phrase that expands on a chip, for snippets.
+    case phrase(String)
+    /// A few day bars, filled for the days already spoken on, for a page that waits to chart.
+    case chart
+    /// The state's own symbol on a tile, for everything else.
+    case symbol
+
+    /// The dictionary's example word, which is the one the app always spells right.
+    public static let exampleWord = "Uttrflow"
+    /// The snippets page's example phrase.
+    public static let examplePhrase = "my address"
+
+    /// The scene each page's symbol stands for; a symbol with no page of its own gets the plain tile.
+    public init(symbolName: String) {
+        switch symbolName {
+        case "mic", "clock", "waveform": self = .dictation
+        case "character.book.closed", "book": self = .word(Self.exampleWord)
+        case "doc.on.doc": self = .phrase(Self.examplePhrase)
+        case "chart.bar": self = .chart
+        default: self = .symbol
+        }
+    }
+
+    /// The page's colour, which the scene is drawn in and glows behind it.
+    public var accent: MainAccent {
+        switch self {
+        case .dictation, .symbol: .dictation
+        case .word: .clipboard
+        case .phrase: .suggestion
+        case .chart: .info
+        }
     }
 }
 

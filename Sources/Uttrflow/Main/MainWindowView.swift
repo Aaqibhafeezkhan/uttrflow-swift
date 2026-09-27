@@ -76,6 +76,7 @@ struct MainWindowView: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.content.notice)
+        .environment(\.dictationKeycaps, model.content.shortcutKeycaps)
         // The field holds what is being typed, so it is only put back in step when the page changes.
         .onChange(of: model.page) { _, _ in
             model.searchQuery = model.chrome.search?.query ?? ""

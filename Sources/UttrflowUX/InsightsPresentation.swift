@@ -347,7 +347,8 @@ public enum InsightsPresenter {
             progress: MainProgress(
                 fraction: Double(spoken) / Double(daysBeforeCharting),
                 leading: "\(spoken) of \(daysBeforeCharting) days",
-                trailing: remaining(spoken: spoken, now: now, calendar: calendar, locale: locale)),
+                trailing: remaining(spoken: spoken, now: now, calendar: calendar, locale: locale),
+                steps: daysBeforeCharting),
             footnote: """
                 The figures Uttrflow can honestly give this early are given. The rest waits \
                 rather than guessing.

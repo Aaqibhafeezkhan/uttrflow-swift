@@ -1928,7 +1928,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     transformerAvailability: transformerAvailability,
                     speechModel: speechModelPresence, permissions: knownPermissions,
                     measurements: measurements, cleaning: lastCleaning)),
-            account: accountPage(at: now))
+            account: accountPage(at: now),
+            shortcutKeycaps: SettingsShortcut.keycaps(for: settings.hotkey))
     }
 
     /// Reads the account the pages draw from, the entitlement and the local choice together.

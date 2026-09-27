@@ -73,12 +73,21 @@ public struct MainProgress: Sendable, Equatable {
     public let leading: String
     /// What happens when it finishes — "Charts appear on Tuesday".
     public let trailing: String
+    /// How many equal steps the wait is counted in, when it is counted in steps.
+    public let steps: Int?
 
-    /// Builds the progress, clamping the fraction to 0…1.
-    public init(fraction: Double, leading: String, trailing: String) {
+    /// Builds the progress, clamping the fraction to 0…1 and ignoring a step count below one.
+    public init(fraction: Double, leading: String, trailing: String, steps: Int? = nil) {
         self.fraction = min(max(fraction, 0), 1)
         self.leading = leading
         self.trailing = trailing
+        self.steps = steps.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// How many of the steps are done, rounded to the nearest; zero when it is not counted in steps.
+    public var stepsDone: Int {
+        guard let steps else { return 0 }
+        return Int((fraction * Double(steps)).rounded())
     }
 }
 
