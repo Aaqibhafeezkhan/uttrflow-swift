@@ -5,6 +5,7 @@ import Foundation
 import Testing
 import UttrflowPredict
 import UttrflowSettings
+import UttrflowTestSupport
 
 @testable import Uttrflow
 @testable import UttrflowUX
@@ -253,5 +254,61 @@ struct MemoryPressureTests {
         await app.pressureReload?.value
         await app.modelPreparation?.value
         #expect(await steps.all == ["load", "release"])
+    }
+
+    /// An app whose first load runs until it is stopped, as a download or a slow read does.
+    private func appWithSlowFirstLoad(_ steps: Steps, in sandbox: borrowing Sandbox) -> AppDelegate {
+        let app = AppDelegate(
+            container: sandbox.root, account: HeldSession(signedIn: true).layer,
+            prepareModel: { _ in
+                let first = await steps.all.isEmpty
+                await steps.record("load")
+                guard first else { return }
+                do {
+                    try await Task.sleep(for: .seconds(3_600))
+                } catch {
+                    await steps.record("stopped")
+                    throw error
+                }
+            },
+            releaseModel: { await steps.record("release") })
+        app.drawsWindows = false
+        app.memoryPressure = SuggestionModelPressure(firstWait: .zero, longestWait: .seconds(1_800))
+        return app
+    }
+
+    @Test(
+        "pressure during a load stops the load instead of waiting for it, and calm loads again",
+        .timeLimit(.minutes(1)))
+    func pressureStopsALoad() async throws {
+        let steps = Steps()
+        let sandbox = Sandbox()
+        let app = appWithSlowFirstLoad(steps, in: sandbox)
+        app.settingsChanged(to: settings(suggesting: true))
+        try await eventually { await steps.all == ["load"] }
+        app.memoryPressureChanged(to: .warning)
+        await app.modelPreparation?.value
+        #expect(await steps.all == ["load", "stopped", "release"])
+        #expect(app.suggestionModel == .releasedForMemory)
+        app.memoryPressureChanged(to: .normal)
+        await app.pressureReload?.value
+        await app.modelPreparation?.value
+        #expect(await steps.all == ["load", "stopped", "release", "load"])
+        #expect(app.suggestionModel == .ready)
+    }
+
+    @Test(
+        "turning the feature off during a load stops the load instead of waiting for it",
+        .timeLimit(.minutes(1)))
+    func offStopsALoad() async throws {
+        let steps = Steps()
+        let sandbox = Sandbox()
+        let app = appWithSlowFirstLoad(steps, in: sandbox)
+        app.settingsChanged(to: settings(suggesting: true))
+        try await eventually { await steps.all == ["load"] }
+        app.settingsChanged(to: settings(suggesting: false))
+        await app.modelPreparation?.value
+        #expect(await steps.all == ["load", "stopped", "release"])
+        #expect(app.suggestionModel == .notAsked)
     }
 }
