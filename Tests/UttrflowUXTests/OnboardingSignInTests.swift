@@ -439,4 +439,34 @@ extension OnboardingSignInTests {
         #expect(harness.profiles.load() != nil)
         #expect(harness.step != .signIn)
     }
+
+    // MARK: A development build's stand-in
+
+    @Test("a stand-in sign-in opens no browser and still moves on")
+    func aStandInOpensNoBrowser() async {
+        let harness = Harness(
+            microphone: .granted, accessibility: .granted, signedIn: false,
+            authentication: FakeAuthenticationService(method: .standIn))
+        await harness.flow.start()
+        #expect(await harness.choose(.google))
+        await harness.returnFromBrowser()
+
+        #expect(harness.browser.urls.isEmpty, "a stand-in sent the browser to a page that resolves nowhere")
+        #expect(harness.profiles.load() != nil)
+        #expect(harness.step != .signIn)
+        await harness.flow.perform(.reopenBrowser)
+        #expect(harness.browser.urls.isEmpty, "Reopen found a page a stand-in never had")
+    }
+
+    @Test("the sign-in page says when it signs in as a stand-in, and only then")
+    func aStandInIsLabelled() async {
+        let standIn = Harness(signedIn: false, authentication: FakeAuthenticationService(method: .standIn))
+        await standIn.flow.start()
+        #expect(standIn.page.hint == OnboardingPresenter.standInHint)
+        #expect(standIn.page.providers.map(\.provider) == SignInProvider.offered)
+
+        let real = Harness(signedIn: false)
+        await real.flow.start()
+        #expect(real.page.hint == nil)
+    }
 }

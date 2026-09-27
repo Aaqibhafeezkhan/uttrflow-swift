@@ -64,6 +64,8 @@ struct SignIn: AsyncParsableCommand {
         case .code(let userCode, let verificationURL):
             print("\nOpen \(verificationURL.absoluteString)")
             print("and enter the code:  \(userCode)")
+        case .standIn:
+            print("\nA stand-in account; nothing to open.")
         }
 
         print("\nwaiting up to \(timeout)s …")
