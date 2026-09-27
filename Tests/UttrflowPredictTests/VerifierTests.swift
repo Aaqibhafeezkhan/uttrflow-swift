@@ -103,6 +103,31 @@ struct VerifierTests {
         #expect(await store.rejected == ["git zqxjw"])
     }
 
+    @Test(
+        "A model objection to a free last word refuses the line this time only.",
+        arguments: [
+            "ls -la", "echo \"done\"", "echo done",
+        ])
+    func freeWordRejectionIsNotRecorded(line: String) async {
+        let store = RecordingSupersession()
+        let verdict = await decided(
+            line, typed: String(line.prefix(4)), scoring: ScriptedScoring(disliked), supersession: store)
+        #expect(verdict == .rejected)
+        #expect(await store.rejected.isEmpty)
+    }
+
+    @Test("A subcommand the machine never answered for is refused this time only.")
+    func unansweredClosedVocabularyIsNotRecorded() async {
+        let store = RecordingSupersession()
+        let verifier = Verifier(
+            index: EnvironmentIndex(reader: StubEnvironment([:])), scoring: ScriptedScoring(disliked),
+            supersession: store, budgetInMilliseconds: 200, clock: ManualClock())
+        let verdict = await verifier.verdict(
+            for: Candidate(text: "git zqxjw", source: .personal), in: terminal, typed: "git z", now: moment)
+        #expect(verdict == .rejected)
+        #expect(await store.rejected.isEmpty)
+    }
+
     @Test("A candidate the model likes stands even where the machine cannot place it.")
     func keepsWhatTheModelLikes() async {
         let verdict = await decided(
