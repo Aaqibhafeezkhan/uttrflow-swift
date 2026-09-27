@@ -132,8 +132,7 @@ enum CompletionText {
         var seen: Set<String> = []
         return lines.compactMap { line in
             guard
-                var kept = SignOff.unsigned(
-                    line, typed: typed, screen: context, ownLines: situation.recentLines)
+                var kept = SignOff.unsigned(line, typed: typed, ownLines: situation.recentLines)
             else { return nil }
             // A command or a query reuses the paths and names on screen, so only prose is held to its own words.
             if register.endsAtSentence {
