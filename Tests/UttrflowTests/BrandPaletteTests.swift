@@ -178,6 +178,28 @@ struct RedesignTokenTests {
         }
     }
 
+    @Test("the settings accents clear 3:1 as marks, and their inks 4.5:1 as words, on the page and a card")
+    func settingsAccentsAreLegible() {
+        let marks = [
+            R.mintAccent, R.neutralAccent, R.dictationDeep, BrandPalette.Semantic.criticalInk,
+            BrandPalette.Semantic.successInk,
+        ]
+        for accent in marks {
+            for (surface, ground) in Self.grounds {
+                #expect(contrastRatio(accent.dark, ground.dark) >= 3, "dark \(surface)")
+                #expect(contrastRatio(accent.light, ground.light) >= 3, "light \(surface)")
+            }
+        }
+        for ink in [R.destructiveInk, R.badgeInk] {
+            for (surface, ground) in Self.grounds {
+                #expect(contrastRatio(ink.dark, ground.dark) >= 4.5, "dark \(surface)")
+                #expect(contrastRatio(ink.light, ground.light) >= 4.5, "light \(surface)")
+            }
+        }
+        #expect(contrastRatio(R.primaryInk.dark, R.primaryFill.dark) >= 4.5)
+        #expect(contrastRatio(R.primaryInk.light, R.primaryFill.light) >= 4.5)
+    }
+
     /// The floating button's glass over a dark desktop and a light one, as `Docs/app-dock.md` measures against.
     static let dockGlass = composite(R.dockGlass, over: BrandTone(dark: 0x26_2626, light: 0xEE_EEEE))
 

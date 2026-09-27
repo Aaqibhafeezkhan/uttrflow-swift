@@ -271,6 +271,10 @@ enum BrandPalette {
         static let fieldWell = BrandLayer(
             tone: BrandTone(dark: 0x00_0000, light: 0x10_1316), darkOpacity: 0.25, lightOpacity: 0.045)
 
+        /// Mint, a second teal for rows beside dictation's own.
+        static let mintAccent = BrandTone(dark: 0x8F_F5EC, light: 0x12_8077)
+        /// The deep end of a switch's teal gradient.
+        static let dictationDeep = BrandTone(dark: 0x29_C0B4, light: 0x12_8077)
         /// The day number on a busy Insights calendar tile, deep teal on the bright teal in both appearances.
         static let calendarDeepInk: UInt32 = 0x04_332F
     }
