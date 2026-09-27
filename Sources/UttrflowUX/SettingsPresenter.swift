@@ -140,11 +140,11 @@ public enum SettingsPresenter {
         so it is back to the default. Choose another any time.
         """
 
-    /// What the Dictate row says under its name, which follows how the shortcut is held.
-    static func dictateExplanation(_ activation: HotkeyActivation) -> String {
+    /// What the Dictate row says under its name: the user's own keys, and how they are held.
+    static func dictateExplanation(_ activation: HotkeyActivation, keys: String) -> String {
         switch activation {
-        case .holdToTalk: "Hold to talk, anywhere"
-        case .pressToToggle: "Press to start talking, and again to stop"
+        case .holdToTalk: "Hold \(keys) to talk, anywhere"
+        case .pressToToggle: "Press \(keys) to start talking, and again to stop"
         }
     }
 
@@ -171,15 +171,15 @@ public enum SettingsPresenter {
                 unarmed
             } else if settings.shortcutsReturnedToDefault.contains(descriptor.action) {
                 returnedToDefault
-            } else if binding?.heldModifier != nil {
+            } else if binding?.isFunctionHold == true {
                 // Only Fn, which macOS has its own plans for. See `Docs/ux-settings-model.md`.
                 """
                 If pressing fn also opens Emoji or Apple's dictation, \
                 set System Settings → Keyboard → "Press 🌐 key to" to \
                 Do Nothing.
                 """
-            } else if descriptor.action == .dictate {
-                dictateExplanation(settings.hotkeyActivation)
+            } else if descriptor.action == .dictate, let binding {
+                dictateExplanation(settings.hotkeyActivation, keys: SettingsShortcut.compact(binding))
             } else {
                 descriptor.explanation
             }
