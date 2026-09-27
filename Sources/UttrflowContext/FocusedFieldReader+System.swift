@@ -133,7 +133,8 @@ public enum FocusedFieldReader {
         let secure = declaredSecure || (value.map(SecureField.looksMasked) ?? false)
         // Checked between messages: a turn that has given up should not pay for the rest of them.
         guard isWanted() else { return nil }
-        let style = range.flatMap { typeStyle(field, at: $0) }
+        // The attributed string carries the characters, so a secure field is never asked for its style.
+        let style = secure ? nil : range.flatMap { typeStyle(field, at: $0) }
         guard isWanted() else { return nil }
         let flipped = cachedPrimaryScreenMaxY.withLock { $0 }
         let marked = CompositionProbe.markedText(of: field)
