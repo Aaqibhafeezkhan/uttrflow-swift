@@ -71,7 +71,7 @@ public struct DictationSnapshot: Sendable, Equatable {
     public let corrections: [Correction]
     /// What has been typed into the search field.
     public let query: String
-    /// The shortcut as it reads on a keycap, "⌥Space", formatted by the app.
+    /// The shortcut as it reads on a keycap, "⌃⌥", formatted by the app.
     public let shortcut: String
     /// The user's settings.
     public let settings: Settings

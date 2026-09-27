@@ -394,7 +394,7 @@ public enum HomePresenter {
 
     // MARK: - What to hold
 
-    /// "Say it once — hold ⌥ Space anywhere on your Mac."; the verb follows how the shortcut is set up.
+    /// "Say it once — hold ⌃ ⌥ anywhere on your Mac."; the verb follows how the shortcut is set up.
     static func hint(shortcut: String, settings: Settings) -> HomeHint {
         HomeHint(
             lead: settings.hotkeyActivation == .holdToTalk
