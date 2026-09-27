@@ -582,6 +582,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         mainWindow?.close()
         mainWindow = nil
         refreshMenuBar()
+        // An open flow may be past sign-in, on a page only a session may see.
+        onboarding?.signedOut()
         show(.onboarding)
     }
 

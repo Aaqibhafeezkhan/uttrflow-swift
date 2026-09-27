@@ -36,6 +36,11 @@ final class OnboardingModel {
         Task { await flow.perform(intent) }
     }
 
+    /// Returns to sign-in, since a sign-out leaves nothing past it to show.
+    func signedOut() {
+        Task { await flow.signedOut() }
+    }
+
     /// Tells the last page how the first try is going.
     func tried(_ trial: OnboardingTrial) {
         Task { await flow.tried(trial) }

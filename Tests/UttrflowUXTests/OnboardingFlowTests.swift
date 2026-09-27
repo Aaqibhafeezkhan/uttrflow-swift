@@ -332,6 +332,39 @@ struct OnboardingFlowTests {
         #expect(harness.buttonTitles == ["Try again"])
     }
 
+    @Test("a sign-out on the download page goes back to sign-in, and the download stops drawing")
+    func signingOutReturnsToSignIn() async {
+        let installer = GatedInstaller()
+        let harness = Harness(microphone: .granted, accessibility: .granted, installer: installer)
+        let running = Task { await harness.flow.start() }
+        await settle(until: { installer.startedDownloads == 1 })
+        installer.send(.report(0.4))
+        await settle(until: { harness.detail == .installing(0.4) })
+
+        harness.profiles.clear()
+        await harness.flow.signedOut()
+        #expect(harness.step == .signIn)
+        #expect(harness.detail == .signIn(.offering))
+
+        installer.send(.report(0.8))
+        installer.send(.succeed)
+        await running.value
+        #expect(harness.step == .signIn, "the download dragged a signed-out user back to setup")
+        #expect(!harness.published.contains { $0.detail == .installing(0.8) })
+    }
+
+    @Test("a sign-out on a permission page goes back to sign-in")
+    func signingOutFromAPermissionPage() async {
+        let harness = Harness(microphone: .notDetermined)
+        await harness.flow.start()
+        #expect(harness.step == .microphone)
+
+        harness.profiles.clear()
+        await harness.flow.signedOut()
+        #expect(harness.step == .signIn)
+        #expect(!harness.liveProviders.isEmpty)
+    }
+
     @Test("Cancel means nothing away from the download page")
     func cancelInstallIsIgnoredElsewhere() async {
         let harness = Harness(microphone: .granted, accessibility: .granted)
