@@ -55,6 +55,8 @@ public actor DictationPipeline {
     private var speechChoices = 0
     /// Counts recognisers taken up, so a load of one since replaced says nothing about its successor.
     private var speechSwaps = 0
+    /// How long `prepare()` waits for the speech model before calling the load failed.
+    private let speechLoadLimit: Duration
     /// How many loads are running, since a switch can begin one before the last has ended.
     private var loadsUnderWay = 0
 
@@ -110,7 +112,8 @@ public actor DictationPipeline {
         profile: UserProfile = .default,
         windowing: SpeechWindowing = .standard,
         earlyPoll: Duration = .seconds(1),
-        pollClock: any Clock<Duration> = ContinuousClock()
+        pollClock: any Clock<Duration> = ContinuousClock(),
+        speechLoadLimit: Duration = StageTimeout.speechModelLoad
     ) {
         self.capture = capture
         self.speech = speech
@@ -132,6 +135,7 @@ public actor DictationPipeline {
         self.windowing = windowing
         self.earlyPoll = earlyPoll
         self.pollClock = pollClock
+        self.speechLoadLimit = speechLoadLimit
     }
 
     /// Takes the user's clean-up choices as they stand now, for every dictation after this one.
@@ -216,8 +220,16 @@ public actor DictationPipeline {
         let engine = speech
         let swap = speechSwaps
         do {
-            try await engine.prepare()
+            // Stops waiting at the limit rather than awaiting a cancel, since a blocked load ignores one. See `Docs/startup.md`.
+            let loaded = try await withStageTimeout(speechLoadLimit, clock: clock) {
+                try await engine.prepare()
+                return true
+            }
             guard swap == speechSwaps else { return }
+            guard loaded == true else {
+                throw SpeechEngineError.modelLoadFailed(
+                    description: "the load did not finish within \(speechLoadLimit)")
+            }
             isReady = true
             // A retry that works clears the notice the failed attempt left behind.
             if case .failed = state, !isBusy { transition(to: .idle) }

@@ -143,6 +143,13 @@ a load reads is there, so a load that still fails is damage the store cannot see
 a fresh copy is the repair. The notice a failed load raises in the pipeline keeps **Try Again**,
 which loads again rather than starting a dictation.
 
+A load that never returns is a failed load too. `prepare()` waits at most
+`StageTimeout.speechModelLoad`, 300 seconds, about twice the 154-second cold load measured above.
+It then fails with `modelLoadFailed`, and the surfaces show the same recovery as any failed load:
+**Try Again** the first time, **Download** after a second failure. It stops waiting instead of
+cancelling and waiting for the cancel, because a blocked recogniser load does not answer a cancel.
+The abandoned load finishes whenever it can, and a load that finishes late is ignored.
+
 ## What is still true
 
 A cold load is still 154 seconds. Nothing here makes it faster; it makes the app honest

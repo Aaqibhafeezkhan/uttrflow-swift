@@ -18,6 +18,9 @@ public enum StageTimeout: Sendable {
 
     /// Context, correction, expansion and insertion: local, but each can block on another app.
     public static let quick = Duration.seconds(15)
+
+    /// Loading the speech model: about twice the slowest measured cold load, 154 s. See `Docs/startup.md`.
+    public static let speechModelLoad = Duration.seconds(300)
 }
 
 /// Runs `work`, answering `nil` when `limit` wins; the work is cancelled then, not awaited, since it may hang.

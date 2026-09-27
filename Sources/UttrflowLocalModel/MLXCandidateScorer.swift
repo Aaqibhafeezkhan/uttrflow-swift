@@ -290,18 +290,17 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let written: String
     }
 
-    /// What the parser makes of a pass, each line cut where it starts copying the screen; one line the budget cut is kept to its last whole word, which is still the line's own start.
+    /// What the parser makes of a pass, each line cut where it starts copying the screen and then finished; one line the budget cut is kept to its last whole word, which is still the line's own start.
     private static func completions(
         from run: Run, typed: String, asking ask: Ask, in situation: GenerationSituation
     ) -> [String] {
         let text = ask == .one && run.stop == .length ? CompletionText.wholeWords(of: run.text) : run.text
         let context = CompletionText.contextNeverCopied(in: situation)
         // The prefill is the line's own start, so the answer reads as the whole line it would echo.
-        return CompletionText.parse(run.written + text, typed: typed).compactMap {
-            CompletionText.trimmed($0, typed: typed, echoing: context).flatMap {
-                SignOff.unsigned($0, typed: typed, screen: context, ownLines: situation.recentLines)
-            }
+        let lines = CompletionText.parse(run.written + text, typed: typed).compactMap {
+            CompletionText.trimmed($0, typed: typed, echoing: context)
         }
+        return CompletionText.finished(lines, typed: typed, in: situation)
     }
 
     /// One pass over the model: prefilled under the container's lock, decoded outside it so a score never waits on a line; a pass that fails throws, so the caller can tell it from an empty answer.
