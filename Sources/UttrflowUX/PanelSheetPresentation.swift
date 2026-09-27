@@ -108,7 +108,9 @@ extension PanelPresenter {
                 draft: draft,
                 placeholder: "pgprod",
                 note: note(for: proposal),
-                conflict: holder.map { "“\(proposal.corrected)” already belongs to \($0.summary)" },
+                conflict: holder.map {
+                    "“\(proposal.corrected)” already belongs to \(name(of: $0, in: snapshot))"
+                },
                 collections: [],
                 confirmTitle: isRemoval ? "Remove name" : "Save",
                 isConfirmEnabled: proposal.isUsable || isRemoval)
@@ -208,6 +210,11 @@ extension PanelPresenter {
             confirmTitle: "Keep it",
             isConfirmEnabled: isConfirmEnabled,
             diff: diff)
+    }
+
+    /// What the conflict line calls the clip holding an alias, which says nothing of a masked secret's text.
+    static func name(of holder: Clip, in snapshot: PanelSnapshot) -> String {
+        snapshot.isMasked(holder) ? "a hidden credential" : holder.summary
     }
 
     /// F4 — said only when correction actually changed something.
