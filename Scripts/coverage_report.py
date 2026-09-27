@@ -125,8 +125,10 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/HomePageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HomeActivityView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HomeHeroView.swift": (
-        "SwiftUI, drawn from a tested presentation; the waveform's bars and the mood pictures "
-        "it loads are tested in HomeHeroViewTests"
+        "SwiftUI, drawn from a tested presentation; the waveform's bars are tested in HomeHeroViewTests"
+    ),
+    "Uttrflow/Main/HomeHeroPieces.swift": (
+        "SwiftUI; the pill's glow is appearance only, and the mood pictures it loads are tested in HomeHeroViewTests"
     ),
     "Uttrflow/Main/RedesignColors.swift": (
         "colour values; the layer resolution and the island's fixed inks are tested in RedesignColorsTests"
