@@ -11,6 +11,11 @@ Each released version is a git tag and a build at
 
 ## [Unreleased]
 
+### Changed
+- **A new install dictates with ⌃⌥ held.** Hold Control and Option, talk, and let go. Installs
+  that finished onboarding on an earlier build keep ⌥Space, and a shortcut already chosen in
+  Settings is left as it is.
+
 ### Fixed
 - **The performance doc's memory headline no longer reads as a whole-app claim.** It reported
   a suggestions-off dictation reading (379 MB peak footprint) as unconditional 8 GB-Mac safety,

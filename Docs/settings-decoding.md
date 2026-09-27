@@ -55,7 +55,8 @@ Decoding cleanly is not the same as being usable.
 - **The dictation shortcut.** `{"keyCode": 49, "modifiers": []}` is a perfectly good
   `HotkeyBinding` and a shortcut that never fires. There is no screen for choosing another,
   so the only way back would be deleting the preferences file from a terminal. An
-  undeliverable shortcut falls back to Option+Space.
+  undeliverable shortcut falls back to Option+Space, and so does a file that names no
+  dictation shortcut, since only an earlier build writes one. See `Docs/shortcuts.md`.
 - **The clipboard shortcut.** It has no such obligation, so an unusable one resolves to
   nothing rather than to a key the user never chose and would meet by surprise in another
   app.

@@ -142,7 +142,7 @@ option turns it on while that terminal is frontmost, or for as long as the optio
 app that forgets to turn it off leaves it on for every app. The tap is not disabled, so nothing
 re-enables it and nothing is logged by the tap itself.
 
-What it affects is every dictation binding with a key in it, such as the default ⌥Space. A binding
+What it affects is every dictation binding with a key in it, such as ⌥Space. A binding
 made only of held modifiers is read from modifier changes rather than key presses, but the notice is
 shown whatever the binding, because the check says only that secure input is on. The Carbon hot keys the clipboard and other
 claimed shortcuts use are delivered anyway, so the clipboard panel can open while dictation cannot.
@@ -172,6 +172,20 @@ removing the setting would still take press-to-toggle away from everyone using i
 tap does not replace it: it is reached from `(.holdToTalk, .released)` only, and gives somebody
 who chose to hold what press-to-toggle already gave everybody else. See
 `Docs/pipeline-gestures.md`.
+
+## The dictation shortcut a new install gets
+
+A new install dictates with ⌃⌥ held: `HotkeyBinding.controlOptionHold`, a hold of two modifiers
+that `HotkeyRecogniser` reads like any other and that settles for `modifierSettle` before it
+counts. Installs onboarded before it keep ⌥Space, the earlier default, which is
+`ShortcutSet.earlierDefault`.
+
+The settings file is what tells the two apart, and it did not always exist: settings are saved
+when something is changed, so an install whose user never opened Settings has none. At launch,
+before the first read, `UserDefaultsSettingsStore.pinDefaults(onboarded:)` saves one when it is
+missing — ⌥Space when the onboarding record says onboarding finished, ⌃⌥ otherwise — so a later
+change of default never moves anybody. A saved file that names no dictation shortcut is read with
+⌥Space for the same reason. Reset in Settings gives back ⌃⌥, the current default, to everybody.
 
 ## What is testable
 
