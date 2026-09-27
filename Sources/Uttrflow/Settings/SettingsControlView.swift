@@ -69,7 +69,7 @@ struct SettingsControlView: View {
             } label: {
                 Image(systemName: isTicked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 17))
-                    .foregroundStyle(isTicked ? PagePalette.dictation : SettingsPalette.ink(0.35))
+                    .foregroundStyle(isTicked ? PagePalette.dictation : PagePalette.faint)
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(isTicked ? [.isButton, .isSelected] : .isButton)
