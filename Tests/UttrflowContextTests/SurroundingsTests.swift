@@ -53,6 +53,16 @@ struct SurroundingsTests {
                 < lines.firstIndex(of: "Me: in dist/, one sec")!)
     }
 
+    @Test("The focused field is never asked for its text, since its value can be a whole scrollback")
+    func focusedFieldTextIsNeverRead() {
+        let reads = TextReadLog()
+        _ = Surroundings.collect(
+            around: compose, in: FakeTree(root: chatWindow, textReads: reads), windowTitle: nil,
+            deadline: unhurried)
+        #expect(!reads.ids.isEmpty)
+        #expect(!reads.ids.contains(compose.id))
+    }
+
     @Test("Hidden text, controls and menus are not what the user is looking at, so they are not read.")
     func hiddenAndControlsAreSkipped() {
         let window = Node(
@@ -342,6 +352,15 @@ struct SurroundingsTests {
         #expect(Surroundings.cleaned("a\n\u{200F}\t\nb") == "a b")
         #expect(Surroundings.cleaned("Whats\u{0E}App\u{0007}") == "WhatsApp")
         #expect(Surroundings.trimmed("\n\tHi there\r\n") == "Hi there")
+    }
+
+    @Test("Zero-width joiners survive, since they join an emoji or keep two letters apart.")
+    func joinersSurvive() {
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"
+        #expect(Surroundings.cleaned(family) == family)
+        let word = "\u{645}\u{6CC}\u{200C}\u{631}\u{648}\u{645}"
+        #expect(Surroundings.cleaned(word) == word)
+        #expect(Surroundings.cleaned("\u{200E}" + word + "\u{200F}") == word)
     }
 
     @Test("An element with no parent at all has no surroundings.")

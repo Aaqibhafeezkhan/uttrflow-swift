@@ -12,8 +12,9 @@ public enum ReadingRestraint {
         text.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
-    /// Whether a reading opens like the word heard; the encoder drops inner vowels, so the opening is what is left.
+    /// Whether a reading opens like the word heard, or is listed in `Homophones` as the same sound spelt another way.
     public static func opensAlike(_ reading: String, heard: String) -> Bool {
+        if Homophones.share(reading, heard) { return true }
         let reading = closedUp(reading).folding(options: .diacriticInsensitive, locale: nil)
         let heard = closedUp(heard).folding(options: .diacriticInsensitive, locale: nil)
         guard reading.count >= openingLettersShared, heard.count >= openingLettersShared else {

@@ -92,7 +92,11 @@ public final class MacContextEngine: ContextEngine, Sendable {
         // Every stored property now has a value, so `self` is safe to capture from here on.
         let token = observeActivations { [weak self] application in
             guard let self, !self.isOurselves(application) else { return }
-            self.memory.withLock { $0.appBehind = application }
+            self.memory.withLock { memory in
+                // Supersedes any read still in flight, so its older answer is not kept.
+                memory.requestNumber &+= 1
+                memory.appBehind = application
+            }
         }
         activationToken.withLock { $0 = token }
     }
@@ -168,7 +172,7 @@ public final class MacContextEngine: ContextEngine, Sendable {
 
     /// Runs `work`, waits no longer than ``budget`` for it, and abandons what is left. See `Docs/context-budget.md`.
     private func withinBudget(_ work: @escaping @Sendable () async -> Void) async {
-        _ = await Deadline.first(within: Self.budget, on: clock) {
+        _ = await withDeadline(Self.budget, clock: clock) {
             await work()
             return true
         }

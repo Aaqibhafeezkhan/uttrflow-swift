@@ -62,6 +62,29 @@ struct SuggestionContextCacheTests {
 
         #expect(await walks.count == 2)
     }
+
+    @Test("a second call for a window being walked waits for that walk instead of starting its own")
+    func concurrentCallsShareOneWalk() async {
+        let cache = SuggestionContextCache()
+        let walks = Counter()
+        let calls = Counter()
+        let walk: @Sendable () async -> Surroundings? = {
+            await walks.bump()
+            while await calls.count < 2 { await Task.yield() }
+            return Self.around
+        }
+        let read: @Sendable () async -> Surroundings? = {
+            await calls.bump()
+            return await cache.surroundings(for: "notes", reading: walk)
+        }
+
+        async let first = read()
+        async let second = read()
+        let answers = await [first, second]
+
+        #expect(await walks.count == 1)
+        #expect(answers.allSatisfy { $0?.windowTitle == "Notes" })
+    }
 }
 
 /// Counts the walks a test asked for.

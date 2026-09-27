@@ -65,8 +65,10 @@ public struct ProbeReport: Sendable {
         }
     }
 
-    /// Keeps an application name containing a pipe from breaking the table.
+    /// Keeps a cell containing a pipe or a line break from breaking the table.
     private func escape(_ text: String) -> String {
-        text.replacingOccurrences(of: "|", with: "\\|")
+        text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .joined(separator: " ")
+            .replacingOccurrences(of: "|", with: "\\|")
     }
 }

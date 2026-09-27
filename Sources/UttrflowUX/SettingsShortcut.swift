@@ -126,6 +126,12 @@ public struct SettingsShortcutRecorder: Sendable, Equatable {
         pendingModifier = nil
     }
 
+    /// Records a refusal found outside the recorder, leaving it listening with the old shortcut.
+    mutating func refuse(_ refusal: SettingsRejection) {
+        rejection = refusal.reason
+        pendingModifier = nil
+    }
+
     /// Stops listening, changing nothing.
     public mutating func cancel() {
         isRecording = false

@@ -109,6 +109,19 @@ struct OrbitPaletteTests {
         #expect(dark == light, "the stage stays dark in Light appearance, so its warning ink must not move")
     }
 
+    @Test("a layer takes each appearance's own tone and opacity")
+    func layerResolvesPerAppearance() {
+        let layer = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x00_0000), darkOpacity: 0.72, lightOpacity: 0.1)
+        let dark = components(.orbit(layer), in: .darkAqua)
+        let light = components(.orbit(layer), in: .aqua)
+
+        #expect(dark[0] == 1)
+        #expect(light[0] == 0)
+        #expect(abs(dark[3] - 0.72) < 0.01)
+        #expect(abs(light[3] - 0.1) < 0.01)
+    }
+
     @Test("the rail is darker than the page, and a card lighter")
     func surfacesStack() {
         func luminance(_ colour: Color) -> CGFloat {

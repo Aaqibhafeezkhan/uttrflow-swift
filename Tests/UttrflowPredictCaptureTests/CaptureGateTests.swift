@@ -28,6 +28,14 @@ struct CaptureGateTests {
                 == .secureField)
     }
 
+    @Test("A field its reader found secure only by its masked value is refused.")
+    func maskedOnlyFieldIsRefused() {
+        let masked = FieldReading(
+            bundleIdentifier: "com.example.terminal", role: "AXTextField", isKnownSecure: true)
+        #expect(masked.isSecure)
+        #expect(CaptureGate.refusal(toRecord: "hunter2000", from: masked, given: allowed) == .secureField)
+    }
+
     @Test("A one-time-code field is refused before consent is even consulted.")
     func sensitiveFieldNameIsRefusedFirst() {
         let otp = FieldReading(
@@ -108,6 +116,13 @@ struct CaptureGateTests {
         #expect(
             CaptureGate.refusal(toRecord: "git push --force", from: field(), given: allowed)
                 == .destructive)
+    }
+
+    @Test("A line the shell reader cannot resolve is refused rather than taken as safe.")
+    func unresolvedSubstitutionIsRefused() {
+        for line in ["rm -rf $(find . -name node_modules)", "git branch -D `git branch --merged`"] {
+            #expect(CaptureGate.refusal(toRecord: line, from: field(), given: allowed) == .destructive)
+        }
     }
 
     @Test("A credential is refused by the same rules the clipboard hides one with.")

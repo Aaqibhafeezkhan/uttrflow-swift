@@ -48,7 +48,12 @@ public enum LatinScript {
         let properties = scalar.properties
         let isMark = [.nonspacingMark, .spacingMark, .enclosingMark].contains(properties.generalCategory)
         guard properties.isAlphabetic || isMark else { return false }
-        return !latinRanges.contains { $0.contains(scalar.value) }
+        return !isInLatinRange(scalar)
+    }
+
+    /// Whether a scalar sits in a block Latin text uses; the one table every Latin-script check consults.
+    public static func isInLatinRange(_ scalar: Unicode.Scalar) -> Bool {
+        latinRanges.contains { $0.contains(scalar.value) }
     }
 
     /// Whether any decimal digit is written in a script other than Latin.
@@ -78,6 +83,7 @@ public enum LatinScript {
         0xFB00...0xFB06,  // Latin ligatures.
         0xFE00...0xFE0F,  // Variation selectors, which emoji carry.
         0xFE20...0xFE2F,  // Combining half marks.
+        0xFF10...0xFF19,  // Fullwidth digits.
         0xFF21...0xFF5A,  // Fullwidth Latin letters.
         0x1D400...0x1D6A5,  // Mathematical Latin letters; the rest of the block before the digits is Greek.
         0x1D7CE...0x1D7FF,  // Mathematical digits.

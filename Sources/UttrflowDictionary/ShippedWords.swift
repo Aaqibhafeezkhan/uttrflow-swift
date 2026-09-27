@@ -4,8 +4,11 @@ public import struct Foundation.Date
 
 /// The words Uttrflow ships knowing, because a general model gets them wrong and every user says them.
 public enum ShippedWords {
-    /// Bumped when the list changes, so a build that adds a word seeds the new one and not the old ones again.
+    /// Bumped when the list changes; seeding itself goes by the spellings recorded as offered.
     public static let version = 1
+
+    /// The lowercased spellings version 1 shipped, which a record naming only a version already offered.
+    static let versionOneSpellings: Set<String> = ["uttrflow"]
 
     /// The spellings, with a pronunciation only where the spelling is not a fair guide to the sound.
     public static let spellings: [(word: String, pronunciation: String?)] = [

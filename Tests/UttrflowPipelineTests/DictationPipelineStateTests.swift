@@ -115,9 +115,11 @@ private final class FakeInserter: TextInserting, Sendable {
 private final class GatedSpeechEngine: SpeechEngine, Sendable {
     let kind: SpeechEngineKind = .whisperKit
     private let gate: Gate
+    private let error: SpeechEngineError?
 
-    init(gate: Gate) {
+    init(gate: Gate, error: SpeechEngineError? = nil) {
         self.gate = gate
+        self.error = error
     }
 
     func prepare() async throws(SpeechEngineError) {}
@@ -127,6 +129,7 @@ private final class GatedSpeechEngine: SpeechEngine, Sendable {
         options: TranscriptionOptions
     ) async throws(SpeechEngineError) -> Transcription {
         await gate.pass()
+        if let error { throw error }
         return .fixture(text: spoken)
     }
 }
@@ -271,6 +274,40 @@ struct DictationPipelineStateTests {
 
         await gate.open()
         await dictation.value
+    }
+
+    @Test("a transcription error after a cancel does not replace idle with a stale failure")
+    func failedTranscriptionAfterCancelRests() async {
+        let gate = Gate()
+        let speech = GatedSpeechEngine(gate: gate, error: .transcriptionFailed(description: "boom"))
+        let pipeline = makePipeline(speech: speech)
+        await pipeline.startRecording()
+        let dictation = Task { await pipeline.finishRecording() }
+        await gate.waitUntilReached()
+
+        await pipeline.cancel()
+        await gate.open()
+        await dictation.value
+
+        #expect(await pipeline.currentState == .idle)
+    }
+
+    @Test("the same transcription error is still reported when nobody cancelled")
+    func failedTranscriptionWithoutCancelFails() async {
+        let gate = Gate()
+        let speech = GatedSpeechEngine(gate: gate, error: .transcriptionFailed(description: "boom"))
+        let pipeline = makePipeline(speech: speech)
+        await pipeline.startRecording()
+        let dictation = Task { await pipeline.finishRecording() }
+        await gate.waitUntilReached()
+
+        await gate.open()
+        await dictation.value
+
+        guard case .failed = await pipeline.currentState else {
+            Issue.record("expected a failure, got \(await pipeline.currentState)")
+            return
+        }
     }
 
     @Test("ignores a start that arrives while it is tidying")
@@ -451,6 +488,17 @@ struct DictationPipelineStateTests {
         #expect(await speech.transcribeCalls.isEmpty, "cancelled audio must never be transcribed")
         #expect(cleaner.requests.isEmpty)
         #expect(inserter.received.isEmpty)
+    }
+
+    @Test("asks the recogniser to warm as the recording starts")
+    func startRecordingWarmsTheRecogniser() async {
+        let speech = FakeSpeechEngine()
+        let pipeline = makePipeline(speech: speech)
+
+        await pipeline.startRecording()
+
+        #expect(await speech.warmCalls.count == 1)
+        #expect(await pipeline.currentState == .recording)
     }
 
     @Test("does nothing when cancelled while idle")

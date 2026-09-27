@@ -69,9 +69,9 @@ public enum TelemetryStage: String, Sendable, Equatable, CaseIterable, Codable {
 public struct TelemetryReport: Sendable, Equatable, Encodable {
     /// The app's version as three numbers, never as a string.
     public struct AppVersion: Sendable, Equatable, Encodable {
-        /// The first number, a four-digit year under the calendar scheme.
+        /// The first number, a year: `26` under `YY.MMDD.REVISION`, `2026` under the older scheme.
         public let major: Int
-        /// The second number.
+        /// The second number, a month and day (`926` for `0926`) under `YY.MMDD.REVISION`.
         public let minor: Int
         /// The third number.
         public let patch: Int
@@ -85,8 +85,8 @@ public struct TelemetryReport: Sendable, Equatable, Encodable {
 
         /// Whether the server's ranges hold all three parts. See Docs/account-telemetry.md.
         var isWithinContract: Bool {
-            TelemetryLimit.versionYear.contains(major)
-                && TelemetryLimit.versionPart.contains(minor)
+            TelemetryLimit.versionDate.contains(major)
+                && TelemetryLimit.versionDate.contains(minor)
                 && TelemetryLimit.versionPart.contains(patch)
         }
     }
@@ -253,10 +253,10 @@ enum TelemetryLimit {
     static let count = 0...2_147_483_647
     /// The server's `durationMs`: up to a week, which no honest measurement reaches.
     static let durationMs = 0...604_800_000
-    /// The server's `versionPart`: a month, a day, or a macOS major version.
+    /// The server's `versionPart`: a release's revision, or a macOS major version.
     static let versionPart = 0...999
-    /// The server's range for a version's first part, which holds a four-digit calendar year.
-    static let versionYear = 0...9999
+    /// The server's range for a version's first two parts, a year and a month-and-day.
+    static let versionDate = 0...9999
 
     /// A latency percentile the table accepts: clamped, and never below the percentile under it.
     static func latency(_ milliseconds: Int?, notBelow floor: Int? = nil) -> Int? {
