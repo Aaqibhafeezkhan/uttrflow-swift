@@ -133,6 +133,14 @@ is the weaker of the two: several applications answer `kAXFocusedUIElementAttrib
 the system-wide element and not on their own. Both are asked, system-wide first; the
 fallback costs one extra round trip in a case that was already failing.
 
+Answering is not the same as answering the right field. While a browser's own editor is
+typed into, the system-wide element can name the word under the caret rather than the
+editor — a text-entry role check decides which answer to keep: the system-wide element's
+if its role is one text is entered into, else the application's if that is, else whichever
+answered at all. `FocusedElementPreference.choose` is the one place this is decided, and
+every reader of the focused element — the field reader, the suggestion reader, the context
+engine and dictation insertion — calls through it rather than keeping its own copy.
+
 ## Accessibility calls must be bounded
 
 They are synchronous and run on the pipeline's own thread, so a focused app that has
@@ -145,6 +153,16 @@ The 2 s is set on the focused element itself, never on the system-wide element. 
 on the system-wide element is process-wide and read when each message is sent, so an AI
 suggestion read on another queue setting its own 100 ms would cut the insertion's write short
 mid-dictation (#887). The system-wide focus query itself runs under the system default.
+
+Every one of those calls blocks the thread that sends it for as long as the target takes to
+answer. Swift's cooperative pool has about one thread per core, so a call made from `async`
+code would hold a pool thread for up to 2 s per message while every other actor in the
+process waited for one. Insertion, paste confirmation, suggestion acceptance and the typed route's check therefore
+send them through `AccessibilityThread`, a concurrent dispatch queue of their own, and the
+awaiting task resumes when the answer comes back. A task cancelled before its message leaves
+the queue sends nothing and takes a safe fallback — "secure" for the concealment question,
+"unreadable" for a caret read. A message already sent cannot be recalled; the 2 s cap is
+what bounds it.
 
 ## Announcing Uttrflow's own writes
 
@@ -171,7 +189,9 @@ A password or PIN field gets the words like any other field, and nothing else do
 reads the value only when none of those says so, to catch a field that shows mask
 characters without declaring itself. The question is asked twice: by the context read
 when the dictation's screen is read, which then carries none of the field's text, and by
-`TextInsertionCoordinator` just before the write.
+`TextInsertionCoordinator` before the fallback chain starts and again once the winning
+strategy has written, so a switch into a secure field while an earlier strategy fails still
+counts.
 
 Either answer marks the outcome `intoSecureField`. The words then reach no store: no
 history row (not even a length), no Uttrflow clip, no last transcript, no dictionary

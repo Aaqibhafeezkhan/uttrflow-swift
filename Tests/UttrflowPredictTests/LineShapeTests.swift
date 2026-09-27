@@ -22,6 +22,7 @@ struct LineShapeTests {
         #expect(shape("ls -la Sour") == LineShape(command: "ls", kind: .file))
         #expect(shape("git chec") == LineShape(command: "git", kind: .subcommand(of: "git")))
         #expect(shape("git checkout -b fe") == LineShape(command: "git", kind: .branch))
+        #expect(shape("git log READ") == LineShape(command: "git", kind: .branchOrFile))
         #expect(shape("git add Sour") == LineShape(command: "git", kind: .file))
         #expect(shape("git commit -m fix") == LineShape(command: "git", kind: .free))
         #expect(shape("make ver") == LineShape(command: "make", kind: .subcommand(of: "make")))

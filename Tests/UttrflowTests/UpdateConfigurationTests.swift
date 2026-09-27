@@ -35,4 +35,17 @@ struct UpdateConfigurationTests {
         let feed = try #require((info["SUFeedURL"] as? String).flatMap(URL.init(string:)))
         #expect(feed.scheme == "https")
     }
+
+    @Test("refuses a placeholder key that is not 32 non-zero bytes of base64")
+    func refusesPlaceholderKeys() throws {
+        let shipped = try #require(shippedInfo()["SUPublicEDKey"] as? String)
+        #expect(UpdateController.isPublicKey(shipped))
+        for key in [
+            "", "not a key", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            String(shipped.dropLast(8)) + "=",
+            shipped + "AAAA", "YOUR_PUBLIC_KEY_HERE",
+        ] {
+            #expect(!UpdateController.isPublicKey(key), "\(key)")
+        }
+    }
 }

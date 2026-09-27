@@ -146,7 +146,7 @@ struct GitRepository: Sendable {
         } ?? false
     }
 
-    /// Whether a name is anything `checkout` could take as a commit: `HEAD` and its relatives, a branch, a tag or a remote's branch.
+    /// Whether a name is anything `checkout` could take as a commit: `HEAD` and its relatives, a branch, a tag, a remote's branch or a loose object's id.
     func hasCommit(named name: String) -> Bool {
         let base = String(name.prefix { $0 != "~" && $0 != "^" })
         guard
@@ -155,6 +155,30 @@ struct GitRepository: Sendable {
         else { return false }
         if base == "HEAD" || base == "@" { return true }
         guard Self.isRefName(base) else { return false }
-        return ["refs/heads/", "refs/tags/", "refs/remotes/", "refs/"].contains { has($0 + base) }
+        if ["refs/heads/", "refs/tags/", "refs/remotes/", "refs/"].contains(where: { has($0 + base) }) {
+            return true
+        }
+        return hasLooseObject(abbreviated: base)
+    }
+
+    /// The fewest hex digits git takes as an object id.
+    static let shortestObjectID = 4
+
+    /// The most names read from one loose-object folder, past which an id is not believed.
+    static let looseFolderLimit = 4_096
+
+    /// Whether exactly one loose object begins with this hex id; a packed object is not read, so it is not vouched for.
+    func hasLooseObject(abbreviated id: String) -> Bool {
+        let hex = id.lowercased()
+        guard (Self.shortestObjectID...64).contains(hex.count), hex.allSatisfy(\.isHexDigit) else {
+            return false
+        }
+        let folder = TerminalPath.joined(commonDirectory, "objects/" + hex.prefix(2))
+        guard let names = files.names(inDirectory: folder, limit: Self.looseFolderLimit) else { return false }
+        let rest = hex.dropFirst(2)
+        let matches = names.filter { $0.count >= 38 && $0.hasPrefix(rest) }
+        guard matches.count == 1, let only = matches.first else { return false }
+        if case .file = files.kind(atPath: TerminalPath.joined(folder, only)) { return true }
+        return false
     }
 }

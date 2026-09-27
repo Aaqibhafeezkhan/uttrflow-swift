@@ -2,7 +2,10 @@ import AppKit
 import ApplicationServices
 public import Foundation
 public import UttrflowCore
-import UttrflowPredict
+public import UttrflowPredict
+
+private import Carbon
+private import Synchronization
 
 /// The real clipboard, untestable by construction and so excluded from the coverage gate.
 public struct SystemPasteboard: Pasteboard {
@@ -90,19 +93,91 @@ private func postTaggedKeyPair(
     keyUp.post(tap: .cghidEventTap)
 }
 
+/// The key code posted when no keyboard layout can be read, `v`'s position on a US QWERTY board.
+private let fallbackVKeyCode: CGKeyCode = 9
+
+/// The key code for ⌘V, resolved from the layout the target interprets shortcuts with. See `Docs/input-synthetic-keystrokes.md`.
+enum PasteKeyLayout {
+    /// `v`, the character ⌘V is a shortcut for regardless of the key that types it.
+    private static let vCharacter = UniChar(UnicodeScalar("v").value)
+
+    /// The last resolved key code, readable from any thread without a Text Input Sources call.
+    private static let cachedKeyCode = Mutex<CGKeyCode>(fallbackVKeyCode)
+
+    /// Whether the change notification is already being watched, so starting twice still observes once.
+    @MainActor private static var observing = false
+
+    /// The cached key code for ⌘V, filled by `startObserving()` and kept current after that.
+    static func vKeyCode() -> CGKeyCode {
+        cachedKeyCode.withLock { $0 }
+    }
+
+    /// Fills the cache and keeps it filled, which every off-main reader depends on having been called.
+    @MainActor
+    static func startObserving() {
+        guard !observing else { return }
+        observing = true
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: nil
+        ) { _ in
+            // Back to the main queue explicitly, because HIToolbox asserts it and the poster is not it.
+            DispatchQueue.main.async { MainActor.assumeIsolated { _ = refresh() } }
+        }
+        refresh()
+    }
+
+    /// Asks Text Input Sources what is selected and caches its ⌘V key code, the one place that calls TIS.
+    @MainActor
+    @discardableResult
+    static func refresh() -> CGKeyCode {
+        let code = readVKeyCode()
+        cachedKeyCode.withLock { $0 = code }
+        return code
+    }
+
+    /// The current layout's key code for `v`, or the ASCII-capable layout's when the current one has none.
+    @MainActor
+    private static func readVKeyCode() -> CGKeyCode {
+        if let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+            let data = unicodeLayoutData(of: source),
+            let code = LayoutKeyCode.code(for: vCharacter, in: data)
+        {
+            return code
+        }
+        if let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
+            let data = unicodeLayoutData(of: source),
+            let code = LayoutKeyCode.code(for: vCharacter, in: data)
+        {
+            return code
+        }
+        return fallbackVKeyCode
+    }
+
+    /// The raw layout table Text Input Sources holds for `source`, absent for input methods and the like.
+    private static func unicodeLayoutData(of source: TISInputSource) -> Data? {
+        guard let property = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
+        else { return nil }
+        return Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue() as Data
+    }
+}
+
 /// Presses ⌘V by posting keyboard events, which no test can assert anything about.
 public struct CGEventKeystrokeSender: KeystrokeSender {
-    /// Virtual key code for V, positional and so correct on any keyboard layout.
-    private static let vKeyCode: CGKeyCode = 9
-
     public init() {}
+
+    /// Starts tracking layout changes, so `sendPaste()` posts the key that types V under the current one.
+    @MainActor
+    public static func startObservingLayout() {
+        PasteKeyLayout.startObserving()
+    }
 
     public func sendPaste() throws(TextInsertionError) {
         guard AXIsProcessTrusted() else { throw .accessibilityDenied }
         guard let source = CGEventSource(stateID: .hidSystemState) else {
             throw .insertionRejected(description: unmakeableKeystroke)
         }
-        try postTaggedKeyPair(from: source, keyCode: Self.vKeyCode) { $0.flags = .maskCommand }
+        try postTaggedKeyPair(from: source, keyCode: PasteKeyLayout.vKeyCode()) { $0.flags = .maskCommand }
     }
 }
 
@@ -144,7 +219,7 @@ public struct CGEventTypist: KeystrokeTyping {
     }
 }
 
-/// The focused text field, found through the Accessibility API against a real window.
+/// The focused text field, found through the Accessibility API; its methods block, so async code calls them via `AccessibilityThread`.
 public struct AXAccessibilityFocus: AccessibilityFocus {
     public init() {}
 
@@ -179,18 +254,22 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
             value: { stringAttribute(kAXValueAttribute, of: element) })
     }
 
-    /// The focused element, asked system-wide then per-application. See `Docs/insertion.md`.
+    /// The focused element, asked system-wide then per-application, preferring whichever names a text-entry role. See `Docs/insertion.md`.
     private func focusedElement() -> AXUIElement? {
         guard AXIsProcessTrusted() else { return nil }
 
         // The timeout goes on the element itself: set on the system-wide element it is process-wide, and a suggestion read could lower it mid-insertion (#887).
         let system = AXUIElementCreateSystemWide()
-        if let element = focusedElement(of: system) { return element }
-
-        guard let frontmost = NSWorkspace.shared.frontmostApplication else { return nil }
-        let application = AXUIElementCreateApplication(frontmost.processIdentifier)
-        _ = AXUIElementSetMessagingTimeout(application, Self.messagingTimeout)
-        return focusedElement(of: application)
+        let systemWide = focusedElement(of: system)
+        return FocusedElementPreference.choose(
+            systemWide: systemWide, systemWideRole: { stringAttribute(kAXRoleAttribute, of: $0) },
+            application: {
+                guard let frontmost = NSWorkspace.shared.frontmostApplication else { return nil }
+                let application = AXUIElementCreateApplication(frontmost.processIdentifier)
+                _ = AXUIElementSetMessagingTimeout(application, Self.messagingTimeout)
+                return focusedElement(of: application)
+            },
+            applicationRole: { stringAttribute(kAXRoleAttribute, of: $0) })
     }
 
     private func focusedElement(of parent: AXUIElement) -> AXUIElement? {
@@ -290,4 +369,20 @@ private func rangeAttribute(_ name: String, of element: AXUIElement) -> CFRange?
         return nil
     }
     return range
+}
+
+/// Posts a keystroke the tap took and the session refused, tagged so neither the tap nor the monitor takes it again.
+public enum KeyStrokeReturn {
+    /// Presses the stroke's key with its modifiers in the focused application.
+    public static func post(_ stroke: UttrflowPredict.KeyStroke) {
+        guard let keyCode = stroke.key.keyCode,
+            let source = CGEventSource(stateID: .hidSystemState)
+        else { return }
+        var flags = CGEventFlags()
+        if stroke.modifiers.contains(.command) { flags.insert(.maskCommand) }
+        if stroke.modifiers.contains(.option) { flags.insert(.maskAlternate) }
+        if stroke.modifiers.contains(.control) { flags.insert(.maskControl) }
+        if stroke.modifiers.contains(.shift) { flags.insert(.maskShift) }
+        try? postTaggedKeyPair(from: source, keyCode: CGKeyCode(keyCode)) { $0.flags = flags }
+    }
 }

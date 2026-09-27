@@ -420,6 +420,7 @@ xcodebuild \
     -skipPackagePluginValidation \
     -skipMacroValidation \
     ENABLE_CODE_COVERAGE=NO \
+    DEBUG_INFORMATION_FORMAT=dwarf-with-dsym \
     -quiet \
     build \
     || fail "xcodebuild failed — rerun without -quiet in this script to see the whole log"
@@ -445,6 +446,15 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # The name in MacOS/ is what CFBundleExecutable has to match, so take it from there.
 cp "$BUILT_BINARY" "$APP/Contents/MacOS/$EXECUTABLE"
 cp "$SOURCE_PLIST" "$APP/Contents/Info.plist"
+
+# The crash reporter's DSN, only from the environment and never in a development build; see Docs/crash-reporting.md.
+if [[ "$MODE" != "development" && -n "${SENTRY_DSN:-}" ]]; then
+    /usr/libexec/PlistBuddy -c "Add :SentryDSN string $SENTRY_DSN" "$APP/Contents/Info.plist" >/dev/null \
+        || fail "could not write SentryDSN into Info.plist"
+    echo "Crash reporting: DSN written into Info.plist (reports still wait for the user's opt-in)."
+else
+    echo "Crash reporting: no DSN, so this build never starts the crash reporter."
+fi
 
 # The commit this bundle was built from, stamped into the bundle itself.
 #
@@ -752,7 +762,7 @@ if [[ -n "$FEED_URL" ]]; then
             printf '  would strand installed copies on an address only the release Mac can serve.'
         )"
     fi
-    [[ -n "$PUBLIC_KEY" && "$PUBLIC_KEY" != *" "* ]] || fail "$(
+    python3 "$SCRIPT_DIR/update_feed_gate.py" check-key "$PUBLIC_KEY" >/dev/null 2>&1 || fail "$(
         printf 'SUFeedURL is set and SUPublicEDKey is not a key.\n'
         printf '  An update feed with nothing to verify downloads against installs\n'
         printf '  whatever it is handed. Run generate_keys and paste the public half\n'

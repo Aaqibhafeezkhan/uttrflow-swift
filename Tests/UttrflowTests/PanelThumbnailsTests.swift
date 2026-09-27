@@ -13,9 +13,23 @@ import UttrflowClipboard
 struct PanelThumbnailsTests {
     /// The mock source is `@Sendable` so the cache can run it on a detached task; the counter is shared across that boundary.
     private final class Counter: @unchecked Sendable {
-        var files: [URL] = []
-        var sizes: [Int] = []
-        var calls = 0
+        private let lock = NSLock()
+        private var storedFiles: [URL] = []
+        private var storedSizes: [Int] = []
+        private var storedCalls = 0
+        var files: [URL] { lock.withLock { storedFiles } }
+        var sizes: [Int] { lock.withLock { storedSizes } }
+        var calls: Int { lock.withLock { storedCalls } }
+        /// Records one decode under the lock, since decodes run on detached tasks at once.
+        func record(_ file: URL, maxPixel: Int) {
+            lock.withLock {
+                storedFiles.append(file)
+                storedSizes.append(maxPixel)
+                storedCalls += 1
+            }
+        }
+        /// Counts one decode under the lock.
+        func count() { lock.withLock { storedCalls += 1 } }
     }
 
     /// A picture with real pixels behind it; `NSImage(size:)` has no representation and weighs nothing.
@@ -33,16 +47,18 @@ struct PanelThumbnailsTests {
     static let thumbnailBytes = PanelThumbnails.bytes(of: bitmap())
 
     private func thumbnails(
-        _ answers: [URL: NSImage] = [:], budget: Int? = nil
+        _ answers: [URL: NSImage] = [:], budget: Int? = nil, retryAfter: Duration = .seconds(2)
     ) -> (PanelThumbnails, Counter) {
         let counter = Counter()
         let source = PanelThumbnailSource { file, maxPixel in
-            counter.files.append(file)
-            counter.sizes.append(maxPixel)
-            counter.calls += 1
+            counter.record(file, maxPixel: maxPixel)
             return answers[file]
         }
-        return (PanelThumbnails(source: source, budget: budget ?? PanelThumbnails.defaultBudget), counter)
+        return (
+            PanelThumbnails(
+                source: source, budget: budget ?? PanelThumbnails.defaultBudget, retryAfter: retryAfter),
+            counter
+        )
     }
 
     func file(_ name: String) -> URL {
@@ -65,7 +81,8 @@ struct PanelThumbnailsTests {
     /// A clip whose file has been deleted should not cost a trip to the disk on every frame.
     @Test("remembers that a picture is gone")
     func remembersAMiss() async {
-        let (thumbnails, counter) = thumbnails()
+        // An hour, so a slow machine cannot make the miss stale between the reads.
+        let (thumbnails, counter) = thumbnails(retryAfter: .seconds(3600))
 
         thumbnails.prepare(file)
         await thumbnails.waitForIdle(file: file)
@@ -73,6 +90,28 @@ struct PanelThumbnailsTests {
         #expect(thumbnails.thumbnail(for: file) == nil)
         #expect(thumbnails.thumbnail(for: file) == nil)
         #expect(counter.files.count == 1)
+    }
+
+    /// A picture file restored after a failed decode is decoded again once the miss is stale.
+    @Test("decodes a restored picture after remembering it was gone")
+    func decodesARestoredPicture() async {
+        let counter = Counter()
+        let restored = Self.bitmap()
+        let present = Counter()
+        let source = PanelThumbnailSource { file, _ in
+            counter.count()
+            return present.calls > 0 ? restored : nil
+        }
+        let thumbnails = PanelThumbnails(source: source, retryAfter: .zero)
+
+        thumbnails.prepare(file)
+        await thumbnails.waitForIdle(file: file)
+        present.count()
+
+        #expect(thumbnails.thumbnail(for: file) == nil)
+        await thumbnails.waitForIdle(file: file)
+        #expect(thumbnails.thumbnail(for: file) === restored)
+        #expect(counter.calls == 2)
     }
 
     /// Asked for at the size it is drawn, not the size of the screenshot.
@@ -150,12 +189,18 @@ struct PanelThumbnailsTests {
 @MainActor
 @Suite("What the picture cache lets go of")
 struct PanelThumbnailsCapacityTests {
-    private final class Counter: @unchecked Sendable { var files: [URL] = [] }
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storedFiles: [URL] = []
+        var files: [URL] { lock.withLock { storedFiles } }
+        /// Records one decode under the lock, since several decodes can run at once.
+        func record(_ file: URL) { lock.withLock { storedFiles.append(file) } }
+    }
 
     private func thumbnails(room pictures: Int) -> (PanelThumbnails, Counter) {
         let counter = Counter()
         let source = PanelThumbnailSource { file, _ in
-            counter.files.append(file)
+            counter.record(file)
             return PanelThumbnailsTests.bitmap()
         }
         return (

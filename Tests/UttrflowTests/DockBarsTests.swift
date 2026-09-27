@@ -126,6 +126,13 @@ struct DockBarsTests {
         #expect(DockMetrics.meterQuietOpacity > 0.4)
     }
 
+    /// A row shorter than the meter would leave a gap on the side sound flows away to.
+    @Test("the row holds enough bars to cross the whole meter")
+    func rowFillsTheMeter() {
+        let step = DockMetrics.meterBarWidth + DockMetrics.meterBarSpacing
+        #expect(CGFloat(DockBars.capacity) * step >= DockMetrics.meterWidth + step)
+    }
+
     @Test("half scale is where the accent starts")
     func accentThreshold() {
         #expect(!DockBars.isLoud(0))
@@ -194,5 +201,37 @@ struct DockArrivalTests {
         dock.show(DictationPresenter.dock(for: .recording))
 
         #expect(dock.bars.levels[0] > 0)
+    }
+}
+
+/// The working orb's three bars rise and settle in turn and never vanish.
+@Suite("The working bars")
+struct DockWorkingBarsTests {
+    @Test("a bar starts settled, rises to full height halfway through, and settles again")
+    func riseAndSettle() {
+        let cycle = DockMetrics.workingCycle
+
+        #expect(abs(DockMetrics.workingStretch(0, 0) - DockMetrics.workingRest) < 0.001)
+        #expect(abs(DockMetrics.workingStretch(cycle / 2, 0) - 1) < 0.001)
+        #expect(abs(DockMetrics.workingStretch(cycle, 0) - DockMetrics.workingRest) < 0.001)
+    }
+
+    @Test("each bar follows the one to its left by the stagger")
+    func staggered() {
+        let lag = DockMetrics.workingStagger
+
+        #expect(abs(DockMetrics.workingStretch(0.3 + lag, 1) - DockMetrics.workingStretch(0.3, 0)) < 0.001)
+        #expect(abs(DockMetrics.workingStretch(0, 2) - DockMetrics.workingStretch(1 - 2 * lag, 0)) < 0.001)
+    }
+
+    @Test("no bar ever collapses below its resting share or grows past full height")
+    func bounded() {
+        for step in 0..<200 {
+            for index in DockMetrics.workingBarHeights.indices {
+                let stretch = DockMetrics.workingStretch(Double(step) * 0.037, index)
+                #expect(stretch >= DockMetrics.workingRest - 0.0001)
+                #expect(stretch <= 1.0001)
+            }
+        }
     }
 }

@@ -48,6 +48,12 @@ public struct TurnGate: Sendable, Equatable {
         return true
     }
 
+    /// Leaves the running turn behind with nothing in its place, so it stops being current and the next turn is admitted free.
+    public mutating func abandon() {
+        current = nil
+        startedAt = nil
+    }
+
     /// Admits a turn under the next number and starts its clock.
     private mutating func admit(at now: Date) -> Int {
         issued += 1

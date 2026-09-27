@@ -269,6 +269,8 @@ private final class CancellableClock: Clock, Sendable {
 private final class CancellingFocus: AccessibilityFocus, @unchecked Sendable {
     private let reads = Mutex(0)
     private let cancelOn: Int
+    /// Cancels the waiting task, which a read on the Accessibility queue cannot reach as its current task.
+    let canceller = Mutex<(@Sendable () -> Void)?>(nil)
 
     init(cancelOn: Int) { self.cancelOn = cancelOn }
 
@@ -282,7 +284,7 @@ private final class CancellingFocus: AccessibilityFocus, @unchecked Sendable {
             reads += 1
             return reads
         }
-        if read == cancelOn { withUnsafeCurrentTask { $0?.cancel() } }
+        if read == cancelOn { canceller.withLock { $0 }?() }
         return .text("what was already there")
     }
 
@@ -323,7 +325,12 @@ struct PasteConfirmationCancellationTests {
         let focus = CancellingFocus(cancelOn: 2)
         let clock = ScriptedClock()
         let confirmation = PasteConfirmation(focus: focus, clock: clock)
-        let outcome = await Task { await confirmation.waitFor("dictated words") }.value
+        let task = Task { () -> PasteConfirmation.Outcome in
+            while focus.canceller.withLock({ $0 }) == nil { await Task.yield() }
+            return await confirmation.waitFor("dictated words")
+        }
+        focus.canceller.withLock { $0 = { task.cancel() } }
+        let outcome = await task.value
 
         guard case .cancelled = outcome else {
             Issue.record("expected a cancelled wait, got \(outcome)")

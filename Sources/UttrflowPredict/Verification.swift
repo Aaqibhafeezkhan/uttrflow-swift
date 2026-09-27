@@ -8,12 +8,6 @@ public enum Verdict: Sendable, Equatable {
     case corrected(String)
     /// It is wrong and nothing near it is right, so it is not offered at all.
     case rejected
-
-    /// Whether the machine vouched for it, which is all a verification over budget may still show.
-    public var isAttested: Bool { self == .attested }
-
-    /// Whether anything at all may be drawn from it.
-    public var allowsOffering: Bool { self != .rejected }
 }
 
 /// Scores how likely a candidate is where it stands, which is the one thing frequency cannot say.
@@ -166,7 +160,8 @@ public enum Verification {
         let below = Lookup(
             "", [kind == .directory ? .directories(under: under) : .entries(under: under)], prefix: word)
         // Where a branch is wanted, the slash may be a branch's own, so the branches beginning this way are offered too.
-        return Attestation(lookups: kind == .branch ? [Lookup(word, [.branch]), below] : [below])
+        return Attestation(
+            lookups: kind == .branch || kind == .branchOrFile ? [Lookup(word, [.branch]), below] : [below])
     }
 
     /// The most values the model is offered to choose among, since each costs prompt and a directory may hold hundreds.
@@ -186,7 +181,7 @@ public enum Verification {
         // A path is looked up where it points, narrowed to directories by `cd` and its kin; a word read as text is never a path, so `deploy/api` stands.
         if word.contains("/"), shape.kind != .free {
             guard let path = path(word, directoriesOnly: shape.kind == .directory) else { return nil }
-            return shape.kind == .branch
+            return shape.kind == .branch || shape.kind == .branchOrFile
                 ? Attestation(lookups: [Lookup(word, [.branch]), path]) : Attestation(lookups: [path])
         }
         switch shape.kind {
@@ -199,6 +194,7 @@ public enum Verification {
         case .file: return Attestation(lookups: [Lookup(word, [.file])])
         // A branch is one ref among many: `HEAD~1`, a tag, a commit hash and `origin/main` are git's to accept, not the list's to deny.
         case .branch: return isRef(word) ? nil : Attestation(lookups: [Lookup(word, [.branch])])
+        case .branchOrFile: return isRef(word) ? nil : Attestation(lookups: [Lookup(word, [.branch, .file])])
         // A dotfile names one file here and nothing else; any other word may be one the command reads as text.
         case .free: return word.hasPrefix(".") ? Attestation(lookups: [Lookup(word, [.file])]) : nil
         }

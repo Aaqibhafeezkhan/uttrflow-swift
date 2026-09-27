@@ -103,12 +103,10 @@ public struct CapturePreferencesFile: Sendable {
         LocalStore.file("predict-consent.v1.json", in: directory)
     }
 
-    /// Reads what was saved, treating a missing or unreadable file as nothing having been said.
+    /// Reads what was saved; an unreadable file is set aside so the next save cannot erase it.
     public func load() -> CapturePreferences {
-        guard let data = FileManager.default.contents(atPath: path),
-            let preferences = try? JSONDecoder().decode(CapturePreferences.self, from: data)
-        else { return CapturePreferences() }
-        return preferences
+        LocalStore.read(CapturePreferences.self, from: URL(fileURLWithPath: path)).value
+            ?? CapturePreferences()
     }
 
     /// Writes what was decided, creating the directory it belongs in when it is not there yet.

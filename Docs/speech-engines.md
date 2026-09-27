@@ -18,6 +18,13 @@ relies on. `Docs/bakeoff.md` compares the engines; `Docs/offline.md` states the 
   the asset, and a readiness check that consults it, would replace a slow first dictation with
   a dead end. Both of those live outside the module, so the change belongs in one piece.
 - Audio is fed to the analyser in 4096-frame chunks, matching how a live microphone delivers.
+- The asset check and the analyser's audio format are settled once, in `load()`, and again only
+  after a transcription fails. An analyser is finished after one clip, so each piece takes a fresh
+  transcriber and analyser; the next pair is built and given `prepareToAnalyze(in:)` as soon as a
+  piece answers, off the wait for the words. `Docs/performance.md` has the measurement.
+- The analyser has offered 16 kHz mono 16-bit on every Mac measured. When it asks for anything
+  else, `AnalyserInput` converts through `AVAudioConverter`, fed in 2048-frame slices within one
+  conversion so neither the converter's truncation nor its filter delay drops audio.
 - Excluded from the coverage gate: it can only be exercised by real speech.
 
 ## Keeping WhisperKit off the network
@@ -340,3 +347,9 @@ call had been replaced by another's.
   single segment with no inner timestamps, so the window ended at its fixed 30 seconds and the
   four words spoken across that boundary were lost. That is the decoder's segmentation under a
   long prompt, not the alignment.
+- `CappedDecodeRetry.collapsedWindow` catches that shape: a segment that ends at a 30-second
+  window (or spans a whole one) while its last word ends more than a second before it, with audio
+  still after it. The segments after it are dropped and the audio is decoded again from that last
+  word, so the boundary words are recovered at the cost of one extra decode of the remainder,
+  paid only when a window collapses (#1567). Unit-tested against a fake recogniser; the cost on
+  the 53-second clip has not been re-measured on real audio.

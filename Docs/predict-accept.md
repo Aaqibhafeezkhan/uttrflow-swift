@@ -47,6 +47,12 @@ so neither arrow nor Return is ever claimed for one — Tab is the only way to t
 | ⎋⎋ | This field offers nothing more |
 | ⌥⎋ | AI suggestions stop everywhere until turned back on |
 
+The bare ⎋ rungs apply where the accept key is Tab or ⌥⇥. In a terminal, whose accept key is
+→, a bare ⎋ is never armed: the shell reads it as the Meta prefix (⎋ then `.`, `b`, `f`) or
+as vi's normal mode, so a suggestion there is dismissed by typing on. ⌥⎋ still turns
+suggestions off in a terminal. A terminal set to send Option as Meta loses Meta-⎋ while a
+suggestion is drawn; with nothing drawn it passes through untouched.
+
 ⎋ with nothing drawn is not ours: it closes the application's own dialog, and a tap that
 swallows it is a tap the user has to quit the app to escape from.
 
@@ -62,6 +68,11 @@ keystroke set in one atomic `UInt32`?
 mask and the rules therefore cannot disagree about what is taken, which matters because a
 key swallowed with no rule behind it is a keystroke the user silently loses. There is a
 test that asserts the agreement directly.
+
+The mask is read on the tap thread and the session decides later, so the two can still
+disagree in time: an accept after a keystroke the offer never saw, or a key armed for a
+suggestion since replaced. The session answers those with `.giveBack`, and the coordinator
+posts the same key with the same modifiers, tagged so the tap lets it through.
 
 A swallowed keystroke is written into a fixed ring buffer of 64 entries and a dispatch
 source is signalled; the decision runs on that source's queue. The ring is what keeps two

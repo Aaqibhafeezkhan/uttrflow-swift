@@ -178,6 +178,37 @@ struct HTTPAuthenticationServiceTests {
         #expect(abandoned.wasClosed)
     }
 
+    /// A challenge from a replaced attempt must not consume the attempt that replaced it.
+    @Test("keeps the current attempt when completed with a stale challenge")
+    func aStaleChallengeLeavesTheCurrentAttempt() async throws {
+        let draws = Mutex(0)
+        let counting: @Sendable (Int) -> Data = { count in
+            let draw = draws.withLock { value in
+                value += 1
+                return UInt8(value)
+            }
+            return Data(repeating: draw, count: count)
+        }
+        let second = StubLoopbackListener(
+            returning: LoopbackCallback(
+                code: "the-code", state: PKCEPair.base64URL(Data(repeating: 4, count: 24))))
+        let listeners = Mutex([StubLoopbackListener(returning: nil), second])
+        let backend = HTTPAuthenticationService(
+            baseURL: Stub.baseURL, transport: signingIn(), tokens: InMemoryTokenStore(),
+            verifier: Fixture.verifier,
+            makeListener: { listeners.withLock { $0.removeFirst() } },
+            randomBytes: counting,
+            now: { Fixture.noon })
+
+        let stale = try await backend.beginSignIn(with: .google)
+        let current = try await backend.beginSignIn(with: .google)
+        await #expect(throws: AccountError.self) { try await backend.completeSignIn(stale) }
+
+        #expect(!second.wasClosed)
+        let profile = try await backend.completeSignIn(current)
+        #expect(profile.account == signedIn.account)
+    }
+
     @Test("sends the machine's own description, when it has one")
     func registersTheDevice() async throws {
         let transport = signingIn()
@@ -351,10 +382,15 @@ struct HTTPAuthenticationServiceTests {
             if request.url.path().hasSuffix("/me") { return BackendResponse(status: 401) }
             return Stub.json(Stub.IssuedSession())
         }
-        let service = service(transport: transport, tokens: InMemoryTokenStore(refreshToken: "r"))
+        let tokens = InMemoryTokenStore(refreshToken: "r")
+        let service = service(transport: transport, tokens: tokens)
 
         #expect(try await service.currentProfile(ifChangedFrom: nil) == .signedOut)
         #expect(transport.requests(to: "/me").count == 2)
+        #expect(tokens.refreshToken() == nil)
+        let refreshes = transport.requests(to: "/refresh").count
+        #expect(try await service.currentProfile(ifChangedFrom: nil) == .noCredential)
+        #expect(transport.requests(to: "/refresh").count == refreshes)
     }
 
     /// A refresh token the server rejects is dead; keeping it means asking the same question for ever.
@@ -400,6 +436,33 @@ struct HTTPAuthenticationServiceTests {
         #expect(tokens.refreshToken() == "rotated-refresh")
         #expect(transport.refreshAttempts.count == 2)
         #expect(Set(transport.refreshAttempts.map(\.idempotencyKey)).count == 1)
+    }
+
+    @Test("ends the session when a timed-out refresh is refused on its retry")
+    func aRefusedAmbiguousRefreshEndsTheSession() async throws {
+        let tokens = InMemoryTokenStore(refreshToken: "dead-refresh")
+        let refreshes = Mutex(0)
+        let transport = StubTransport { request, _ in
+            guard request.url.path().hasSuffix("/refresh") else { return BackendResponse(status: 401) }
+            let count = refreshes.withLock { count -> Int in
+                count += 1
+                return count
+            }
+            return count == 1 ? nil : BackendResponse(status: 401)
+        }
+        let service = service(transport: transport, tokens: tokens)
+
+        await #expect(throws: AccountError.serverUnreachable) {
+            try await service.currentProfile(ifChangedFrom: nil)
+        }
+        await #expect(throws: AccountError.serverUnreachable) {
+            try await service.currentProfile(ifChangedFrom: nil)
+        }
+        #expect(try await service.currentProfile(ifChangedFrom: nil) == .signedOut)
+        #expect(tokens.refreshToken() == nil)
+        let keys = transport.requests(to: "/refresh").compactMap { $0.jsonBody["idempotencyKey"] as? String }
+        #expect(keys.count == 3)
+        #expect(keys[0] == keys[1])
     }
 
     @Test("keeps the rotated refresh token, because the old one is already dead")

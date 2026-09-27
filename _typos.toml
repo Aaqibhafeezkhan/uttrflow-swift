@@ -54,6 +54,7 @@ extend-exclude = [
 mis = "mis"
 gti = "gti"
 comit = "comit"
+chekout = "chekout"
 ommit = "ommit"
 statu = "statu"
 chec = "chec"

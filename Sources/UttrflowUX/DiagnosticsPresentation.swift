@@ -253,6 +253,11 @@ public enum DiagnosticsPresenter {
     ) -> DiagnosticsSummary {
         let ordered = permissions + engines + storage
         guard let problem = ordered.first(where: { $0.state == .attention }) else {
+            // An unanswered check is not an all-clear, so the line names it without raising a warning.
+            if let pending = ordered.first(where: { $0.state == .unknown }) {
+                return DiagnosticsSummary(
+                    text: "Still checking: \(pending.title).", needsAttention: false, action: nil)
+            }
             return DiagnosticsSummary(
                 text: "Everything Uttrflow needs is in place.", needsAttention: false,
                 action: nil)
@@ -526,9 +531,12 @@ public enum DiagnosticsPresenter {
             return [DiagnosticsRow(title: "Speech model", detail: "Not checked yet", state: .unknown)]
         }
         guard model.isInstalled else {
+            // Only the downloaded recogniser needs these files, so its absence is a problem only for it.
+            let needed = (snapshot.speechInUse ?? snapshot.engines.speech) == .whisperKit
             return [
                 DiagnosticsRow(
-                    title: "Speech model", detail: "Not downloaded", state: .attention,
+                    title: "Speech model", detail: "Not downloaded",
+                    state: needed ? .attention : .good,
                     action: action(.downloadSpeechModel))
             ]
         }

@@ -1,5 +1,6 @@
 import ApplicationServices
 import Foundation
+import UttrflowCore
 
 /// Reads other applications through Accessibility, from one attribute to a whole field's capabilities. See `Docs/predict-probe.md`.
 public enum SurfaceProbe {
@@ -17,16 +18,14 @@ public enum SurfaceProbe {
         // Never set on the system-wide element: that is process-wide and would cut dictation's own writes short (#887).
         let system = AXUIElementCreateSystemWide()
         let systemWide = element(system, kAXFocusedUIElementAttribute, timeoutInSeconds: messagingTimeout)
-            .flatMap { field in owns(owner(of: field), processIdentifier) ? field : nil }
-        // While a browser editor is typed into, the system names the word under the caret; the application still names the field.
-        if let field = systemWide, FocusedFieldSnapshot.isTextEntry(string(field, kAXRoleAttribute)) {
-            return field
-        }
-        let application = AXUIElementCreateApplication(processIdentifier)
-        _ = AXUIElementSetMessagingTimeout(application, messagingTimeout)
-        let own = element(application, kAXFocusedUIElementAttribute, timeoutInSeconds: messagingTimeout)
-        if let field = own, FocusedFieldSnapshot.isTextEntry(string(field, kAXRoleAttribute)) { return field }
-        return systemWide ?? own
+        return FocusedElementPreference.choose(
+            systemWide: systemWide, systemWideRole: { string($0, kAXRoleAttribute) },
+            application: {
+                let application = AXUIElementCreateApplication(processIdentifier)
+                _ = AXUIElementSetMessagingTimeout(application, messagingTimeout)
+                return element(application, kAXFocusedUIElementAttribute, timeoutInSeconds: messagingTimeout)
+            },
+            applicationRole: { string($0, kAXRoleAttribute) })
     }
 
     /// Whether a focused element's owner is the requested application and not Uttrflow's own nonactivating panel.
@@ -88,6 +87,14 @@ public enum SurfaceProbe {
         guard AXUIElementCopyAttributeValue(owner, attribute as CFString, &value) == .success
         else { return nil }
         return value as? String
+    }
+
+    /// One attribute read as a whole number, or nothing where the element answers something else.
+    static func integer(_ owner: AXUIElement, _ attribute: String) -> Int? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(owner, attribute as CFString, &value) == .success
+        else { return nil }
+        return (value as? NSNumber)?.intValue
     }
 
     /// One `AXValue` attribute, unwrapped into the Core Graphics type it stands for.

@@ -73,8 +73,28 @@ struct FrecencyTests {
         #expect(abs(taken - (1 + Frecency.acceptanceLift)) < 1e-9)
         #expect(abs(refused - (1 - Frecency.acceptanceLift)) < 1e-9)
         #expect(mixed == 1)
-        #expect(refused >= Frecency.acceptanceFloor)
+        #expect(abs(refused - Frecency.acceptanceFloor) < 1e-9)
         #expect(Frecency.acceptanceFloor > 0)
+    }
+
+    @Test("The floor is reached exactly by an always-refused candidate and by nothing lower.")
+    func floorBindsAtTotalRefusal() {
+        var lowest = Double.infinity
+        for accepted in 0...12 {
+            for rejected in 0...12 {
+                let entry = Entry(
+                    text: "x", count: 3, accepted: accepted, rejected: rejected, lastUsed: moment)
+                lowest = min(lowest, Frecency.acceptance(entry))
+            }
+        }
+        #expect(abs(lowest - Frecency.acceptanceFloor) < 1e-9)
+    }
+
+    @Test("An always-refused candidate keeps exactly the floor's share of an unoffered one's score.")
+    func refusalScalesScoreByTheFloor() {
+        let unoffered = Frecency.score(remembered(accepted: 0, rejected: 0), now: moment)
+        let refused = Frecency.score(remembered(accepted: 0, rejected: 8), now: moment)
+        #expect(abs(refused - unoffered * Frecency.acceptanceFloor) < 1e-9)
     }
 
     @Test(
