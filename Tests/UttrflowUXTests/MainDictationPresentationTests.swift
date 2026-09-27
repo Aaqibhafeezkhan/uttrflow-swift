@@ -345,12 +345,13 @@ struct DictationFiguresTests {
     /// A new install's whole life that happens to fill the window has had nothing deleted.
     @Test("a streak that exactly fills the window with nothing older says nothing about deletion")
     func streakFillingTheWindowIsNotADeletion() {
+        var settings = Settings.default
+        settings.transcriptRetentionDays = 7
         let page = HistoryFixture.dictation(
-            entries: (0..<Settings.default.transcriptRetentionDays).map {
-                HistoryFixture.entry("day \($0)", daysAgo: $0)
-            })
+            entries: (0..<7).map { HistoryFixture.entry("day \($0)", daysAgo: $0) },
+            settings: settings)
         let figure = page.figures.first { $0.caption == "Day streak" }
-        #expect(figure?.value == "\(Settings.default.transcriptRetentionDays)")
+        #expect(figure?.value == "7")
         #expect(figure?.comment == "days in a row")
     }
 

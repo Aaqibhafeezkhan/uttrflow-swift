@@ -1,6 +1,7 @@
 // The choices the settings screens offer, stated as outcomes. See `Docs/ux-settings-model.md`.
 public import UttrflowCore
 public import UttrflowPredict
+import UttrflowSettings
 
 // MARK: - Tidying
 
@@ -104,12 +105,18 @@ public enum SettingsEngines {
 
 /// How long transcripts are kept, offering only periods the store round-trips unchanged.
 public enum SettingsRetention {
-    /// A day, through to a quarter. Ordered, because they are drawn in this order.
-    public static let offeredDays = [1, 3, 7, 14, 30, 90]
+    /// Always, then a day through to a quarter. Ordered, because they are drawn in this order.
+    public static let offeredDays = [Settings.keepAlwaysDays, 1, 3, 7, 14, 30, 90]
+
+    /// Whether a period means "until I delete it" rather than a number of days.
+    public static func isAlways(days: Int) -> Bool {
+        days >= Settings.keepAlwaysDays
+    }
 
     /// How a period reads in a pop-up.
     public static func title(days: Int) -> String {
-        days == 1 ? "1 day" : "\(days) days"
+        if isAlways(days: days) { return "Always" }
+        return days == 1 ? "1 day" : "\(days) days"
     }
 }
 

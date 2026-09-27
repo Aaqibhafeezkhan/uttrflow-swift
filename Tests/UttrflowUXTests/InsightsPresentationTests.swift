@@ -39,10 +39,10 @@ extension HistoryFixture {
         return settings
     }
 
-    /// The Insights page over these inputs, with the fixed clock, a Monday-first week and the region.
+    /// The Insights page over these inputs, with the fixed clock, a Monday-first week and history kept a week.
     static func insights(
         entries: [HistoryEntry] = [],
-        settings: Settings = .default,
+        settings: Settings = keeping(7),
         range: InsightsRange? = nil,
         calendar: Calendar = mondayFirst
     ) -> InsightsPresentation {
@@ -261,6 +261,12 @@ struct InsightsRangeTests {
         #expect(page.ranges.allSatisfy { $0.isAvailable })
         #expect(page.ranges.map(\.id) == ["7", "30", "90"])
         #expect(page.ranges.map(\.title) == ["7 days", "30 days", "90 days"])
+    }
+
+    @Test("history kept always can show every range")
+    func keptAlways() {
+        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(), settings: .default)
+        #expect(page.ranges.map(\.isAvailable) == [true, true, true])
     }
 
     /// History kept for a week has nothing to show further back, so the switch says so.

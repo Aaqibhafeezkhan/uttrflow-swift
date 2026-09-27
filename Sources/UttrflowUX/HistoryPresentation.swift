@@ -252,7 +252,10 @@ public enum HistoryPresenter {
     /// The privacy screen's promise, cut to what fits under a list.
     static func notice(for snapshot: HistorySnapshot) -> HistoryRetentionNotice {
         let text = snapshot.settings.transcriptRetentionDays
-        let kept = "Kept on this Mac for \(MainFormatting.count(text, "day", "days")), then deleted."
+        let kept =
+            SettingsRetention.isAlways(days: text)
+            ? "Kept on this Mac until you delete it."
+            : "Kept on this Mac for \(MainFormatting.count(text, "day", "days")), then deleted."
         let sentence =
             snapshot.keepsRecordings
             ? "\(kept) A recording stays only until its words land." : "\(kept) Recordings are never saved."

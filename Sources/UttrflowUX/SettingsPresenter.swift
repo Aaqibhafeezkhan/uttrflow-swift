@@ -645,7 +645,7 @@ public enum SettingsPresenter {
 
     /// The privacy promise, written once for every screen. See `Docs/ux-settings-model.md`.
     static let privacyPromise =
-        "\(recordingsPromise) The text is kept on this Mac and deleted automatically. We "
+        "\(recordingsPromise) The text is kept on this Mac until you delete it, or for the period you choose. We "
         + "never see it, and it is not tied to your account. Local history, clips, "
         + "suggestions and retry recordings kept on this Mac until deleted are excluded "
         + "from Mac backups that honour that setting."
