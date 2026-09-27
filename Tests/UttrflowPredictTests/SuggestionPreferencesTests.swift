@@ -213,4 +213,32 @@ struct SuggestionApplicationListTests {
         #expect(SuggestionApplications.name(of: "") == "")
         #expect(SuggestionApplications.name(of: "...") == "...")
     }
+
+    @Test("Names an application by its installed name before any shipped name or identifier tail.")
+    func installedNameWins() {
+        let notes = "com.example.notetakerpro"
+        #expect(SuggestionApplications.name(of: notes, installed: ["Note Taker Pro"]) == "Note Taker Pro")
+        #expect(SuggestionApplications.name(of: "com.apple.mobilesms", installed: ["Messages"]) == "Messages")
+        #expect(SuggestionApplications.name(of: "com.microsoft.vscode", installed: ["Code"]) == "Code")
+    }
+
+    @Test("Takes the first installed name that has something in it, in the order given.")
+    func firstUsableInstalledName() {
+        let candidates: [String?] = [nil, "  ", "Messages", "MobileSMS"]
+        #expect(SuggestionApplications.name(of: "com.apple.mobilesms", installed: candidates) == "Messages")
+        #expect(SuggestionApplications.firstUsable(["", "Note Taker.app"]) == "Note Taker")
+        #expect(SuggestionApplications.firstUsable([" Note Taker \n"]) == "Note Taker")
+        #expect(SuggestionApplications.firstUsable([".app", nil]) == nil)
+    }
+
+    @Test("Falls back to the shipped name, then the identifier's tail, when nothing installed has a name.")
+    func fallsBackWithoutAnInstalledName() {
+        #expect(
+            SuggestionApplications.name(of: "com.microsoft.vscode", installed: [nil, ""])
+                == "Visual Studio Code")
+        #expect(
+            SuggestionApplications.name(of: "com.example.notetakerpro", installed: [])
+                == "Notetakerpro")
+        #expect(SuggestionApplications.name(of: "", installed: [nil]) == "")
+    }
 }
