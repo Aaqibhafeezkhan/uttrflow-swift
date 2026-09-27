@@ -111,7 +111,7 @@ struct SettingsMenu: View {
                     .font(.system(size: 12.5))
                     .foregroundStyle(PagePalette.text)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(PagePalette.faint)
             }
             .padding(.horizontal, 10)
@@ -236,7 +236,7 @@ struct SettingsChipView: View {
             if let onRemove {
                 Button(action: onRemove) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(PagePalette.faint)
                         .frame(width: 14, height: 14)
                         .contentShape(.rect)

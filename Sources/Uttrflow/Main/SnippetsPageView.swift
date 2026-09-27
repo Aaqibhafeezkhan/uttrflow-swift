@@ -211,7 +211,7 @@ struct SnippetExampleCard: View {
                 HStack(spacing: 8) {
                     MainPillView(pill: example.trigger)
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                     Text(example.text)
                         .font(.system(size: MainMetrics.calloutSize))

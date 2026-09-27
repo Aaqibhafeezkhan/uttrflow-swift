@@ -205,7 +205,7 @@ struct SettingsRowView: View {
                     .foregroundStyle(SettingsPalette.ink(0.92))
                 if let badge = row.badge {
                     Text(badge)
-                        .font(.system(size: 9.5, weight: .semibold))
+                        .font(.system(size: 10, weight: .semibold))
                         .tracking(0.6)
                         .foregroundStyle(PagePalette.suggestion)
                         .padding(.horizontal, 6)
