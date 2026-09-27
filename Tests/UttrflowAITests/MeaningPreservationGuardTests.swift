@@ -1075,3 +1075,47 @@ struct GuardMatchStrengthTests {
         #expect(MeaningPreservationGuard.sentenceCount(text) == expected)
     }
 }
+
+/// An accent is still Latin script, so a name like "José" leaves every word of the draft readable.
+@Suite("MeaningPreservationGuard over an accented English draft")
+struct AccentedDraftGuardTests {
+    private let sut = MeaningPreservationGuard()
+
+    @Test("refuses a clause the model added to a draft with an accented word in it")
+    func refusesAnInventionBesideAnAccent() {
+        let verdict = sut.verdict(
+            draft: Draft(text: "Tell José the meeting moved to noon"),
+            rewritten: "Tell José the meeting moved to noon and wish him a happy birthday.")
+        guard case .rejected(_, let kind) = verdict else {
+            Issue.record("the added clause was accepted")
+            return
+        }
+        #expect(kind == .inventedWord)
+    }
+
+    @Test("refuses an accented name written as another name")
+    func refusesAReplacedAccentedName() {
+        let verdict = sut.verdict(
+            draft: Draft(text: "tell José the meeting moved to noon"),
+            rewritten: "Tell Joseph the meeting moved to noon.")
+        #expect(!verdict.isAccepted)
+    }
+
+    @Test(
+        "accepts a faithful rewrite of a draft with accented words",
+        arguments: [
+            ("tell José the meeting moved to noon", "Tell José the meeting moved to noon."),
+            ("send my résumé to the café owner", "Send my résumé to the café owner."),
+        ])
+    func acceptsAFaithfulRewrite(draft: String, rewritten: String) {
+        #expect(sut.verdict(draft: Draft(text: draft), rewritten: rewritten).isAccepted)
+    }
+
+    @Test("reads an accented Latin word and still leaves Devanagari to the base checks")
+    func readsAccentsNotOtherScripts() {
+        let accented = MeaningPreservationGuard.grammarTokens("José résumé café")
+        let devanagari = MeaningPreservationGuard.grammarTokens("नमस्ते")
+        #expect(accented.count == 3 && accented.allSatisfy { $0.isPlain })
+        #expect(!devanagari.isEmpty && !devanagari.contains { $0.isPlain })
+    }
+}
