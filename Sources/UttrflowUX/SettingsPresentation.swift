@@ -27,6 +27,8 @@ public struct SettingsPane: Sendable, Equatable {
     public let example: SettingsTidyExample?
     /// What an empty search says, set only on a search that matched nothing.
     public let emptySearch: String?
+    /// Why most of the pane cannot be operated, said once above the cards instead of on every row.
+    public let unavailability: String?
 
     /// Builds a pane; no example and no empty search unless given them.
     public init(
@@ -36,7 +38,8 @@ public struct SettingsPane: Sendable, Equatable {
         groups: [SettingsGroup],
         callout: SettingsCallout?,
         example: SettingsTidyExample? = nil,
-        emptySearch: String? = nil
+        emptySearch: String? = nil,
+        unavailability: String? = nil
     ) {
         self.tab = tab
         self.title = title
@@ -45,6 +48,7 @@ public struct SettingsPane: Sendable, Equatable {
         self.callout = callout
         self.example = example
         self.emptySearch = emptySearch
+        self.unavailability = unavailability
     }
 }
 
@@ -180,6 +184,11 @@ public struct SettingsRow: Sendable, Equatable, Identifiable {
         self.badge = badge
         self.keyedExplanation = keyedExplanation
         self.style = style
+    }
+
+    /// The reason drawn on the row: its own, unless the pane already says the same above its cards.
+    public func unavailability(besides pane: String?) -> String? {
+        unavailability == pane ? nil : unavailability
     }
 
     /// The same row with a tile at the left.

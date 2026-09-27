@@ -70,8 +70,8 @@ public struct InsightsCalendarDay: Sendable, Equatable, Identifiable {
     public var isSilent: Bool { words == 0 }
     /// The teal's opacity: a floor so a quiet day still reads as spoken on, rising to full on the busiest.
     public var shade: Double { isSilent ? 0 : 0.15 + 0.85 * fraction }
-    /// Whether the number sits on a tile dark enough to need the deep ink rather than the soft one.
-    public var usesDeepInk: Bool { fraction > 0.6 }
+    /// Whether the deep ink reads better than the page's ink on this tile; the two cross at 0.6 in dark.
+    public var usesDeepInk: Bool { shade > 0.6 }
 
     /// Builds a tile; the fraction is clamped to 0…1.
     public init(
@@ -199,8 +199,7 @@ public enum InsightsPresenter {
             ranges: options(selected: range, retention: retention),
             calendar: self.calendar(
                 for: inRange, range: range, now: snapshot.now, calendar: calendar, locale: locale),
-            figures: figures(
-                inRange: inRange, kept: kept, now: snapshot.now, calendar: calendar, locale: locale),
+            figures: figures(inRange: inRange, range: range, calendar: calendar, locale: locale),
             emptyState: nil)
     }
 
@@ -317,19 +316,41 @@ public enum InsightsPresenter {
 
     // MARK: - Figures
 
-    /// Words and dictations in the range, the pace across it, and the streak Home counts.
+    /// Words in the range, their daily average, the pace across it, and the range's longest streak.
     static func figures(
-        inRange: [HistoryEntry], kept: [HistoryEntry], now: Date, calendar: Calendar, locale: Locale
+        inRange: [HistoryEntry], range: InsightsRange, calendar: Calendar, locale: Locale
     ) -> [MainStatistic] {
-        let streak = HomeDashboard.streak(in: kept, now: now, calendar: calendar)
+        let streak = longestStreak(in: inRange, calendar: calendar)
         return [
             MainStatistic(value: inRange.totalWords.formatted(.number.locale(locale)), caption: "words"),
-            MainStatistic(value: inRange.count.formatted(.number.locale(locale)), caption: "dictations"),
+            MainStatistic(
+                value: dailyAverage(of: inRange, over: range).formatted(.number.locale(locale)),
+                caption: "a day"),
             MainStatistic(
                 value: DictationPresenter.pace(of: inRange).map { "\($0)" } ?? "—",
                 caption: "words / min"),
-            MainStatistic(value: MainFormatting.count(streak, "day", "days"), caption: "streak"),
+            MainStatistic(value: MainFormatting.count(streak, "day", "days"), caption: "longest streak"),
         ]
+    }
+
+    /// Words in the range over every day it covers, silent days included, to the nearest word.
+    static func dailyAverage(of inRange: [HistoryEntry], over range: InsightsRange) -> Int {
+        Int((Double(inRange.totalWords) / Double(range.days)).rounded())
+    }
+
+    /// The most days in a row with a dictation, anywhere in the entries given.
+    static func longestStreak(in entries: [HistoryEntry], calendar: Calendar) -> Int {
+        let days = daysSpokenOn(entries, calendar: calendar).sorted()
+        var longest = 0
+        var run = 0
+        var previous: Date?
+        for day in days {
+            let follows = previous.flatMap { calendar.date(byAdding: .day, value: 1, to: $0) } == day
+            run = follows ? run + 1 : 1
+            longest = max(longest, run)
+            previous = day
+        }
+        return longest
     }
 
     // MARK: - Not yet

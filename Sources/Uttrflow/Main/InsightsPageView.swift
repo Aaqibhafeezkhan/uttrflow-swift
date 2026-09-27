@@ -185,9 +185,9 @@ struct InsightsDayTile: View {
         )
         .overlay {
             Text(day.number)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
-                .foregroundStyle(day.usesDeepInk ? InsightsPalette.deepInk : PagePalette.faint)
+                .foregroundStyle(day.usesDeepInk ? InsightsPalette.deepInk : PagePalette.text)
         }
         .help(day.detail)
         .accessibilityElement(children: .ignore)
