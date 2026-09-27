@@ -178,5 +178,46 @@ enum BrandPalette {
         static let ringTrack = BrandLayer(tone: textStrong, darkOpacity: 0.1, lightOpacity: 0.1)
         /// The faint rim of a home card or row when dark; none when light, where white on the page is enough.
         static let cardEdge = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.08, lightOpacity: 0)
+
+        /// The clipboard panel's glass and inks. See `Docs/app-quick-panel.md`.
+        enum Panel {
+            /// The panel's glass over the system material: violet-black when dark, paper when light.
+            static let glass = BrandLayer(
+                tone: BrandTone(dark: 0x09_090F, light: 0xFA_F9F6), darkOpacity: 0.92, lightOpacity: 0.94)
+            /// The rim round the glass.
+            static let edge = BrandLayer(tone: film.tone, darkOpacity: 0.14, lightOpacity: 0.126)
+            /// The search field's and microphone's film on the glass.
+            static let film = BrandLayer(
+                tone: BrandTone(dark: 0xFF_FFFF, light: 0x10_1316), darkOpacity: 0.045, lightOpacity: 0.0405)
+            /// A hovered row, and the segmented control's track.
+            static let lift = BrandLayer(tone: film.tone, darkOpacity: 0.06, lightOpacity: 0.054)
+            /// The rules between the panel's bands and round its controls.
+            static let line = BrandLayer(tone: film.tone, darkOpacity: 0.1, lightOpacity: 0.09)
+            /// The ⋯ menu's and a sheet's glass.
+            static let popover = BrandLayer(
+                tone: BrandTone(dark: 0x16_1424, light: 0xFE_FEFC), darkOpacity: 0.94, lightOpacity: 0.93)
+            /// A sheet's text field and diff, sunk below the popover.
+            static let well = BrandTone(dark: 0x0B_0C10, light: 0xFF_FFFF)
+            /// The chosen segment of the kind filter, and the ink on it.
+            static let segment = BrandTone(dark: 0xFF_FFFF, light: 0x10_1316)
+            static let segmentInk = BrandTone(dark: 0x0B_0C10, light: 0xFE_FEFE)
+            /// The panel's three text tones, strongest first, and a glyph's quieter floor.
+            static let label = BrandTone(dark: 0xF4_F4F6, light: 0x10_1316)
+            static let soft = BrandTone(dark: 0x8B_90A0, light: 0x5C_6866)
+            static let dim = BrandTone(dark: 0x7A_7F8E, light: 0x6D_6481)
+            static let ghost = BrandTone(dark: 0x65_6E80, light: 0x8A_8F9C)
+            /// The selection ring, the chosen tab and a sheet's confirm fill.
+            static let accent = BrandTone(dark: 0x29_C0B4, light: dictationAccent.light)
+            /// The accent as a foreground on the glass.
+            static let accentInk = dictationAccent
+            /// Ink on an accent fill: deep teal when dark, white when light.
+            static let onAccent = BrandTone(dark: 0x04_332F, light: 0xFF_FFFF)
+            /// An alias chip and a credential's tile.
+            static let key = BrandTone(dark: 0xF0_BE63, light: 0x9A_6400)
+            /// Delete under the pointer.
+            static let destructive = BrandTone(dark: 0xFF_8D28, light: 0x8F_4800)
+            /// The aurora rising from the panel's top edge, drawn at this opacity in both appearances.
+            static let auroraOpacity = 0.22
+        }
     }
 }
