@@ -100,6 +100,8 @@ final class SuggestionCoordinator {
     private var isStopped = false
     /// Set while a dictation is under way, when no turn may start.
     private var isDictating = DictationInProgress.shared.isDictating
+    /// Whether the last field read reported marked text, so a Return next confirms a conversion rather than ending the line.
+    private var composingAtLastRead = false
     /// Set when a paste or a dictation put text in the field that capture has not yet been told was never typed.
     private var insertionPending = false
     private var again: SuggestionReason?
@@ -360,7 +362,12 @@ final class SuggestionCoordinator {
         session.keystrokeArrived()
         // The line just changed, so the ghost at the old caret, a pass about the old prefix and a booked wake are all stale.
         withdraw()
-        wake(key == .return ? .returnPressed : .keystroke)
+        wake(Self.endsLine(key, composing: composingAtLastRead) ? .returnPressed : .keystroke)
+    }
+
+    /// Whether a key ends the line: a Return does, unless an input method was composing, when it confirms a conversion.
+    nonisolated static func endsLine(_ key: Key, composing: Bool) -> Bool {
+        key == .return && !composing
     }
 
     /// Keeps the ghost up when the key typed its next letters, answering false for any other key, which withdraws it.
@@ -457,6 +464,7 @@ final class SuggestionCoordinator {
             front: front, own: ownBundleIdentifier, preferences: preferences, at: Date())
         let read = shouldRead ? await FocusedFieldReader.read() : nil
         guard turns.isCurrent(number) else { return }
+        composingAtLastRead = read?.markedText == .present
         Self.log.debug(
             "TURN front=\(front, privacy: .public) read=\(read != nil) lineChars=\(read?.currentLine.count ?? -1) value=\(read?.value != nil) units=\(read?.value?.utf16.count ?? -1) sel=\(read?.selection?.location ?? -1) caret=\(read?.caret != nil) role=\(read?.role ?? "-", privacy: .public) labelChars=\(read?.accessibilityDescription?.count ?? -1) identified=\(read?.identifier != nil) secure=\(read?.isSecure ?? false) placement=\(String(describing: read?.placement), privacy: .public)"
         )
