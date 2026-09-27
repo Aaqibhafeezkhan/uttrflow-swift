@@ -6,7 +6,7 @@ import Testing
 
 @testable import UttrflowAccount
 
-/// The answers of ``EntitlementGate/access`` over signed-in, signed-out and local-account states.
+/// The answers of ``EntitlementGate/access`` over signed-in and signed-out states.
 @Suite("May this person dictate?")
 struct EntitlementGateTests {
     /// A gate over a cache holding `entitlement`, or nothing.
@@ -106,56 +106,32 @@ struct ExpiredEntitlementNeverLocksTests {
                 .access(at: Fixture.noon, networkIsReachable: false).permitsDictation)
     }
 
-    // MARK: Rule 5 — a person who cannot sign in is not locked out
+    // MARK: Rule 5 — nobody is let in without a session
 
-    /// The point of ``LocalAccount``: the one page that needs a network has a way through that needs nothing.
-    @Test("allows somebody who chose this Mac over an account, network or no network")
-    func chosenThisMac() {
+    /// A Mac that once worked without an account holds nothing the gate reads, so it is refused.
+    @Test("refuses a Mac that kept the retired Mac-account record and has no session")
+    func retiredMacAccountIsRefused() throws {
+        let storage = MemoryStorage()
+        storage.set(Data(#"{"name":"Sam","since":0}"#.utf8), forKey: RetiredLocalAccount.key)
         let gate = EntitlementGate(
-            profiles: Fixture.cacheHolding(nil),
-            local: InMemoryLocalAccountStore(LocalAccount(name: "Naveen", since: Fixture.noon)))
+            profiles: UserDefaultsProfileCache(storage: storage, verifier: Fixture.verifier))
         for reachable in [true, false] {
-            let access = gate.access(at: Fixture.noon, networkIsReachable: reachable)
-            #expect(access == .allowedOnThisMac)
-            #expect(access.permitsDictation)
+            #expect(gate.access(at: Fixture.noon, networkIsReachable: reachable) == .refused)
         }
     }
 
-    /// A present, empty store answers exactly as no store does, or wiring one in would sign everybody in.
-    @Test("a local store nobody has written to still refuses")
-    func localStoreButNoLocalAccount() {
-        let gate = EntitlementGate(
-            profiles: Fixture.cacheHolding(nil), local: InMemoryLocalAccountStore())
-        #expect(gate.access(at: Fixture.noon, networkIsReachable: true) == .refused)
-    }
-
-    /// The unsigned value never overrules the signed one, or a local account could revive a lapsed plan.
-    @Test("the entitlement decides even when a local account is also present")
-    func entitlementBeatsTheLocalAccount() {
-        let local = InMemoryLocalAccountStore(LocalAccount(name: "Naveen", since: Fixture.noon))
-        #expect(
-            EntitlementGate(
-                profiles: Fixture.cacheHolding(Fixture.entitlement(expiring: 86_400)),
-                local: local
-            ).access(at: Fixture.noon, networkIsReachable: true) == .allowed)
-        #expect(
-            EntitlementGate(
-                profiles: Fixture.cacheHolding(Fixture.entitlement(expiring: -1)), local: local
-            ).access(at: Fixture.noon, networkIsReachable: true) == .allowedPendingSignIn)
-    }
-
-    /// Guards against a sixth state joining the refusing side, or an aged-out state tidied into `.refused`.
-    @Test("stops a dictation in exactly one of its five states, and that state is being signed out")
+    /// Guards against a fifth state joining the refusing side, or an aged-out state tidied into `.refused`.
+    @Test("stops a dictation in exactly one of its four states, and that state is being signed out")
     func exactlyOneAnswerRefuses() {
         let refusing = DictationAccess.allCases.filter { !$0.permitsDictation }
         #expect(
             refusing == [.refused],
             """
             Exactly one answer may stop a dictation, and it is the one where nobody has \
-            signed in and nobody chose to do without. These refuse: \(refusing).
+            signed in. These refuse: \(refusing).
             """)
         #expect(
-            DictationAccess.allCases.count == 5,
+            DictationAccess.allCases.count == 4,
             "a state was added or removed; decide here whether it costs the user their voice")
     }
 }

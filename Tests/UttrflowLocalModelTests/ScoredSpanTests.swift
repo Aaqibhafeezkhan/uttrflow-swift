@@ -130,7 +130,7 @@ private let realCandidates: [(context: String, candidate: String)] = [
 struct ScoredSpanProofTests {
     /// The suggestion model's snapshot, when this Mac has it.
     static let gemmaSnapshot = CachedSnapshot.complete(
-        identifier: LocalModel.gemma3.identifier,
+        identifier: LocalModel.gemma3.identifier, revision: LocalModel.gemma3.revision,
         in: FileManager.default.homeDirectoryForCurrentUser.appending(path: ".cache/huggingface/hub"),
         minimumWeightBytes: 0)
 

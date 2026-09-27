@@ -81,15 +81,61 @@ struct FakeCache {
     /// The weights a whole snapshot is allowed to weigh no less than.
     static let minimum: UInt64 = 256
 
-    func complete() -> URL? {
-        CachedSnapshot.complete(identifier: identifier, in: root, minimumWeightBytes: Self.minimum)
+    func complete(revision: String = String(repeating: "a1", count: 20)) -> URL? {
+        CachedSnapshot.complete(
+            identifier: identifier, revision: revision, in: root, minimumWeightBytes: Self.minimum)
     }
 
-    func model() -> LocalModel { Self.model(identifier: identifier) }
+    /// A cache laid out the way the pinned downloader leaves it: snapshot at the pinned commit and no `refs/main`.
+    struct PinnedCache {
+        let root: URL
+        let identifier = "example-org/pinned-model"
+        let revision = String(repeating: "c3", count: 20)
 
-    static func model(identifier: String, downloadBytes: Int64 = 256) -> LocalModel {
+        init() throws {
+            root = FileManager.default.temporaryDirectory.appending(path: "pinned-cache-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: snapshot, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+        }
+
+        var repository: URL { root.appending(path: "models--example-org--pinned-model") }
+        var blobs: URL { repository.appending(path: "blobs") }
+        var snapshot: URL { repository.appending(path: "snapshots/\(revision)") }
+
+        /// Writes `data` as a blob and links it into the snapshot under `name`, the way the hub does.
+        func add(_ name: String, _ data: Data) throws {
+            let blob = blobs.appending(path: UUID().uuidString)
+            try data.write(to: blob)
+            try FileManager.default.createSymbolicLink(
+                atPath: snapshot.appending(path: name).path,
+                withDestinationPath: "../../blobs/\(blob.lastPathComponent)")
+        }
+
+        func addConfiguration() throws {
+            for name in CachedSnapshot.requiredFiles { try add(name, Data("{}".utf8)) }
+        }
+
+        func complete() -> URL? {
+            CachedSnapshot.complete(
+                identifier: identifier, revision: revision, in: root, minimumWeightBytes: 256)
+        }
+
+        func model() -> LocalModel {
+            LocalModel(
+                identifier: identifier, revision: revision, family: "Tiny", version: "1",
+                parameterBillions: 0.1, quantisation: .fourBit, downloadBytes: 256,
+                isMultilingual: true)
+        }
+    }
+
+    func model() -> LocalModel { Self.model(identifier: identifier, revision: commit) }
+
+    static func model(
+        identifier: String, revision: String = String(repeating: "0", count: 40),
+        downloadBytes: Int64 = 256
+    ) -> LocalModel {
         LocalModel(
-            identifier: identifier, revision: String(repeating: "0", count: 40), family: "Tiny",
+            identifier: identifier, revision: revision, family: "Tiny",
             version: "1", parameterBillions: 0.1,
             quantisation: .fourBit, downloadBytes: downloadBytes, isMultilingual: true)
     }
@@ -187,15 +233,41 @@ struct CachedSnapshotTests {
         #expect(cache.complete() == nil)
     }
 
-    @Test("A ref that names no commit is not followed")
-    func badReferenceIsNotFollowed() throws {
+    @Test(
+        "A cache the pinned downloader leaves, snapshot at the commit and no refs/main, loads without the hub"
+    )
+    func pinnedSnapshotWithoutRefsIsLoaded() async throws {
+        let cache = try FakeCache.PinnedCache()
+        try cache.addConfiguration()
+        try cache.add("model.safetensors", FakeCache.weights(bytes: 256))
+        let hub = RefusingDownloader()
+        let directory = try await cache.model().weightsDirectory(
+            cache: cache.root, downloader: { hub }, onProgress: { _ in })
+        #expect(hub.count == 0)
+        #expect(directory.standardizedFileURL == cache.snapshot.standardizedFileURL)
+    }
+
+    @Test("A snapshot at a commit other than the model's pinned revision is not trusted")
+    func snapshotAtWrongCommitIsNotTrusted() throws {
+        let cache = try FakeCache.PinnedCache()
+        try cache.addConfiguration()
+        try cache.add("model.safetensors", FakeCache.weights(bytes: 256))
+        let wrongRevision = String(repeating: "ff", count: 20)
+        let resolved = CachedSnapshot.complete(
+            identifier: cache.identifier, revision: wrongRevision, in: cache.root,
+            minimumWeightBytes: 256)
+        #expect(resolved == nil)
+    }
+
+    @Test("A revision that is not a commit hash is not followed")
+    func revisionThatIsNotACommitHashIsNotFollowed() throws {
         let cache = try FakeCache()
         try cache.addConfiguration()
         try cache.add("model.safetensors", FakeCache.weights(bytes: 256))
-        try Data("main".utf8).write(to: cache.repository.appending(path: "refs/main"))
-        #expect(cache.complete() == nil)
-        try FileManager.default.removeItem(at: cache.repository.appending(path: "refs/main"))
-        #expect(cache.complete() == nil)
+        let resolved = CachedSnapshot.complete(
+            identifier: cache.identifier, revision: "main", in: cache.root,
+            minimumWeightBytes: FakeCache.minimum)
+        #expect(resolved == nil)
     }
 
     @Test("A header that is absurdly long, not JSON, or longer than the file is not believed")

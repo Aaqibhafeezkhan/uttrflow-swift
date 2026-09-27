@@ -46,78 +46,37 @@ struct OnboardingSignInTests {
             #expect(!wording.contains(escape), "the sign-in page hints at \(escape)")
         }
         #expect(!harness.page.buttons.contains { $0.intent == .advance })
-        #expect(!harness.page.buttons.contains { $0.intent == .continueOnThisMac })
         await harness.flow.perform(.advance)
         #expect(harness.step == .signIn, "a stray advance walked past sign-in")
     }
 
-    // MARK: The way past it
+    // MARK: Nobody past it without a session
 
-    /// No page offers it; the intent is kept so a local account can come back without new code.
-    @Test("continuing on this Mac records who is here and moves the flow on")
-    func continuingOnThisMac() async {
-        let harness = Harness(signedIn: false, systemName: "Naveen Bhatt")
+    /// An upgrade from a build that allowed working without an account has finished setup and holds no session.
+    @Test("a Mac that finished setup but holds no session opens on sign-in")
+    func finishedButSignedOutOpensOnSignIn() async {
+        let harness = Harness(
+            microphone: .granted, accessibility: .granted, hasFinished: true, signedIn: false)
         await harness.flow.start()
         #expect(harness.step == .signIn)
-
-        await harness.flow.perform(.continueOnThisMac)
-
-        #expect(harness.local.load()?.name == "Naveen Bhatt")
-        #expect(harness.step != .signIn, "the page it exists to get past is still on screen")
-        #expect(harness.profiles.load() == nil, "no session was invented to get past it")
+        await harness.flow.perform(.advance)
+        #expect(harness.step == .signIn, "an advance walked a signed-out Mac past sign-in")
     }
 
-    /// A Mac that will not say who owns it is recorded with no name rather than a made-up one.
-    @Test("works on a Mac that will not say whose it is")
-    func continuingWithNoName() async {
-        let harness = Harness(signedIn: false, systemName: nil)
-        await harness.flow.start()
-
-        await harness.flow.perform(.continueOnThisMac)
-
-        #expect(harness.local.load() != nil)
-        #expect(harness.local.load()?.name == nil)
-    }
-
-    /// Offline is the situation this exists for, so it is asserted end to end.
-    @Test("offline, the Mac account is a way out rather than a wall")
-    func continuingWhileOffline() async {
-        let harness = Harness(signedIn: false, reachable: false)
-        await harness.flow.start()
-        #expect(harness.detail == .signIn(.unreachable))
-
-        await harness.flow.perform(.continueOnThisMac)
-        #expect(harness.local.load() != nil)
-        #expect(harness.step != .signIn)
-    }
-
-    /// An instruction that could only have come from a page the user has left must not act.
-    @Test("cannot be chosen from a page that is not asking who you are")
-    func ignoredAwayFromTheSignInPage() async {
-        let harness = Harness(microphone: .notDetermined, signedIn: true)
-        await harness.flow.start()
-        #expect(harness.step != .signIn)
-
-        await harness.flow.perform(.continueOnThisMac)
-        #expect(harness.local.load() == nil)
-    }
-
-    /// A real account supersedes the Mac one, or every page drawing one would have to pick.
-    @Test("signing in for real forgets the Mac account")
-    func signingInReplacesTheMacAccount() async {
+    /// The rest of the app waits on the session, so it is told the moment one is kept.
+    @Test("tells the app as soon as a sign-in's profile is kept, and not before")
+    func signInIsAnnounced() async {
         let harness = Harness(signedIn: false)
+        var announced = 0
+        harness.flow.onSignIn = { announced += 1 }
         await harness.flow.start()
-        await harness.flow.perform(.continueOnThisMac)
-        #expect(harness.local.load() != nil)
-
-        // Back to the sign-in page, the way the Account page's Sign In button gets there.
-        await harness.flow.resume(askingToSignIn: true)
-        #expect(harness.step == .signIn, "the button that asks to sign in must land on it")
         #expect(await harness.choose(.google))
+        #expect(announced == 0, "announced before the browser came back")
+
         await harness.returnFromBrowser()
 
         #expect(harness.profiles.load() != nil)
-        #expect(harness.local.load() == nil)
+        #expect(announced == 1)
     }
 
     @Test("says on the page itself what a person is agreeing to")

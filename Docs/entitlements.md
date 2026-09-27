@@ -48,6 +48,24 @@ to try their account identifier a few times, with a signature they could type fr
 Bytes that are not a key at all verify nothing, which is the only safe thing for a
 placeholder to be. `rejectsTheDegenerateKeyThatWouldAcceptAForgery` keeps it that way.
 
+## No session, nothing but sign-in
+
+Signed in means a signed profile in the cache — never a local choice, and there is no way
+to work without an account. `SessionGate` (in `UttrflowUX`) is the one rule every way in
+asks: `AppDelegate.show` routes every `Destination` through it, so the Dock icon, Window ▸
+Uttrflow, ⌘, (Settings), Help, the Home and Account pages and every menu item land on the
+onboarding window's sign-in page while signed out. The menu bar icon stays; a click on it
+asks for sign-in, and its menu offers only Sign In and Quit. `SessionSurfaces` decides what
+runs in the background — the dictation shortcut, the claimed shortcuts (the clipboard
+panel's ⇧⌘V among them), the clipboard recorder, tab-to-complete and the floating button —
+and answers no to all of them without a session.
+
+Signing out, or a `/v1/me` answer that the session is over (a 401 after a refresh), clears
+the profile and runs `AppDelegate.followSession`, which closes the main window and every
+panel, stops listening and opens sign-in. A refresh that cannot reach the server changes
+nothing: a signed, cached session keeps working offline. A sign-in that completes in
+onboarding runs the same function the other way, before the setup pages after it.
+
 ## Expiry never locks anybody out
 
 An aged-out entitlement still permits dictation. There is nothing to ask of somebody on a

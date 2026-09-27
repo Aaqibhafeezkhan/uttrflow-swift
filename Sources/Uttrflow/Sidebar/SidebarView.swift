@@ -356,12 +356,6 @@ struct SidebarAccountCard: View {
                             endPoint: .bottomTrailing),
                         in: .circle)
             }
-        // The same initials, unfilled: a person on this Mac, but not a session.
-        case .onThisMac(let initials, _, _):
-            Text(initials)
-                .font(BrandFont.display(size: size * 0.39, weight: .semibold))
-                .frame(width: size, height: size)
-                .overlay(Circle().strokeBorder(IslandPalette.accent.opacity(0.6), lineWidth: 1.5))
         case .signedOut:
             Image(systemName: "person.crop.circle")
                 .font(.system(size: size * 0.6, weight: .regular))
@@ -372,7 +366,7 @@ struct SidebarAccountCard: View {
 
     private var name: String {
         switch account {
-        case .signedIn(_, let name, _), .onThisMac(_, let name, _): name
+        case .signedIn(_, let name, _): name
         case .signedOut(let open): open.title
         }
     }
@@ -382,7 +376,6 @@ struct SidebarAccountCard: View {
         let who =
             switch account {
             case .signedIn(_, let name, let open): "\(open.title), \(name)"
-            case .onThisMac(_, let name, let open): "\(open.title), \(name), on this Mac"
             case .signedOut(let open): open.title
             }
         return version.isKnown ? "\(who). Version \(version.full)" : who
