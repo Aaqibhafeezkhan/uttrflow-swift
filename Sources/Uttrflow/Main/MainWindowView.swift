@@ -81,7 +81,7 @@ struct MainWindowView: View {
     }
 
     /// Whether the page draws the redesign's title bar and margins.
-    private var isRedesigned: Bool { [.dictionary].contains(model.page) }
+    private var isRedesigned: Bool { [.dictionary, .snippets].contains(model.page) }
 
     /// Home sets its own margins; a redesigned page is set wider than the others.
     private var horizontalMargin: CGFloat {
