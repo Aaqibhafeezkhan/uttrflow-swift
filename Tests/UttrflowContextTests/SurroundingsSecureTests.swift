@@ -91,4 +91,36 @@ struct SurroundingsSecureTests {
         #expect(!plain.isSecure)
         #expect(plain.text == "Sign in")
     }
+
+    @Test(
+        "A message or a group that only mentions a password, a PIN or an OTP is still read, and its children walked."
+    )
+    func aMessageNamingASecretIsRead() {
+        let message = answers([
+            kAXRoleAttribute: "AXStaticText" as NSString,
+            kAXDescriptionAttribute: "what's the wifi password?" as NSString,
+        ])
+        #expect(!message.isSecure)
+        #expect(message.text == "what's the wifi password?")
+        let group = answers([
+            kAXRoleAttribute: "AXGroup" as NSString, kAXDescriptionAttribute: "send me the pin" as NSString,
+        ])
+        #expect(!group.isSecure)
+        let row = answers([
+            kAXRoleAttribute: "AXRow" as NSString, kAXDescriptionAttribute: "Your OTP is below" as NSString,
+        ])
+        #expect(!row.isSecure)
+        let field = answers([
+            kAXRoleAttribute: "AXTextField" as NSString,
+            kAXDescriptionAttribute: "Enter your PIN" as NSString,
+            kAXTitleAttribute: "1234" as NSString,
+        ])
+        #expect(field.isSecure)
+        #expect(field.text == nil)
+        let masked = answers([
+            kAXRoleAttribute: "AXStaticText" as NSString,
+            kAXSubroleAttribute: "AXSecureTextField" as NSString,
+        ])
+        #expect(masked.isSecure)
+    }
 }

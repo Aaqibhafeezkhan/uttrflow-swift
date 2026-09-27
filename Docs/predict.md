@@ -255,6 +255,13 @@ field alone for a rest that starts at 10 s and doubles on each further overrun u
 timeout, therefore costs its application one read per rest rather than one per turn, and
 draws no suggestion.
 
+**A resting field quiets its whole application.** Asking an application which element has
+focus can itself be the slow part (about 100 ms in a browser holding a 200 KB text area), so
+while the focused field rests, a turn and the surroundings walk send that application no
+message at all (`SlowFields.isQuiet`). A click, an application switch, Tab, Escape or any ⌘
+shortcut may have moved focus, so each ends the quiet; the next read asks for the focus once,
+and a field that still rests quiets the application again for the rest of its rest.
+
 ### One ghost, and only while it is true
 
 **There is one panel for the process** (`SuggestionPanelController.shared`), so a loop

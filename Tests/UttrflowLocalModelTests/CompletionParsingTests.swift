@@ -146,6 +146,26 @@ struct CompletionParsingTests {
                 == "INSERT INTO products (id, name, price, stock)")
     }
 
+    @Test("A time or date inside the line is its answer, and only a stamp hung after the line is dropped")
+    func onlyATrailingStampIsDropped() {
+        #expect(
+            CompletionText.trimmed(
+                "The meeting is at 10:30, see you there", typed: "The meeting is at", echoing: [])
+                == "The meeting is at 10:30, see you there")
+        #expect(
+            CompletionText.trimmed(
+                "Let's meet on Friday, 5 March, at the office", typed: "Let's meet on", echoing: [])
+                == "Let's meet on Friday, 5 March, at the office")
+        #expect(
+            CompletionText.trimmed("The meeting is at 10:30", typed: "The meeting is at", echoing: [])
+                == "The meeting is at 10:30")
+        #expect(
+            CompletionText.trimmed(
+                "See you there, 4 September at 6:41 PM", typed: "See you", echoing: [])
+                == "See you there")
+        #expect(CompletionText.trimmed("ok, 12:46 PM", typed: "ok", echoing: []) == nil)
+    }
+
     @Test(
         "A new word of one or two characters is nothing, while a character that finishes the typed word stays."
     )
