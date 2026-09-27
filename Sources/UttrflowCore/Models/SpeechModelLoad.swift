@@ -45,8 +45,8 @@ public enum SpeechModelLoad: Sendable, Equatable {
         }
     }
 
-    /// The sentence under the heading, with the estimate only once the load has earned it.
-    public var message: String { sentence(range: "2–3") }
+    /// The sentence under the heading, with the time left only once the load has earned an estimate.
+    public var message: String { sentence }
 
     /// The floating button's first line, short enough for its one line.
     public var line: String {
@@ -61,8 +61,7 @@ public enum SpeechModelLoad: Sendable, Equatable {
     /// The floating button's second line.
     public var detail: String {
         switch self {
-        case .loading where showsEstimate: "First load after restart: about 2–3 min"
-        case .loading: "Dictation starts once it’s ready"
+        case .loading: estimate.map { Self.opening($0.timeLeft) } ?? "Dictation starts once it’s ready"
         case .failed, .broken, .missing: "Dictation can’t start without it"
         }
     }
@@ -81,7 +80,7 @@ public enum SpeechModelLoad: Sendable, Equatable {
     public var accessibilityLabel: String {
         let heading = String(title.filter { $0 != "…" })
         if let estimate { return "\(heading), \(estimate.spokenTimeLeft). \(Self.whenReady)" }
-        return "\(heading). \(sentence(range: "2 to 3"))"
+        return "\(heading). \(sentence)"
     }
 
     /// The one way forward: a reload after a first failure, a download once a reload cannot help, nothing while loading.
@@ -95,13 +94,18 @@ public enum SpeechModelLoad: Sendable, Equatable {
 
     private static let whenReady = "Dictation starts working as soon as it’s ready."
 
-    /// The sentence with the minutes written as `range`, since a dash reads as nothing aloud.
-    private func sentence(range: String) -> String {
+    /// The time left as the start of a sentence: "About 1 min left", "Almost ready".
+    private static func opening(_ timeLeft: String) -> String {
+        timeLeft.prefix(1).uppercased() + timeLeft.dropFirst()
+    }
+
+    /// The sentence under the heading, paced by the same estimate as every other surface's time left.
+    private var sentence: String {
         switch self {
-        case .loading where showsEstimate:
-            "The first load after a restart can take about \(range) minutes. \(Self.whenReady)"
         case .loading:
-            Self.whenReady
+            estimate.map {
+                "\(Self.opening($0.timeLeft)). The first load after a restart takes a while. \(Self.whenReady)"
+            } ?? Self.whenReady
         case .failed:
             "Dictation can’t start without it. Try loading it again."
         case .broken:
