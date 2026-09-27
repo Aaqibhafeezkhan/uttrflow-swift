@@ -29,6 +29,7 @@ public enum SettingsDestinations {
         case .spreadsheet: "A spreadsheet cell"
         case .sqlEditor: "A SQL editor"
         case .codeEditor: "Code"
+        case .terminal: "A terminal"
         case .messaging: "A chat"
         case .email: "An email"
         case .plain: "Plain text"

@@ -39,6 +39,7 @@ struct PromptBuilderTests {
         arguments: [
             (Destination.document, "In a document:"), (.spreadsheet, "In a spreadsheet cell:"),
             (.sqlEditor, "In a SQL editor:"), (.codeEditor, "In a code editor:"),
+            (.terminal, "In a terminal:"),
             (.messaging, "In a chat message:"), (.email, "In an email:"), (.plain, "In plain text:"),
         ])
     func blockHeading(destination: Destination, heading: String) {
