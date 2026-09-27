@@ -8,6 +8,8 @@ struct Node: Equatable {
     var role: String? = "AXGroup"
     var text: String? = nil
     var visible = true
+    /// Whether the node declares itself a field that hides what is typed.
+    var secure = false
     /// Where the node sits on screen, or nothing for one that does not say and is trusted.
     var frame: CGRect? = nil
     var children: [Node] = []
@@ -33,6 +35,7 @@ struct FakeTree: ElementTree {
     var textReads: TextReadLog? = nil
 
     func role(of element: Node) -> String? { element.role }
+    func isSecure(_ element: Node) -> Bool { element.secure }
     func text(of element: Node) -> String? {
         textReads?.ids.append(element.id)
         return element.text
