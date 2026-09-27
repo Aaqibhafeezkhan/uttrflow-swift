@@ -336,9 +336,9 @@ struct InsightsFiguresTests {
     @Test("the daily average divides by every day of the range, to the nearest word")
     func dailyAverage() {
         let entries = HistoryFixture.aWeek(words: 1_000, days: 3)
-        #expect(InsightsPresenter.dailyAverage(of: entries, over: .week) == 429)
-        #expect(InsightsPresenter.dailyAverage(of: entries, over: .month) == 100)
-        #expect(InsightsPresenter.dailyAverage(of: [], over: .quarter) == 0)
+        #expect(InsightsPresenter.dailyAverage(of: entries.totalWords, over: .week) == 429)
+        #expect(InsightsPresenter.dailyAverage(of: entries.totalWords, over: .month) == 100)
+        #expect(InsightsPresenter.dailyAverage(of: 0, over: .quarter) == 0)
     }
 
     /// Words per minute is a dash until something is timed.

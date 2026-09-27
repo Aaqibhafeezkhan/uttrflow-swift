@@ -356,3 +356,29 @@ struct HistoryApplicationTests {
         #expect(HistoryPresenter.application(for: HistoryFixture.entry(application: " ")) == nil)
     }
 }
+
+@Suite("Counting a dictation's words")
+struct HistoryWordCountTests {
+    @Test("counts the same runs a whitespace split does, across every kind of space")
+    func matchesSplit() {
+        let texts = [
+            "", " ", "one", " one  two ", "one\r\ntwo", "tab\tand\u{00A0}nbsp", "ideographic\u{3000}space",
+            "e\u{0301}clair and café", "emoji 👩‍👩‍👧 family", "line\u{2028}separator", "trailing\n",
+        ]
+        for text in texts {
+            #expect(
+                MainFormatting.words(in: text) == text.split(whereSeparator: \.isWhitespace).count, "\(text)")
+        }
+    }
+
+    @Test("a day's summary and each row's length agree on the words")
+    func summaryAgreesWithRows() {
+        let entries = [
+            HistoryFixture.entry("one two three", minutesAgo: 1),
+            HistoryFixture.entry("four  five", minutesAgo: 2),
+        ]
+        let day = HistoryFixture.page(entries: entries).days.first
+        #expect(day?.summary == "2 dictations · 5 words")
+        #expect(day?.rows.map(\.length) == ["3 words", "2 words"])
+    }
+}

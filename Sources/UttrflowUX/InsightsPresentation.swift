@@ -331,10 +331,11 @@ public enum InsightsPresenter {
         inRange: [HistoryEntry], range: InsightsRange, calendar: Calendar, locale: Locale
     ) -> [MainStatistic] {
         let streak = longestStreak(in: inRange, calendar: calendar)
+        let total = inRange.totalWords
         return [
-            MainStatistic(value: inRange.totalWords.formatted(.number.locale(locale)), caption: "words"),
+            MainStatistic(value: total.formatted(.number.locale(locale)), caption: "words"),
             MainStatistic(
-                value: dailyAverage(of: inRange, over: range).formatted(.number.locale(locale)),
+                value: dailyAverage(of: total, over: range).formatted(.number.locale(locale)),
                 caption: "a day"),
             MainStatistic(
                 value: DictationPresenter.pace(of: inRange).map { "\($0)" } ?? "—",
@@ -344,8 +345,8 @@ public enum InsightsPresenter {
     }
 
     /// Words in the range over every day it covers, silent days included, to the nearest word.
-    static func dailyAverage(of inRange: [HistoryEntry], over range: InsightsRange) -> Int {
-        Int((Double(inRange.totalWords) / Double(range.days)).rounded())
+    static func dailyAverage(of words: Int, over range: InsightsRange) -> Int {
+        Int((Double(words) / Double(range.days)).rounded())
     }
 
     /// The most days in a row with a dictation, anywhere in the entries given.

@@ -295,8 +295,8 @@ public enum HistoryPresenter {
 
         for item in interleaved(entries, recordings) {
             let day = calendar.startOfDay(for: item.when)
-            let row = row(for: item, snapshot: snapshot, calendar: calendar, locale: locale)
             let words = item.entry.map { MainFormatting.words(in: $0.text) } ?? 0
+            let row = row(for: item, words: words, snapshot: snapshot, calendar: calendar, locale: locale)
             if let index = grouped.firstIndex(where: { $0.day == day }) {
                 grouped[index].rows.append(row)
                 grouped[index].words += words
@@ -348,11 +348,11 @@ public enum HistoryPresenter {
 
     /// One dictation or recording as a row.
     static func row(
-        for item: Item, snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
+        for item: Item, words: Int, snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
     ) -> HistoryRow {
         switch item {
         case .entry(let entry):
-            row(for: entry, relativeTo: snapshot.now, calendar: calendar, locale: locale)
+            row(for: entry, words: words, relativeTo: snapshot.now, calendar: calendar, locale: locale)
         case .recording(let recording):
             row(for: recording, snapshot: snapshot, calendar: calendar, locale: locale)
         }
@@ -368,7 +368,7 @@ public enum HistoryPresenter {
 
     /// One dictation as a row, with the buttons it offers when pointed at.
     static func row(
-        for entry: HistoryEntry, relativeTo now: Date,
+        for entry: HistoryEntry, words: Int? = nil, relativeTo now: Date,
         calendar: Calendar = .autoupdatingCurrent, locale: Locale
     ) -> HistoryRow {
         let (tag, tone) = HomeDashboard.outcome(of: entry.changes)
@@ -378,7 +378,7 @@ public enum HistoryPresenter {
             when: when(entry.when, relativeTo: now, locale: locale),
             text: entry.text,
             time: HomeDashboard.time(entry.when, calendar: calendar, locale: locale),
-            length: length(of: entry),
+            length: length(of: entry, words: words),
             // Only a change is worth a tag; "as dictated" is what every quiet row already says.
             tag: tone == .changed ? tag : nil,
             isFlagged: entry.isFlagged,
@@ -426,8 +426,9 @@ public enum HistoryPresenter {
     }
 
     /// "0:09 · 23 words"; the words stand alone when nothing timed the dictation.
-    static func length(of entry: HistoryEntry) -> String {
-        let words = MainFormatting.count(MainFormatting.words(in: entry.text), "word", "words")
+    static func length(of entry: HistoryEntry, words counted: Int? = nil) -> String {
+        let words = MainFormatting.count(
+            counted ?? MainFormatting.words(in: entry.text), "word", "words")
         guard let spoken = entry.spokenFor else { return words }
         return "\(clock(spoken)) · \(words)"
     }
