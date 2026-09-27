@@ -110,6 +110,37 @@ struct HomeSubtitleTests {
     }
 }
 
+@Suite("Home before the first dictation")
+struct HomeEmptyTests {
+    @Test("a new install gets one centred invitation that starts a dictation")
+    func invitation() {
+        let empty = HistoryFixture.home().emptyState
+        #expect(empty?.title == "Nothing dictated yet")
+        #expect(empty?.message == "Hold the shortcut anywhere and talk.")
+        #expect(empty?.action?.title == "Try it now")
+        #expect(empty?.action?.intent == .dictate)
+        #expect(empty?.scene == .dictation)
+    }
+
+    @Test("the verb follows how the shortcut is set up")
+    func pressToToggle() {
+        let page = HistoryFixture.home(settings: Settings(hotkeyActivation: .pressToToggle))
+        #expect(page.emptyState?.message == "Press the shortcut anywhere and talk.")
+    }
+
+    @Test("gone once there is a dictation, a missing permission, or a model not ready")
+    func notWhenSomethingElseApplies() {
+        #expect(HistoryFixture.home(entries: [HistoryFixture.entry("said something")]).emptyState == nil)
+        #expect(
+            HistoryFixture.home(permissions: [.microphone: .denied, .accessibility: .granted])
+                .emptyState == nil)
+        let downloading = HomePresenter.page(
+            for: HomeSnapshot(shortcut: "⌥Space", now: HistoryFixture.now, speechDownload: 0.4),
+            calendar: HistoryFixture.calendar, locale: HistoryFixture.locale)
+        #expect(downloading.emptyState == nil)
+    }
+}
+
 @Suite("Home when Uttrflow cannot listen")
 struct HomeBlockedTests {
     /// Figures above a notice that dictation cannot happen read as a product arguing with itself.

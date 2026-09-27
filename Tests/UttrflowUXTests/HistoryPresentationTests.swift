@@ -302,8 +302,9 @@ struct HistoryEmptyTests {
     @Test("never dictated is not the same as everything expired")
     func distinguishesTheEmptinesses() {
         let never = HistoryFixture.page(entries: [])
-        #expect(never.emptyState?.title == "Nothing yet")
-        #expect(never.emptyState?.message.contains("never leaves this Mac") == true)
+        #expect(never.emptyState?.title == "Nothing dictated yet")
+        #expect(never.emptyState?.message == "Every dictation lands here, kept on this Mac.")
+        #expect(never.emptyState?.action?.intent == .dictate)
 
         let expired = HistoryFixture.page(
             entries: [HistoryFixture.entry(daysAgo: 30)], settings: Settings(transcriptRetentionDays: 7))
