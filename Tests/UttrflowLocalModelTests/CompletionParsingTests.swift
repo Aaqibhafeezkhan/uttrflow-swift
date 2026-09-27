@@ -347,6 +347,36 @@ struct FirstSentenceTests {
     }
 }
 
+@Suite("A suggestion is held to the length this person writes")
+struct ContinuationLengthTests {
+    @Test("In a chat of short replies a long continuation is refused, and a short one kept")
+    func aLongReplyIsRefused() {
+        let long =
+            "sounds good, I will have the whole thing ready well before the call and send it across to everyone"
+        #expect(CompletionText.finished([long], typed: "sou", in: deckChat).isEmpty)
+        #expect(CompletionText.finished(["sounds good"], typed: "sou", in: deckChat) == ["sounds good"])
+    }
+
+    @Test("With no history the register's own limit holds, not one limit for every field")
+    func theRegisterSetsTheLimitWithoutHistory() {
+        let notes = GenerationSituation(application: "Notes", isMultiline: true)
+        let line = "The plan is " + String(repeating: "longer and ", count: 12) + "done"
+        #expect(line.count - 4 > 80 && line.count - 4 <= 160)
+        #expect(CompletionText.finished([line], typed: "The ", in: notes) == [line])
+        let chat = GenerationSituation(
+            application: "Chat", field: "Message",
+            surroundings: "Sam: hi\nMe: hey\nSam: are you around\nSam: call?", isMultiline: true)
+        #expect(CompletionText.finished([line], typed: "The ", in: chat).isEmpty)
+    }
+
+    @Test("Two lines that finish the same are offered once")
+    func finishedLinesAreOfferedOnce() {
+        #expect(
+            CompletionText.finished(["sure, on it. Later", "sure, on it. Soon"], typed: "sure", in: deckChat)
+                == ["sure, on it."])
+    }
+}
+
 /// A mail the person is replying to, signed by its sender.
 private let incoming =
     "From: Sam\nHi, could you share the invoice for August when you get a chance? Thanks, Sam"

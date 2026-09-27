@@ -114,6 +114,26 @@ public struct Register: Sendable, Equatable {
     /// Whether a line here is prose, a reply or a document's sentence, which ends at its first sentence end.
     public var endsAtSentence: Bool { !writesAddresses && symbolShare <= Self.symbolicShare }
 
+    /// How many of this person's typical lines a continuation may run to before it is no line of theirs.
+    public static let lengthMultiple = 3
+
+    /// The fewest characters a continuation is allowed, so a terse person's line can still be finished by a word or two.
+    public static let shortestAllowance = 16
+
+    /// The most characters a continuation may add with no typical length to go by: a reply, a search or an address runs short, a command or a document's line longer.
+    public var registerContinuationLimit: Int {
+        if writesAddresses || isSearchField { return 80 }
+        if symbolShare > Self.symbolicShare { return 120 }
+        return isConversational ? 80 : 160
+    }
+
+    /// The most characters a continuation may add here: a multiple of this person's typical line, never past the register's own limit.
+    public var longestContinuation: Int {
+        guard let typicalLength else { return registerContinuationLimit }
+        return min(
+            registerContinuationLimit, max(typicalLength * Self.lengthMultiple, Self.shortestAllowance))
+    }
+
     /// The facts as short phrases the model reads, so it matches the register instead of guessing it.
     public var hints: [String] {
         var hints = [isMultiline ? "a multi-line field" : "a single-line field"]

@@ -147,6 +147,23 @@ struct RegisterTests {
         #expect(register(length: 10, conversational: true).maxTokens == 24)
     }
 
+    @Test(
+        "A continuation is held to a multiple of this person's typical line, or to its register's own limit.")
+    func theContinuationFollowsTheLength() {
+        #expect(register(length: 9).longestContinuation == 27)
+        #expect(register(length: 20, conversational: true).longestContinuation == 60)
+        #expect(register(length: 3).longestContinuation == Register.shortestAllowance)
+        #expect(register(length: 200).longestContinuation == 160)
+        #expect(register(length: 200, conversational: true).longestContinuation == 80)
+        #expect(register(length: nil, conversational: true).longestContinuation == 80)
+        #expect(register(length: nil, symbols: 0.4).longestContinuation == 120)
+        #expect(register(length: nil).longestContinuation == 160)
+        let addresses = Register(
+            isMultiline: false, typicalLength: nil, isConversational: false, symbolShare: 0.3,
+            usesSentenceCase: nil, writesAddresses: true)
+        #expect(addresses.longestContinuation == 80)
+    }
+
     @Test("Prose ends at its first sentence; a command, a query and an address do not.")
     func onlyProseEndsAtASentence() {
         #expect(register(length: nil, conversational: true).endsAtSentence)
