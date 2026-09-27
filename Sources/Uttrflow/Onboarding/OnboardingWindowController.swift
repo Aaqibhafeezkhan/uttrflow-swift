@@ -90,7 +90,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         NSApplication.shared.activate()
     }
 
-    private func makeWindow() -> NSWindow {
+    /// Builds the window without showing it, internal so a test can read how it is configured.
+    func makeWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(
                 x: 0, y: 0,
@@ -102,6 +103,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
+        // Owned by `window`, so closing must not release it a second time under a running close animation.
+        window.isReleasedWhenClosed = false
         // Dark in every appearance, so the window's own buttons sit on the aurora the way it is drawn.
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(rgb: BrandPalette.Onboarding.windowGround)
