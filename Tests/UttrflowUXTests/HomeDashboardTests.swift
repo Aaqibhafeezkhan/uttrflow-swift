@@ -72,6 +72,7 @@ struct HomeHeroTests {
         #expect(hero.start.intent == .dictate)
         #expect(hero.start.title == "Start speaking")
         #expect(hero.canStart)
+        #expect(hero.modelStatus == nil, "a ready model leaves the waveform in place")
     }
 
     @Test("a missing permission stops the hero offering to start")

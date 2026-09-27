@@ -172,6 +172,9 @@ EXCLUDED_FILES = {
         "it decides itself, which #630 moves into a pure type in UttrflowUX"
     ),
     "Uttrflow/Dock/DockView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Dock/DockSetupView.swift": (
+        "SwiftUI, drawn from DockModelSetup, which SpeechModelDockTests covers"
+    ),
     "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item",
     "UttrflowSpeech/TokenizerDownload.swift": "fetches the tokenizer over the real network at install time",
     "UttrflowSpeech/WhisperKitBackend.swift": "loads a downloaded model and decodes real speech",

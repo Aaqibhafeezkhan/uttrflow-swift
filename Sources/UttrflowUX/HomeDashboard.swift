@@ -77,16 +77,20 @@ public struct HomeHero: Sendable, Equatable {
     public let start: MainAction
     /// Whether a dictation can start now; false while a permission or the speech model is missing.
     public let canStart: Bool
+    /// The speech model's state in place of the waveform; absent once it can transcribe.
+    public let modelStatus: HomeModelStatus?
 
-    /// Builds the hero from its parts.
+    /// Builds the hero from its parts; the waveform shows unless a model status is given.
     public init(
-        lead: String, emphasis: String, features: [HomeFeature], start: MainAction, canStart: Bool
+        lead: String, emphasis: String, features: [HomeFeature], start: MainAction, canStart: Bool,
+        modelStatus: HomeModelStatus? = nil
     ) {
         self.lead = lead
         self.emphasis = emphasis
         self.features = features
         self.start = start
         self.canStart = canStart
+        self.modelStatus = modelStatus
     }
 }
 
@@ -195,11 +199,11 @@ public enum HomeDashboard {
         title: "Search your words…", symbolName: "magnifyingglass", intent: .search)
 
     /// The hero; `canStart` is false while anything stops a dictation starting.
-    static func hero(canStart: Bool) -> HomeHero {
+    static func hero(canStart: Bool, modelStatus: HomeModelStatus? = nil) -> HomeHero {
         HomeHero(
             lead: "Your voice,", emphasis: "finished for you.", features: HomeFeature.allCases,
             start: MainAction(title: "Start speaking", symbolName: "mic", intent: .dictate),
-            canStart: canStart)
+            canStart: canStart, modelStatus: modelStatus)
     }
 
     /// "Sunday 15 June", in the reader's region and the calendar's time zone.

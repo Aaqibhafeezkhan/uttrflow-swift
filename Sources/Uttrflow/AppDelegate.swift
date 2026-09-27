@@ -426,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if case .idle = state, let pasteReport { return pasteReport }
         return DictationPresenter.dock(
             for: state, advice: recordingAdvice, speechModel: speechModelLoad,
-            stopGesture: recordingStopGesture)
+            download: speechReadiness.download, stopGesture: recordingStopGesture)
     }
 
     /// Asks each clean-up engine whether it could run, so Diagnostics has an answer to show; the task ends once it has.
@@ -1878,7 +1878,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     // The name macOS knows, read here so a test decides who is greeted.
                     systemName: NSFullUserName(),
                     shortcut: shortcut, settings: settings, now: now,
-                    speechModel: speechModelLoad)),
+                    speechModel: speechModelLoad, speechDownload: speechReadiness.download)),
             sidebar: SidebarPresenter.sidebar(
                 for: SidebarSnapshot(
                     // The page the window shows; Settings is a window and lights nothing.

@@ -1,4 +1,4 @@
-// Tests what the floating button shows while the speech model loads, and after it failed to.
+// Tests what the floating button shows while the speech model downloads or loads, and after it failed to.
 import Testing
 
 @testable import UttrflowCore
@@ -6,41 +6,83 @@ import Testing
 
 @Suite("The floating button during the speech model's load")
 struct SpeechModelDockTests {
-    @Test("resting during a load shows the load, with no minutes in its first seconds")
+    @Test("resting during a load says it is getting ready, with no minutes in its first seconds")
     func restingShowsTheLoad() {
         let dock = DictationPresenter.dock(for: .idle, speechModel: .loading(elapsed: .seconds(2)))
 
-        #expect(dock.symbolName == "hourglass")
-        #expect(dock.primaryLine == "Loading speech model…")
-        #expect(dock.secondaryLine == "Dictation starts once it’s ready")
+        #expect(dock.setup == .loading)
+        #expect(dock.primaryLine == "Getting ready…")
+        #expect(dock.secondaryLine == nil)
         #expect(dock.action == nil)
-        #expect(!dock.showsProgress, "nothing reports how far a load has got, so nothing pretends to")
+        #expect(!dock.showsProgress, "the spinner ring is the setup form's, not the working orb")
         #expect(!dock.accessibilityLabel.contains("minutes"))
     }
 
-    @Test("gives the minutes once the load has run long enough to need them")
+    @Test("keeps the minutes for the pointer and VoiceOver once the load has run long enough to need them")
     func longLoadGivesTheEstimate() {
         let dock = DictationPresenter.dock(for: .idle, speechModel: .loading(elapsed: .seconds(30)))
 
+        #expect(dock.primaryLine == "Getting ready…")
         #expect(dock.secondaryLine == "First load after restart: about 2–3 min")
         #expect(dock.accessibilityLabel.contains("2 to 3 minutes"))
     }
 
-    @Test("resting after a failed load says so and offers a fresh download")
-    func failedLoadOffersDownload() {
+    @Test("resting after a failed load says so and offers Retry, which loads it again")
+    func failedLoadOffersRetry() {
         let dock = DictationPresenter.dock(for: .idle, speechModel: .failed)
 
+        #expect(dock.setup == .failed)
         #expect(dock.primaryLine == "Speech model didn’t load")
-        #expect(dock.action == .downloadSpeechModel)
-        #expect(dock.symbolName == "exclamationmark.triangle")
+        #expect(dock.action == .retry)
+        #expect(dock.setup?.actionTitle == "Retry")
+        #expect(dock.accessibilityLabel.hasSuffix("Try loading it again."))
     }
 
-    /// Setup fetches a missing model, and the button stays the resting grip while it does.
-    @Test("resting with no model on disk draws the resting button, not a warning")
-    func missingModelLeavesTheButtonAlone() {
+    @Test("resting with no model on disk says one is needed and offers Download")
+    func missingModelOffersDownload() {
+        let dock = DictationPresenter.dock(for: .idle, speechModel: .missing)
+
+        #expect(dock.setup == .missing)
+        #expect(dock.primaryLine == "Speech model needed")
+        #expect(dock.action == .downloadSpeechModel)
+        #expect(dock.setup?.actionTitle == "Download")
+        #expect(dock.accessibilityLabel.hasPrefix("The speech model isn’t downloaded."))
+    }
+
+    @Test("resting during a download says it is setting up, with the percentage beside a ring")
+    func downloadShowsItsShare() {
+        let dock = DictationPresenter.dock(for: .idle, speechModel: nil, download: 0.42)
+
+        #expect(dock.setup == .downloading(0.42))
+        #expect(dock.primaryLine == "Setting up")
+        #expect(dock.secondaryLine == "42%")
+        #expect(dock.action == nil)
+        #expect(dock.setup?.actionTitle == nil)
+        #expect(dock.accessibilityLabel == "Setting up. Downloading the speech model, 42 percent.")
+    }
+
+    @Test("a download's ring never runs past either end")
+    func downloadIsClamped() {
+        #expect(DictationPresenter.dock(for: .idle, speechModel: nil, download: 1.3).setup == .downloading(1))
+        #expect(DictationPresenter.dock(for: .idle, speechModel: nil, download: -1).secondaryLine == "0%")
+        #expect(DockModelSetup.percentage(of: 0.426) == 43)
+    }
+
+    @Test("a dictation under way is never covered by a download")
+    func downloadLeavesBusyStatesAlone() {
+        let recording = DictationPresenter.dock(for: .recording, speechModel: nil, download: 0.5)
+
+        #expect(recording == DictationPresenter.dock(for: .recording))
+        #expect(recording.setup == nil)
+    }
+
+    @Test("a failure while no model is on disk keeps exactly its own form")
+    func missingLeavesFailuresAlone() {
+        let failure = DictationFailure(SpeechEngineError.modelLoadFailed(description: "fixture"))
+
         #expect(
-            DictationPresenter.dock(for: .idle, speechModel: .missing)
-                == DictationPresenter.dock(for: .idle))
+            DictationPresenter.dock(for: .failed(failure), speechModel: .missing)
+                == DictationPresenter.dock(for: .failed(failure)))
     }
 
     @Test("a refused attempt is drawn wide, with its words and why")

@@ -1,4 +1,4 @@
-// Tests for what home's views decide: the waveform's bars, the tile columns and the mood pictures.
+// Tests for what home's views decide: the waveform's bars, the loading bar, the tile columns and the mood pictures.
 
 import AppKit
 import Testing
@@ -19,6 +19,18 @@ struct HomeHeroViewTests {
         #expect(bars[middle].opacity > bars[0].opacity)
         #expect(bars[0].height < peak / 2)
         #expect(bars[HomeWaveform.count - 1].height < peak / 2)
+    }
+
+    @Test(
+        "the loading bar's segment slides in from off the left and leaves past the right, then starts again")
+    func loadingBarSlides() {
+        let segment = HomeModelBar.width * HomeModelBar.segment
+        let middle = HomeModelBar.offset(at: HomeModelBar.period / 2)
+        #expect(HomeModelBar.offset(at: 0) == -segment)
+        #expect(HomeModelBar.offset(at: HomeModelBar.period * 0.999) > HomeModelBar.width)
+        #expect(middle > 0 && middle < HomeModelBar.width)
+        let again = HomeModelBar.offset(at: HomeModelBar.period * 1.25)
+        #expect(abs(again - HomeModelBar.offset(at: HomeModelBar.period * 0.25)) < 0.001)
     }
 
     @Test("four tiles share a row only where each keeps its narrowest width")

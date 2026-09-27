@@ -100,7 +100,7 @@ struct DockView: View {
             .accessibilityActions {
                 // The recovery the failure draws, spoken; its own button is inside the ignored children.
                 if let action = model.presentation.action {
-                    Button(Self.title(for: action)) { onRecovery(action) }
+                    Button(Self.title(for: action, in: model.presentation)) { onRecovery(action) }
                 }
             }
     }
@@ -116,7 +116,7 @@ struct DockView: View {
     static func spokenHint(for presentation: DockPresentation) -> String {
         let toggle = presentation.isRecording ? "Stops listening." : "Starts a dictation."
         guard let action = presentation.action else { return toggle }
-        return "\(toggle) \(title(for: action)) is available as an action."
+        return "\(toggle) \(title(for: action, in: presentation)) is available as an action."
     }
 
     // MARK: - Forms
@@ -127,6 +127,9 @@ struct DockView: View {
             listening()
         } else if presentation.showsProgress {
             working()
+        } else if let setup = presentation.setup {
+            DockSetupView(setup: setup, presentation: presentation, onRecovery: onRecovery)
+                .padding(DockMetrics.gripHitPadding)
         } else if let line = presentation.primaryLine {
             notice(presentation, primaryLine: line)
         } else if model.isHovering || !model.shrinksToGrip {
@@ -371,6 +374,11 @@ struct DockView: View {
                 model.isPressed = false
                 onPressEnded()
             }
+    }
+
+    /// The button's words as drawn: the setup form's own, else the recovery's verb.
+    static func title(for action: RecoveryAction, in presentation: DockPresentation) -> String {
+        presentation.setup?.actionTitle ?? title(for: action)
     }
 
     /// One verb per recovery, matching the sentence the failure already offered.
@@ -649,7 +657,7 @@ extension DockMetrics {
 
 extension View {
     /// The tinted glass every form but the resting one is drawn on: violet-black when dark, frosted white when light.
-    fileprivate func glass(cornerRadius: CGFloat) -> some View {
+    func glass(cornerRadius: CGFloat) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius)
         return background(Color.dockGlass, in: shape)
             .background(.ultraThinMaterial, in: shape)

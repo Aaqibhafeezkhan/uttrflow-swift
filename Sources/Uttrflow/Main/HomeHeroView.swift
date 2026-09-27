@@ -22,10 +22,22 @@ struct HomeHeroCard: View {
             features
                 .padding(.top, 12)
                 .padding(.bottom, 20)
-            HomeWaveform()
-                .frame(height: 56)
-            startButton
-                .padding(.top, 22)
+            if let status = hero.modelStatus {
+                HomeModelStatusView(status: status)
+                    .padding(.top, 4)
+                if let action = status.action {
+                    HomeModelActionButton(action: action, tone: status.actionTone, onIntent: onIntent)
+                        .padding(.top, 18)
+                } else {
+                    startButton
+                        .padding(.top, 22)
+                }
+            } else {
+                HomeWaveform()
+                    .frame(height: 56)
+                startButton
+                    .padding(.top, 22)
+            }
         }
         .frame(maxWidth: Self.contentWidth, alignment: .leading)
         .padding(.horizontal, 40)
@@ -102,20 +114,27 @@ struct HomeHeroCard: View {
             .background {
                 Capsule()
                     .fill(PagePalette.dictation.opacity(0.08))
-                    .shadow(color: PagePalette.dictation.opacity(isDark ? 0.55 : 0.3), radius: 12)
+                    .shadow(
+                        color: PagePalette.dictation.opacity(hero.canStart ? (isDark ? 0.55 : 0.3) : 0),
+                        radius: 12)
             }
-            // A soft lilac glow just inside the rim, then the teal rim itself.
+            // A soft lilac glow just inside the rim, then the teal rim itself; a plain grey rim while dimmed.
             .overlay {
-                Capsule()
-                    .inset(by: 1.5)
-                    .strokeBorder(PagePalette.suggestion.opacity(isDark ? 0.3 : 0.18), lineWidth: 4)
+                if hero.canStart {
+                    Capsule()
+                        .inset(by: 1.5)
+                        .strokeBorder(PagePalette.suggestion.opacity(isDark ? 0.3 : 0.18), lineWidth: 4)
+                }
             }
-            .overlay { Capsule().strokeBorder(PagePalette.dictation, lineWidth: 1.5) }
+            .overlay {
+                Capsule().strokeBorder(
+                    hero.canStart ? PagePalette.dictation : PagePalette.text.opacity(0.3), lineWidth: 1.5)
+            }
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
         .disabled(!hero.canStart)
-        .opacity(hero.canStart ? 1 : 0.45)
+        .opacity(hero.canStart ? 1 : 0.4)
         .help(hero.canStart ? "Start or stop a dictation" : "Uttrflow cannot listen yet")
     }
 
@@ -133,6 +152,128 @@ struct HomeHeroCard: View {
                     center: UnitPoint(x: 0.1, y: 1), startRadiusFraction: 0, endRadiusFraction: 0.55)
             }
             .accessibilityHidden(true)
+    }
+}
+
+/// The speech model's state where the waveform would be: a dot and a title, the line under it, and the bar while setup runs.
+struct HomeModelStatusView: View {
+    let status: HomeModelStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(HomeModelPalette.accent(for: status.tone))
+                    .frame(width: 8, height: 8)
+                Text(status.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(PagePalette.text)
+            }
+            Text(status.subtitle)
+                .font(.system(size: 13))
+                .foregroundStyle(PagePalette.quiet)
+                .padding(.top, 4)
+                .padding(.leading, 18)
+            if let progress = status.progress {
+                HomeModelBar(progress: progress)
+                    .padding(.top, 10)
+                    .padding(.leading, 18)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(status.accessibilityLabel)
+    }
+}
+
+/// The thin bar under the status: filled to the share downloaded, or a segment sliding across while the model loads.
+struct HomeModelBar: View {
+    let progress: HomeModelProgress
+
+    /// The bar's width and height, and the sliding segment's share of the width.
+    static let width: CGFloat = 300
+    static let height: CGFloat = 4
+    static let segment: CGFloat = 0.3
+    /// How long the segment takes to cross.
+    static let period: TimeInterval = 1.6
+
+    /// When the bar appeared, so the segment starts from the left.
+    @State private var began = Date.now
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Capsule().fill(PagePalette.ringTrack)
+            switch progress {
+            case .fraction(let fraction):
+                Capsule()
+                    .fill(Self.fill)
+                    .frame(width: Self.width * fraction)
+            case .sliding:
+                let motion = MotionBudgetObserver.shared.budget
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motion.workingBarsMove)) {
+                    timeline in
+                    Capsule()
+                        .fill(Self.fill)
+                        .frame(width: Self.width * Self.segment)
+                        .offset(
+                            x: motion.workingBarsMove
+                                ? Self.offset(at: timeline.date.timeIntervalSince(began)) : 0)
+                }
+            }
+        }
+        .frame(width: Self.width, height: Self.height)
+        .clipShape(.capsule)
+        .accessibilityHidden(true)
+    }
+
+    /// The dictation gradient, from the aurora's blue to teal.
+    private static var fill: LinearGradient {
+        LinearGradient(
+            colors: [PagePalette.glowBlue, PagePalette.dictation], startPoint: .leading, endPoint: .trailing)
+    }
+
+    /// Where the sliding segment's left edge is after `elapsed`: from one length off the left to past the right, eased.
+    static func offset(at elapsed: TimeInterval) -> CGFloat {
+        let phase = elapsed.truncatingRemainder(dividingBy: period) / period
+        let eased = (1 - cos(phase * .pi)) / 2
+        let segment = width * self.segment
+        return segment * (-1 + 4.4 * CGFloat(eased))
+    }
+}
+
+/// The filled button in place of the start pill: amber to try loading again, teal to download.
+struct HomeModelActionButton: View {
+    let action: MainAction
+    let tone: HomeModelTone
+    var onIntent: (MainIntent) -> Void
+
+    var body: some View {
+        Button {
+            onIntent(action.intent)
+        } label: {
+            Text(action.title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(HomeModelPalette.onAccent)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 11)
+                .background(HomeModelPalette.accent(for: tone), in: .capsule)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The status block's colours.
+enum HomeModelPalette {
+    /// Words on a button filled with an accent.
+    static let onAccent = Color(nsColor: .orbit(BrandPalette.Redesign.onAccentInk))
+
+    /// Teal while setup runs, amber once it needs a hand.
+    static func accent(for tone: HomeModelTone) -> Color {
+        switch tone {
+        case .dictation: PagePalette.dictation
+        case .warning: PagePalette.clipboard
+        }
     }
 }
 
