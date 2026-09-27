@@ -149,6 +149,8 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/AvatarView.swift": "SwiftUI; which of the two things it draws is decided in AccountPagePresentation",
     "Uttrflow/Main/MainWindowView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/MainPieces.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/MainEmptyStateScene.swift": "SwiftUI; which scene a page draws is decided and tested in MainEmptyScene",
+    "Uttrflow/Main/MainDialogs.swift": "SwiftUI, drawn from a tested MainNotice and MainConfirmation",
     "Uttrflow/Main/HistoryPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/DiagnosticsPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Dock/DockPanelController.swift": "owns an on-screen floating window",

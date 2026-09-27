@@ -19,6 +19,8 @@ struct MainContent: Sendable, Equatable {
     var style: StylePagePresentation
     var diagnostics: DiagnosticsPresentation
     var account: AccountPagePresentation
+    /// The dictation shortcut's keys, which an empty page draws as keycaps.
+    var shortcutKeycaps: [String] = []
 }
 
 /// What the window is showing, in one place the view can watch.

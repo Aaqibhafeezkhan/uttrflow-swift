@@ -46,6 +46,20 @@ enum PagePalette {
     static let suggestion = Color(nsColor: .orbit(R.suggestionAccent))
     static let clipboard = Color(nsColor: .orbit(R.clipboardAccent))
     static let info = Color(nsColor: .orbit(R.infoAccent))
+    static let primaryFill = Color(nsColor: .orbit(R.primaryFill))
+    static let primaryInk = Color(nsColor: .orbit(R.primaryInk))
+    static let destructiveInk = Color(nsColor: .orbit(R.destructiveInk))
+    static let quietFill = Color(nsColor: .orbit(R.quietFill))
+    static let sheetGlass = Color(nsColor: .orbit(R.sheetGlass))
+    static let toastGlass = Color(nsColor: .orbit(R.toastGlass))
+    static let scrim = Color(nsColor: .orbit(R.scrim))
+    static let floatShadow = Color(nsColor: .orbit(R.floatShadow))
+    /// A failure's red, the same token the pages use for critical text.
+    static let critical = Color(nsColor: .orbit(BrandPalette.Semantic.criticalInk))
+    /// A caution's amber.
+    static let caution = Color(nsColor: .orbit(BrandPalette.Semantic.warningInk))
+    /// Success's green.
+    static let success = Color(nsColor: .orbit(BrandPalette.Semantic.successInk))
     /// The aurora's two glow colours in the hero: its violet and its blue.
     static let glowViolet = Color(rgb: R.auroraStops[0])
     static let glowBlue = Color(rgb: R.auroraStops[2])

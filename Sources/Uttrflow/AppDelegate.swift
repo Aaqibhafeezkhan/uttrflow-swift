@@ -1959,7 +1959,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     transformerAvailability: transformerAvailability,
                     speechModel: speechModelPresence, permissions: knownPermissions,
                     measurements: measurements, cleaning: lastCleaning)),
-            account: accountPage(at: now))
+            account: accountPage(at: now),
+            shortcutKeycaps: SettingsShortcut.keycaps(for: settings.hotkey))
     }
 
     /// Reads the account the pages draw from, the entitlement and the local choice together.
@@ -2150,6 +2151,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .signIn:
             // Onboarding owns the whole sign-in conversation, so this asks for it explicitly.
             presentOnboarding(skippingWelcome: true, askingToSignIn: true)
+        case .dismissNotice:
+            actionNotice = nil
+            redrawMainWindow()
         case .signOut:
             // Cleared first and the server told after, so signing out never waits on a network.
             account.profiles.clear()

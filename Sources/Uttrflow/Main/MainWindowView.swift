@@ -12,6 +12,9 @@ struct MainWindowView: View {
     var onDraft: () -> Void = {}
     var onToggleSidebar: () -> Void = {}
 
+    /// The question a button is asking before it acts, drawn over the whole window.
+    @State private var confirmations = MainConfirmationCenter()
+
     var body: some View {
         HStack(spacing: 0) {
             SidebarView(
@@ -39,6 +42,7 @@ struct MainWindowView: View {
         .foregroundStyle(Color.mainText, Color.mainMuted, Color.mainDim)
         // One tint at the root, so a control added later cannot arrive in the stock blue.
         .tint(Color.dockAccent)
+        .confirmationSheet(confirmations, onIntent: onIntent)
         // SwiftUI still reserves a safe area for the transparent title bar; the island keeps its own inset.
         .ignoresSafeArea(.container, edges: .top)
     }
@@ -55,11 +59,6 @@ struct MainWindowView: View {
                     searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
                     onSearch: onSearch, onScope: onScope)
             }
-            if let notice = model.content.notice {
-                MainNoticeBar(notice: notice)
-                    .padding(.horizontal, MainMetrics.contentPadding)
-                    .padding(.top, 12)
-            }
             page
                 // Home sets its own margins; every other page is a document and wants these.
                 .padding(.horizontal, model.page == .home ? 0 : MainMetrics.contentPadding)
@@ -67,6 +66,17 @@ struct MainWindowView: View {
                 .padding(.bottom, model.page == .home ? 0 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        // The notice floats in the corner over the page rather than pushing the page down.
+        .overlay(alignment: .topTrailing) {
+            if let notice = model.content.notice {
+                MainNoticeBar(notice: notice, onIntent: onIntent)
+                    .padding(.top, 20)
+                    .padding(.trailing, 20)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: model.content.notice)
+        .environment(\.dictationKeycaps, model.content.shortcutKeycaps)
         // The field holds what is being typed, so it is only put back in step when the page changes.
         .onChange(of: model.page) { _, _ in
             model.searchQuery = model.chrome.search?.query ?? ""
