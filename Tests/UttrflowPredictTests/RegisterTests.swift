@@ -48,8 +48,8 @@ struct RegisterTests {
         #expect(register.typicalLength == 9)
         #expect(register.usesSentenceCase == false)
         #expect(register.symbolShare < Register.symbolicShare)
-        // A terse person still gets a whole reply's budget, and their terseness is not quoted as the length to write.
-        #expect(register.maxTokens == Register.replyTokens)
+        // A terse person's budget follows their own lines, and their terseness is not quoted as the length to write.
+        #expect(register.maxTokens == Register.tokenRange.lowerBound)
         #expect(!register.hints.contains { $0.hasPrefix("lines here run about") })
         #expect(register.hints.contains("a conversation is on screen and the line answers its last message"))
         #expect(register.hints.contains("this person writes casually, without sentence punctuation"))
@@ -144,6 +144,18 @@ struct RegisterTests {
         #expect(register(length: 400).maxTokens == 96)
         #expect(register(length: nil, symbols: 0.4).maxTokens == 32)
         #expect(register(length: nil, conversational: true).maxTokens == 48)
+        #expect(register(length: 10, conversational: true).maxTokens == 24)
+    }
+
+    @Test("Prose ends at its first sentence; a command, a query and an address do not.")
+    func onlyProseEndsAtASentence() {
+        #expect(register(length: nil, conversational: true).endsAtSentence)
+        #expect(register(length: 40).endsAtSentence)
+        #expect(!register(length: 40, symbols: 0.3).endsAtSentence)
+        let addresses = Register(
+            isMultiline: false, typicalLength: nil, isConversational: false, symbolShare: 0,
+            usesSentenceCase: nil, writesAddresses: true)
+        #expect(!addresses.endsAtSentence)
     }
 
     @Test("Two turns are not a conversation, and long turns are a document however many there are.")

@@ -301,6 +301,52 @@ struct CopiedRunTests {
     }
 }
 
+@Suite("A suggestion ends where its line ends")
+struct FirstSentenceTests {
+    @Test("A reply that runs into a second sentence is ended at the first")
+    func aReplyEndsAtItsFirstSentence() {
+        let raw = "ok sounds good, see you at 5. Let me know if anything changes and I will update the doc."
+        #expect(
+            CompletionText.finished([raw], typed: "ok sounds g", in: deckChat) == [
+                "ok sounds good, see you at 5."
+            ])
+        #expect(CompletionText.firstSentence(of: "sure! on my way", typed: "su") == "sure!")
+        #expect(CompletionText.firstSentence(of: "is it done?? I need it", typed: "is") == "is it done??")
+        #expect(
+            CompletionText.firstSentence(of: "she said \"go.\" Then left", typed: "she") == "she said \"go.\""
+        )
+    }
+
+    @Test("A stop inside a number, an address, an abbreviation or an ellipsis is no sentence end")
+    func stopsThatEndNothing() {
+        for line in [
+            "meet at 5.30 near the gate", "see example.com for details", "bring snacks, e.g. chips and dip",
+            "ask Dr. Rao about it", "hmm... maybe later", "call J. Smith first",
+        ] {
+            #expect(CompletionText.firstSentence(of: line, typed: String(line.prefix(4))) == line, "\(line)")
+        }
+    }
+
+    @Test("A sentence end the person typed is theirs, and the line goes on to the next")
+    func aTypedStopIsNotCut() {
+        #expect(
+            CompletionText.firstSentence(of: "Done. Sending it now. Thanks", typed: "Done. S")
+                == "Done. Sending it now.")
+    }
+
+    @Test("A command keeps every clause, since a full stop there is no sentence end")
+    func aCommandIsNotCut() {
+        let shell = GenerationSituation(
+            application: "Terminal", preceding: "$ git status",
+            recentLines: [
+                "git commit -m 'fix: ship it'", "ls -la ~/src/*.swift", "docker compose -f ./a.yml up -d",
+            ])
+        #expect(
+            CompletionText.finished(["git commit -m 'fix. ship it. now'"], typed: "git commit", in: shell)
+                == ["git commit -m 'fix. ship it. now'"])
+    }
+}
+
 /// A mail the person is replying to, signed by its sender.
 private let incoming =
     "From: Sam\nHi, could you share the invoice for August when you get a chance? Thanks, Sam"

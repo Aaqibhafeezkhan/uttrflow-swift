@@ -96,22 +96,19 @@ public struct Register: Sendable, Equatable {
         return line[line.index(after: dot)].isLetter
     }
 
-    /// A reply is always given room for a whole message, however terse this person has been, since a reply cut to a word is no reply.
+    /// A reply with no typical length to follow is given room for a whole message.
     public static let replyTokens = 48
 
     /// Below this many characters a person's typical line says they write tersely, not how long a reply should be, so it is not quoted to the model.
     public static let terseLength = 24
 
-    /// How many tokens a pass may spend: enough for a line the length of this person's lines, never less than a short one, and never less than a whole reply.
+    /// How many tokens a pass may spend: enough for a line the length of this person's lines, never less than a short one.
     public var maxTokens: Int {
         // Half the typical character count is about twice the tokens the line needs, which leaves room for alternatives.
-        let budget: Int
         if let typicalLength {
-            budget = min(max(typicalLength / 2, Self.tokenRange.lowerBound), Self.tokenRange.upperBound)
-        } else {
-            budget = symbolShare > Self.symbolicShare ? 32 : (isConversational ? Self.replyTokens : 64)
+            return min(max(typicalLength / 2, Self.tokenRange.lowerBound), Self.tokenRange.upperBound)
         }
-        return isConversational ? max(budget, Self.replyTokens) : budget
+        return symbolShare > Self.symbolicShare ? 32 : (isConversational ? Self.replyTokens : 64)
     }
 
     /// Whether a line here is prose, a reply or a document's sentence, which ends at its first sentence end.

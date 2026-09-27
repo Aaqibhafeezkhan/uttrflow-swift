@@ -78,18 +78,66 @@ enum CompletionText {
         return found
     }
 
-    /// The lines a pass keeps once each is unsigned; prose that copies the screen is dropped.
+    /// Marks that end a sentence; an ellipsis trails off inside one, so it is read past.
+    static let sentenceEnds: Set<Character> = [".", "?", "!"]
+
+    /// Marks that may close a sentence after its end mark, a quote or a bracket.
+    private static let sentenceClosers: Set<Character> = ["\"", "'", ")", "”", "’", "]"]
+
+    /// Short words a full stop follows without ending the sentence.
+    private static let abbreviations: Set<String> = [
+        "mr", "mrs", "ms", "dr", "st", "vs", "jr", "sr", "prof", "approx", "dept", "fig", "eg", "ie", "etc",
+    ]
+
+    /// The line ended at the first sentence end its continuation reaches, or the whole line when it reaches none.
+    static func firstSentence(of line: String, typed: String) -> String {
+        let characters = Array(line)
+        var index = typed.count
+        while index < characters.count {
+            guard sentenceEnds.contains(characters[index]) else {
+                index += 1
+                continue
+            }
+            var end = index
+            while end + 1 < characters.count, sentenceEnds.contains(characters[end + 1]) { end += 1 }
+            let isEllipsis = end > index && characters[index...end].allSatisfy { $0 == "." }
+            while end + 1 < characters.count, sentenceClosers.contains(characters[end + 1]) { end += 1 }
+            // A mark with no space after it is inside a number, a name or an address, not at a sentence's end.
+            if end + 1 < characters.count, characters[end + 1].isWhitespace, !isEllipsis,
+                !isAbbreviation(before: index, in: characters)
+            {
+                return String(characters[...end])
+            }
+            index = end + 1
+        }
+        return line
+    }
+
+    /// Whether the full stop at this offset closes an abbreviation or an initial rather than a sentence.
+    private static func isAbbreviation(before stop: Int, in characters: [Character]) -> Bool {
+        guard characters[stop] == "." else { return false }
+        var start = stop
+        while start > 0, !characters[start - 1].isWhitespace { start -= 1 }
+        let word = String(characters[start..<stop]).lowercased()
+        // "e.g" and "U.S" carry a stop inside, and one letter before a stop is an initial.
+        if word.contains(".") { return true }
+        if word.count == 1, word.first?.isLetter == true { return true }
+        return abbreviations.contains(word)
+    }
+
+    /// The lines a pass keeps once each is unsigned and ended at its first sentence where it is prose; prose that copies the screen is dropped.
     static func finished(_ lines: [String], typed: String, in situation: GenerationSituation) -> [String] {
         let register = Register.infer(from: situation, typed: typed)
         let context = contextNeverCopied(in: situation)
         var seen: Set<String> = []
         return lines.compactMap { line in
             guard
-                let kept = SignOff.unsigned(
+                var kept = SignOff.unsigned(
                     line, typed: typed, screen: context, ownLines: situation.recentLines)
             else { return nil }
             // A command or a query reuses the paths and names on screen, so only prose is held to its own words.
             if register.endsAtSentence {
+                kept = firstSentence(of: kept, typed: typed)
                 guard !copiesContext(kept, typed: typed, context: context, ownLines: situation.recentLines)
                 else { return nil }
             }
