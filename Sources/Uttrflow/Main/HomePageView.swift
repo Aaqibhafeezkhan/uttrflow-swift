@@ -3,14 +3,18 @@
 import UttrflowUX
 import SwiftUI
 
-/// The page the window opens on: top bar, hero, four stat tiles, then the last few dictations.
+/// The page the window opens on: top bar, hero, four stat tiles, then the last few dictations; before any, one centred invitation.
 struct HomePageView: View {
     let presentation: HomePresentation
     var onIntent: (MainIntent) -> Void = { _ in }
 
     var body: some View {
-        ScrollView {
+        if presentation.emptyState != nil {
             HomePageContent(presentation: presentation, onIntent: onIntent)
+        } else {
+            ScrollView {
+                HomePageContent(presentation: presentation, onIntent: onIntent)
+            }
         }
     }
 }
@@ -26,19 +30,25 @@ struct HomePageContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             topBar
-            HomeHeroCard(hero: presentation.hero, mood: presentation.mood, onIntent: onIntent)
-            if let step = presentation.nextStep {
-                MainCard { MainEmptyStateView(state: step, onIntent: onIntent) }
+            if let empty = presentation.emptyState {
+                MainEmptyStateView(state: empty, onIntent: onIntent)
+            } else {
+                HomeHeroCard(hero: presentation.hero, mood: presentation.mood, onIntent: onIntent)
+                if let step = presentation.nextStep {
+                    MainCard { MainEmptyStateView(state: step, onIntent: onIntent) }
+                }
+                if !presentation.tiles.isEmpty {
+                    tiles
+                }
+                HomeActivityCard(presentation: presentation, onIntent: onIntent)
             }
-            if !presentation.tiles.isEmpty {
-                tiles
-            }
-            HomeActivityCard(presentation: presentation, onIntent: onIntent)
         }
         .padding(.horizontal, 28)
         .padding(.top, 34)
         .padding(.bottom, 22)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(
+            maxWidth: .infinity, maxHeight: presentation.emptyState == nil ? nil : .infinity,
+            alignment: .topLeading)
     }
 
     /// The date, and the greeting for the time of day.

@@ -45,6 +45,8 @@ public struct HomePresentation: Sendable, Equatable {
     public let search: MainAction
     /// Whether there is anything to search, the same test History uses to show its field.
     public let canSearch: Bool
+    /// The whole page below the greeting before the first dictation, when nothing stops one starting.
+    public let emptyState: MainEmptyState?
 
     /// Builds a page from its parts.
     public init(
@@ -66,7 +68,8 @@ public struct HomePresentation: Sendable, Equatable {
         activity: [HomeActivityRow],
         viewAll: MainAction?,
         search: MainAction,
-        canSearch: Bool
+        canSearch: Bool,
+        emptyState: MainEmptyState? = nil
     ) {
         self.greeting = greeting
         self.subtitle = subtitle
@@ -87,6 +90,7 @@ public struct HomePresentation: Sendable, Equatable {
         self.viewAll = viewAll
         self.search = search
         self.canSearch = canSearch
+        self.emptyState = emptyState
     }
 }
 
@@ -354,7 +358,9 @@ public enum HomePresenter {
                 } : [],
             viewAll: kept.isEmpty ? nil : MainAction(title: "View all", intent: .show(.history)),
             search: HomeDashboard.search,
-            canSearch: !kept.isEmpty)
+            canSearch: !kept.isEmpty,
+            emptyState: kept.isEmpty && blocked == nil && modelStatus == nil
+                ? HomeDashboard.emptyState(activation: snapshot.settings.hotkeyActivation) : nil)
     }
 
     // MARK: - Showing the clipboard rather than mentioning it

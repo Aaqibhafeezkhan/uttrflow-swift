@@ -1,5 +1,6 @@
 // The home page's hero, stat tiles and recent-activity rail, and the rules that fill them.
 public import Foundation
+internal import UttrflowCore
 internal import UttrflowHistory
 
 /// The part of the day, which picks the greeting and the picture beside the hero.
@@ -212,6 +213,15 @@ public enum HomeDashboard {
     static let search = MainAction(
         title: "Search your words…", symbolName: "magnifyingglass", intent: .search)
 
+    /// Home before the first dictation: the shortcut, how to use it, and a dictation to start now.
+    static func emptyState(activation: HotkeyActivation) -> MainEmptyState {
+        MainEmptyState(
+            symbolName: "mic", title: "Nothing dictated yet",
+            message: activation == .holdToTalk
+                ? "Hold the shortcut anywhere and talk." : "Press the shortcut anywhere and talk.",
+            action: .tryIt)
+    }
+
     /// The hero; `canStart` is false while anything stops a dictation starting.
     static func hero(canStart: Bool, modelStatus: HomeModelStatus? = nil) -> HomeHero {
         HomeHero(
@@ -331,4 +341,9 @@ public enum HomeDashboard {
         guard count > 0 else { return ("As dictated", .asDictated) }
         return (MainFormatting.count(count, "change", "changes"), .changed)
     }
+}
+
+extension MainAction {
+    /// Starts a dictation from an empty page, the same toggle as the hero's Start speaking.
+    static let tryIt = MainAction(title: "Try it now", symbolName: "plus", intent: .dictate)
 }
