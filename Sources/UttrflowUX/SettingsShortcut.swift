@@ -114,6 +114,9 @@ public struct SettingsShortcutRecorder: Sendable, Equatable {
         self.binding = binding.isDeliverable ? binding : .optionSpace
     }
 
+    /// What the row says under its name while it listens.
+    public static let listeningHint = "Press the new keys · Esc to cancel"
+
     /// What the field reads while it waits.
     public var prompt: String {
         isRecording ? "Press the new shortcut" : SettingsShortcut.compact(binding)

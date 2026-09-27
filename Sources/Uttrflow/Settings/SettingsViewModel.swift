@@ -1,4 +1,4 @@
-// The Settings window's observable state over `SettingsSession`.
+// The Settings page's observable state over `SettingsSession`.
 
 import UttrflowCore
 import UttrflowHistory
@@ -8,14 +8,11 @@ import SwiftUI
 
 import struct Foundation.Date
 
-/// The Settings window's observable state; every rule lives in `SettingsSession`.
+/// The Settings page's observable state; every rule lives in `SettingsSession`.
 @MainActor
 @Observable
 final class SettingsViewModel {
     var session: SettingsSession
-
-    /// Who is signed in, for the foot of the rail; set from outside, because the app already holds it.
-    var identity: AccountIdentity?
 
     private let store: any SettingsStore
     private let personalisation: any SettingsPersonalisationStore
@@ -61,19 +58,27 @@ final class SettingsViewModel {
         }
     }
 
-    /// Moves to `tab`, first ending any shortcut recording, since the field that owns it goes with the old tab.
+    /// Moves to `tab` and out of any search, first ending a recording, since the field that owns it goes too.
     func select(_ tab: SettingsTab) {
-        guard tab != session.tab else { return }
+        guard tab != session.tab || !session.query.isEmpty else { return }
         cancelRecordingShortcut()
+        session.query = ""
         session.tab = tab
     }
 
-    /// A local recorder owns only the Settings window; leaving that surface ends the attempt.
+    /// Filters every tab's rows by what is typed, ending a recording whose row the search may hide.
+    func search(_ query: String) {
+        guard query != session.query else { return }
+        cancelRecordingShortcut()
+        session.query = query
+    }
+
+    /// A local recorder owns only the Settings page; leaving that surface ends the attempt.
     func shortcutRecordingSurfaceDidLoseFocus() {
         cancelRecordingShortcut()
     }
 
-    /// Applies an authoritative change made outside the Settings window without replacing its UI state.
+    /// Applies an authoritative change made outside the Settings page without replacing its UI state.
     func synchronize(settings: UttrflowSettings.Settings) {
         session.synchronize(settings: settings)
     }

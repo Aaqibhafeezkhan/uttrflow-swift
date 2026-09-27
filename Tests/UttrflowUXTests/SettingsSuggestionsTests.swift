@@ -126,7 +126,7 @@ struct SettingsSuggestionsPaneTests {
         var settings = switchedOn()
         let ready = try #require(row("pauseSuggestions", in: pane(settings)))
         #expect(
-            ready.control == .action(title: "Pause for 30 Minutes", change: .pauseSuggestions(isOn: true)))
+            ready.control == .action(title: "Pause 30 min", change: .pauseSuggestions(isOn: true)))
 
         settings.suggestions.setPaused(true, at: noon)
         let running = try #require(
@@ -142,20 +142,20 @@ struct SettingsSuggestionsPaneTests {
         let after = try #require(
             row("pauseSuggestions", in: pane(settings, at: noon.addingTimeInterval(3_600))))
         #expect(
-            after.control == .action(title: "Pause for 30 Minutes", change: .pauseSuggestions(isOn: true)))
+            after.control == .action(title: "Pause 30 min", change: .pauseSuggestions(isOn: true)))
     }
 
     @Test("never counts a running pause down to nothing")
     func aRunningPauseIsNeverZeroMinutes() {
         #expect(SettingsPresenter.pauseSentence(1).contains("1 minute."))
-        #expect(SettingsPresenter.pauseSentence(nil).contains("half an hour"))
+        #expect(SettingsPresenter.pauseSentence(nil).contains("30 minutes"))
     }
 
     @Test("says why an application is off only when the user did not choose it")
     func explainsOnlyWhatTheUserDidNotChoose() {
         #expect(SettingsPresenter.applicationSentence(.on) == nil)
         #expect(SettingsPresenter.applicationSentence(.turnedOff)?.isEmpty == false)
-        #expect(SettingsPresenter.applicationSentence(.offByDefault)?.contains("whole file") == true)
+        #expect(SettingsPresenter.applicationSentence(.offByDefault)?.contains("its own suggestions") == true)
     }
 }
 
@@ -163,7 +163,7 @@ struct SettingsSuggestionsPaneTests {
 
 @Suite("Everything switched off is findable")
 struct SettingsSuggestionApplicationListTests {
-    @Test("lists all four shipped editors, each with a switch beside it")
+    @Test("lists both shipped editors, each with the button that takes it off the list")
     func theShippedEditorsAreListed() throws {
         let shown = pane(switchedOn())
         for editor in SuggestionApplications.offByDefault {
@@ -171,8 +171,8 @@ struct SettingsSuggestionApplicationListTests {
             #expect(listed.label == editor.name)
             #expect(
                 listed.control
-                    == .applicationSwitch(
-                        isOn: false,
+                    == .action(
+                        title: "Remove",
                         change: .suggestionsHere(application: editor.bundleIdentifier, isOn: true)))
         }
     }
@@ -185,7 +185,7 @@ struct SettingsSuggestionApplicationListTests {
         let listed = try #require(row("suggestionsIn.\(notes)", in: pane(settings)))
         #expect(
             listed.control
-                == .applicationSwitch(isOn: false, change: .suggestionsHere(application: notes, isOn: true)))
+                == .action(title: "Remove", change: .suggestionsHere(application: notes, isOn: true)))
     }
 
     @Test("lists an application that was switched off, so switching off cannot hide one")
@@ -511,11 +511,14 @@ struct MenuBarFeatureTests {
 struct SettingsAddApplicationTests {
     private let bank = "com.example.bank"
 
-    @Test("The Applications group ends in an Add Application… row that asks the app to pick one")
+    @Test("The list of apps left alone ends in a row that asks the app to pick one")
     func theGroupOffersToAddOne() throws {
         let add = try #require(row("addSuggestionApplication", in: pane(switchedOn())))
         #expect(
-            add.control == .action(title: "Add Application…", change: .chooseApplicationToTurnOffSuggestions))
+            add.control
+                == .action(title: "Add an app to leave alone", change: .chooseApplicationToTurnOffSuggestions)
+        )
+        #expect(add.style == .add)
         #expect(add.isEnabled)
         let group = try #require(pane(switchedOn()).groups.first { $0.id == "suggestionApplications" })
         #expect(group.rows.last?.id == "addSuggestionApplication")
@@ -544,8 +547,7 @@ struct SettingsAddApplicationTests {
         let listed = try #require(row("suggestionsIn.\(bank)", in: pane(settings)))
         #expect(
             listed.control
-                == .applicationSwitch(
-                    isOn: false, change: .suggestionsHere(application: bank, isOn: true)))
+                == .action(title: "Remove", change: .suggestionsHere(application: bank, isOn: true)))
     }
 
     @Test(

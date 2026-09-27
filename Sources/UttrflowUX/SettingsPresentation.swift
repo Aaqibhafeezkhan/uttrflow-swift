@@ -1,4 +1,4 @@
-// The shape of the Settings window: panes, cards, rows, controls, and the changes they ask for.
+// The shape of the Settings page: panes, cards, rows, controls, and the changes they ask for.
 public import UttrflowCore
 public import UttrflowPredict
 public import UttrflowSettings
@@ -23,6 +23,107 @@ public struct SettingsPane: Sendable, Equatable {
     public let groups: [SettingsGroup]
     /// The tinted note at the foot of the pane, when there is one.
     public let callout: SettingsCallout?
+    /// The worked tidying example, drawn under the group whose id it names.
+    public let example: SettingsTidyExample?
+    /// What an empty search says, set only on a search that matched nothing.
+    public let emptySearch: String?
+
+    /// Builds a pane; no example and no empty search unless given them.
+    public init(
+        tab: SettingsTab,
+        title: String,
+        banner: SettingsBanner?,
+        groups: [SettingsGroup],
+        callout: SettingsCallout?,
+        example: SettingsTidyExample? = nil,
+        emptySearch: String? = nil
+    ) {
+        self.tab = tab
+        self.title = title
+        self.banner = banner
+        self.groups = groups
+        self.callout = callout
+        self.example = example
+        self.emptySearch = emptySearch
+    }
+}
+
+/// The same sentence as spoken and as written at the level in force, so the choice is shown.
+public struct SettingsTidyExample: Sendable, Equatable {
+    /// The group the example is drawn under.
+    public let groupID: String
+    /// The sentence as spoken.
+    public let spoken: String
+    /// The label over the written sentence, naming the level.
+    public let writtenLabel: String
+    /// The sentence as written at that level.
+    public let written: String
+
+    /// Builds the example.
+    public init(groupID: String, spoken: String, writtenLabel: String, written: String) {
+        self.groupID = groupID
+        self.spoken = spoken
+        self.writtenLabel = writtenLabel
+        self.written = written
+    }
+}
+
+/// The accent a row's icon tile and a note are washed in; a closed set, since the palette is the design's.
+public enum SettingsTint: Sendable, Equatable, CaseIterable {
+    /// Teal, dictation's colour.
+    case dictation
+    /// Lilac, the colour of AI suggestions.
+    case suggestion
+    /// Amber.
+    case amber
+    /// Blue, for information.
+    case info
+    /// Mint.
+    case mint
+    /// Grey.
+    case neutral
+    /// Red, for what cannot be undone.
+    case danger
+}
+
+/// What sits at the left of a row: a tinted symbol, or an application's own icon.
+public enum SettingsIcon: Sendable, Equatable {
+    /// An SF Symbol on a tile washed in its tint.
+    case symbol(String, SettingsTint)
+    /// The icon of the application the row is about.
+    case application(bundleIdentifier: String, name: String)
+}
+
+/// How a row sits in its card.
+public enum SettingsRowStyle: Sendable, Equatable {
+    /// A full-width line.
+    case standard
+    /// A smaller card inside the card, belonging to the row above it.
+    case inset
+    /// A lone button that adds to the list above it.
+    case add
+}
+
+/// A sentence with keycaps inside it, such as "Double-tap ⌃ ⌥ to keep listening".
+public struct SettingsKeyedSentence: Sendable, Equatable {
+    /// The words before the keys.
+    public let before: String
+    /// The keys, as keycaps.
+    public let keys: [String]
+    /// The words after the keys.
+    public let after: String
+
+    /// The sentence as plain text, for VoiceOver and search.
+    public var text: String {
+        [before, keys.joined(separator: " "), after].filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// Builds the sentence.
+    public init(before: String, keys: [String], after: String) {
+        self.before = before
+        self.keys = keys
+        self.after = after
+    }
 }
 
 /// A card, and the small heading above it when it needs one.
@@ -41,27 +142,52 @@ public struct SettingsRow: Sendable, Equatable, Identifiable {
     public let control: SettingsControl
     /// Why this row cannot be operated, said in words the user can act on.
     public let unavailability: String?
+    /// The tile at the left, when the row has one.
+    public let icon: SettingsIcon?
+    /// A short word beside the label, such as "NEW".
+    public let badge: String?
+    /// A second line with keycaps in it, drawn in place of ``explanation``.
+    public let keyedExplanation: SettingsKeyedSentence?
+    /// How the row sits in its card.
+    public let style: SettingsRowStyle
 
     public var isEnabled: Bool { unavailability == nil }
 
     /// What VoiceOver reads, including why the row is off, which grey alone does not say.
     public var accessibilityLabel: String {
-        [label, explanation, unavailability].compactMap(\.self).joined(separator: ". ")
+        [label, explanation ?? keyedExplanation?.text, unavailability]
+            .compactMap(\.self).filter { !$0.isEmpty }.joined(separator: ". ")
     }
 
-    /// Builds a row; operable unless given a reason it is not.
+    /// Builds a row; operable, plain and without an icon unless told otherwise.
     public init(
         id: String,
         label: String,
         explanation: String? = nil,
         control: SettingsControl,
-        unavailability: String? = nil
+        unavailability: String? = nil,
+        icon: SettingsIcon? = nil,
+        badge: String? = nil,
+        keyedExplanation: SettingsKeyedSentence? = nil,
+        style: SettingsRowStyle = .standard
     ) {
         self.id = id
         self.label = label
         self.explanation = explanation
         self.control = control
         self.unavailability = unavailability
+        self.icon = icon
+        self.badge = badge
+        self.keyedExplanation = keyedExplanation
+        self.style = style
+    }
+
+    /// The same row with a tile at the left.
+    public func with(icon: SettingsIcon) -> SettingsRow {
+        SettingsRow(
+            id: id, label: label, explanation: explanation, control: control,
+            unavailability: unavailability, icon: icon, badge: badge,
+            keyedExplanation: keyedExplanation, style: style)
     }
 }
 
@@ -76,6 +202,15 @@ public struct SettingsBanner: Sendable, Equatable {
 public struct SettingsCallout: Sendable, Equatable {
     public let symbolName: String
     public let message: String
+    /// The accent the note is washed in.
+    public let tint: SettingsTint
+
+    /// Builds a note, washed in blue unless told otherwise.
+    public init(symbolName: String, message: String, tint: SettingsTint = .info) {
+        self.symbolName = symbolName
+        self.message = message
+        self.tint = tint
+    }
 }
 
 // MARK: - Controls
@@ -90,9 +225,6 @@ public enum SettingsControl: Sendable, Equatable {
 
     /// Mutually exclusive choices behind a pop-up, for lists too long to lay out flat.
     case menu(options: [SettingsOption], selectedID: String)
-
-    /// The four screen corners the floating button can park in.
-    case anchorPicker(selected: DockAnchor)
 
     /// The shortcut in force, as the keycaps it is drawn on, and which shortcut it is.
     case shortcut(action: ShortcutAction, keys: [String])
@@ -111,6 +243,27 @@ public enum SettingsControl: Sendable, Equatable {
 
     /// A value with nothing to press — a version number, a count, a date.
     case text(String)
+
+    /// A fact that is fine, drawn with a green dot: "On-device".
+    case status(String)
+
+    /// The languages being listened for as removable chips, and the ones that can be added.
+    case languages(chips: [SettingsChip], add: [SettingsOption])
+}
+
+/// One removable chip: what it says, and the change removing it asks for, absent when it cannot go.
+public struct SettingsChip: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let title: String
+    /// What pressing × asks for, or `nil` when the chip is the last one and has to stay.
+    public let removal: SettingsChange?
+
+    /// Builds a chip.
+    public init(id: String, title: String, removal: SettingsChange?) {
+        self.id = id
+        self.title = title
+        self.removal = removal
+    }
 }
 
 /// A destructive button: what it says, what it removes, and what it asks first.

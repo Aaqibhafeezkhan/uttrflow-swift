@@ -2,6 +2,7 @@
 
 import AppKit
 import SwiftUI
+import UttrflowUX
 
 /// The sidebar island's colours, fixed because the island stays dark in both appearances.
 enum IslandPalette {
@@ -63,4 +64,35 @@ enum PagePalette {
     /// The aurora's two glow colours in the hero: its violet and its blue.
     static let glowViolet = Color(rgb: R.auroraStops[0])
     static let glowBlue = Color(rgb: R.auroraStops[2])
+}
+
+/// The Settings page's colours, each following the appearance.
+enum SettingsPalette {
+    private typealias R = BrandPalette.Redesign
+
+    /// The page's ink at an opacity: the film every card, field and control is drawn in.
+    static func ink(_ opacity: Double) -> Color { PagePalette.text.opacity(opacity) }
+
+    /// A row tile's or a note's accent.
+    static func tint(_ tint: SettingsTint) -> Color {
+        switch tint {
+        case .dictation: PagePalette.dictation
+        case .suggestion: PagePalette.suggestion
+        case .amber: PagePalette.clipboard
+        case .info: PagePalette.info
+        case .mint: mint
+        case .neutral: neutral
+        case .danger: danger
+        }
+    }
+
+    static let mint = Color(nsColor: .orbit(R.mintAccent))
+    static let neutral = Color(nsColor: .orbit(R.neutralAccent))
+    static let danger = Color(nsColor: .orbit(BrandPalette.Semantic.criticalInk))
+    static let dangerInk = Color(nsColor: .orbit(R.destructiveInk))
+    static let good = Color(nsColor: .orbit(BrandPalette.Semantic.successInk))
+    static let dictationInk = Color(nsColor: .orbit(R.badgeInk))
+    static let dictationDeep = Color(nsColor: .orbit(R.dictationDeep))
+    static let inverseFill = Color(nsColor: .orbit(R.primaryFill))
+    static let inverseInk = Color(nsColor: .orbit(R.primaryInk))
 }

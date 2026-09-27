@@ -2,7 +2,7 @@ public import struct Foundation.Date
 public import UttrflowCore
 public import UttrflowSettings
 
-/// The Settings window while it is open, as a value that decides everything and saves nothing.
+/// The Settings page while it is open, as a value that decides everything and saves nothing.
 public struct SettingsSession: Sendable, Equatable {
     /// What the user has now. Only ever a state ``SettingsEditor`` allowed.
     public private(set) var settings: Settings
@@ -15,6 +15,9 @@ public struct SettingsSession: Sendable, Equatable {
 
     /// Which tab is showing.
     public var tab: SettingsTab
+
+    /// What is typed in the search field; while it holds anything, the page lists matching rows.
+    public var query = ""
 
     /// The shortcut field's own state, which is not a setting until it is committed.
     public private(set) var recorder: SettingsShortcutRecorder
@@ -56,7 +59,7 @@ public struct SettingsSession: Sendable, Equatable {
     public func presentation(at moment: Date) -> SettingsWindowPresentation {
         SettingsPresenter.window(
             showing: tab, settings: settings, capabilities: capabilities,
-            personalisation: personalisation, at: moment)
+            personalisation: personalisation, at: moment, query: query)
     }
 
     /// Carries out a change and returns the settings to save, or records the refusal's reason.

@@ -79,7 +79,8 @@ public enum SettingsDestinations {
                 explanation:
                     "Dictate somewhere once and it appears here, so you can say what kind of "
                     + "place it is.",
-                control: .text("Nothing yet"))
+                control: .text("Nothing yet"),
+                icon: .symbol("macbook", .neutral))
         }
 
         let chosen = overrides.destination(forBundleIdentifier: lastApp.bundleIdentifier)
@@ -92,7 +93,8 @@ public enum SettingsDestinations {
             explanation: "The last app you dictated into. Uttrflow writes to suit the place.",
             control: .menu(
                 options: [automatic] + offered.map { option(for: $0, in: lastApp) },
-                selectedID: chosen?.rawValue ?? automaticID))
+                selectedID: chosen?.rawValue ?? automaticID),
+            icon: .application(bundleIdentifier: lastApp.bundleIdentifier, name: lastApp.title))
     }
 
     static func option(
@@ -112,6 +114,7 @@ public enum SettingsDestinations {
             explanation: "Treated as \(title(of: override.destination).lowercased()).",
             control: .action(
                 title: "Use the Default",
-                change: .forgetAppDestination(bundleIdentifier: override.bundleIdentifier)))
+                change: .forgetAppDestination(bundleIdentifier: override.bundleIdentifier)),
+            icon: .application(bundleIdentifier: override.bundleIdentifier, name: override.title))
     }
 }

@@ -220,25 +220,25 @@ struct WindowLifetimeTests {
         #expect(model == nil)
     }
 
-    @Test("the Settings window's controller and model are released after every section is drawn five times")
-    func settingsWindowReleasesAfterEverySection() throws {
-        weak var controller: SettingsWindowController?
+    @Test("the Settings page's controller and model are released after every tab is drawn five times")
+    func settingsPageReleasesAfterEveryTab() throws {
+        weak var controller: SettingsPageController?
         weak var model: SettingsViewModel?
         do {
-            let window = SettingsWindowController(
+            let page = SettingsPageController(
                 store: UserDefaultsSettingsStore(store: MemoryDefaults()),
                 personalisation: NoPersonalisation(), capabilities: .everything)
-            let kept = try #require(stored("model", of: window, as: SettingsViewModel.self))
-            controller = window
+            let kept = page.model
+            controller = page
             model = kept
             for _ in 0..<5 {
                 for tab in SettingsTab.allCases {
                     kept.session.tab = tab
-                    window.setSuggestionModel(.ready)
+                    page.setSuggestionModel(.ready)
                     drawOffscreen(
-                        SettingsRootView(model: kept),
-                        size: CGSize(width: SettingsMetrics.windowWidth, height: SettingsMetrics.windowHeight)
-                    )
+                        SettingsPageView(
+                            model: kept, diagnostics: DiagnosticsPresenter.page(for: DiagnosticsSnapshot())),
+                        size: MainMetrics.windowSize)
                 }
             }
         }

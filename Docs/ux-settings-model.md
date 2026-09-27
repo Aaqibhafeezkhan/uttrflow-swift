@@ -1,6 +1,6 @@
 # The settings screen's model
 
-Why the choices on the Settings and Style screens are shaped the way they are. The code is
+Why the choices on the Settings page are shaped the way they are. The code is
 `Sources/UttrflowUX/SettingsChoices.swift`, `SettingsPresenter.swift`, `SettingsEditor.swift`
 and `SettingsReset.swift`.
 
@@ -18,10 +18,11 @@ always runs. Offering an "off" would promise a state the pipeline has no way to 
 
 ## One copy for the tidying row
 
-`SettingsTidyingLevel.rowLabel` and `.rowExplanation` are held on the type because two screens
-draw the row. When each screen held its own wording they disagreed about what Light does — one
-said punctuation only, when Light does capitalisation and spacing too. A user comparing the two
-screens would reasonably conclude the app has two settings.
+`SettingsTidyingLevel.rowLabel` and `.rowExplanation` are held on the type so that any screen
+drawing the row uses one wording. When two screens held their own they disagreed about what Light
+does — one said punctuation only, when Light does capitalisation and spacing too — and a user
+comparing them would reasonably conclude the app has two settings. The row is on the Languages tab
+now, above the example that shows the level in force.
 
 ## The preference order is normalised, not trusted
 

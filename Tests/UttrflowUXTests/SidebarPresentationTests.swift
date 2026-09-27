@@ -42,7 +42,7 @@ struct SidebarOrderTests {
         }
         #expect(
             Set(MainTab.allCases).subtracting(reached)
-                == [.dictation, .corrections, .style, .diagnostics, .account])
+                == [.dictation, .corrections, .account])
     }
 
     @Test("the rows fall into three groups, with a heading over the user's words")
@@ -79,12 +79,12 @@ struct SidebarOrderTests {
         #expect(items.filter(\.isSelected).map(\.title) == ["Insights"])
     }
 
-    /// Settings is a window, not a page, so lighting its row would say the reader is somewhere they are not.
-    @Test("the Settings row never lights, whichever tab that window is on")
-    func settingsNeverLights() {
+    /// Settings is a page of the main window, so its row lights whichever tab it is on.
+    @Test("the Settings row lights alone, whichever tab the page is on")
+    func settingsLights() {
         for tab in SettingsTab.allCases {
             let items = HistoryFixture.sidebar(selection: .settings(tab)).items
-            #expect(items.filter(\.isSelected).isEmpty)
+            #expect(items.filter(\.isSelected).map(\.title) == ["Settings"])
         }
     }
 

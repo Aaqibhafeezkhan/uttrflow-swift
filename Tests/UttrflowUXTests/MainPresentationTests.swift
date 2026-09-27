@@ -102,7 +102,7 @@ struct MainPageTests {
             MainTab.allCases == [
                 .home,
                 .dictation, .history, .dictionary, .corrections, .insights, .snippets,
-                .style, .diagnostics, .account,
+                .account,
             ])
     }
 

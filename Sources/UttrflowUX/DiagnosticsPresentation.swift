@@ -1,4 +1,4 @@
-// The Diagnostics page: its rows, the latency figures, reliability, and the plain-text report.
+// The Diagnostics tab: the model cards, this Mac, the latency figures, reliability, and the plain-text report.
 public import Foundation
 public import UttrflowCore
 
@@ -109,6 +109,41 @@ public struct DiagnosticsModelPresence: Sendable, Equatable {
     }
 }
 
+/// One model Uttrflow runs, as a card: what it is for, what it is, and whether it is ready.
+public struct DiagnosticsModelCard: Sendable, Equatable, Identifiable {
+    /// What the model is for, which is unique on the page.
+    public let title: String
+    /// The SF Symbol on the card's tile.
+    public let symbolName: String
+    /// The accent the tile is washed in.
+    public let tint: SettingsTint
+    /// The model in plain words, never a product name.
+    public let name: String
+    /// Short facts under the name: its size, where it runs.
+    public let chips: [String]
+    /// Whether it is ready, in a word or two.
+    public let status: String
+    /// How the status is coloured.
+    public let state: DiagnosticsState
+
+    /// The title.
+    public var id: String { title }
+
+    /// Builds a card.
+    public init(
+        title: String, symbolName: String, tint: SettingsTint, name: String, chips: [String],
+        status: String, state: DiagnosticsState
+    ) {
+        self.title = title
+        self.symbolName = symbolName
+        self.tint = tint
+        self.name = name
+        self.chips = chips
+        self.status = status
+        self.state = state
+    }
+}
+
 /// Everything the diagnostics page is drawn from.
 public struct DiagnosticsSnapshot: Sendable, Equatable {
     /// Which engines are configured, in preference order.
@@ -125,6 +160,12 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
     public let measurements: [StageMeasurement]
     /// What the clean-up steps did to the last dictation, absent until one has been tidied.
     public let cleaning: CleaningRecord?
+    /// How far along the model AI suggestions need is.
+    public let suggestionModel: SuggestionModelReadiness
+    /// Which build is running.
+    public let version: AppVersion
+    /// This Mac in one line: macOS version, chip and memory; absent when it could not be read.
+    public let machine: String?
 
     /// Builds a snapshot; everything defaults to not yet checked.
     public init(
@@ -134,7 +175,10 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
         speechModel: DiagnosticsModelPresence? = nil,
         permissions: [PermissionKind: PermissionStatus] = [:],
         measurements: [StageMeasurement] = [],
-        cleaning: CleaningRecord? = nil
+        cleaning: CleaningRecord? = nil,
+        suggestionModel: SuggestionModelReadiness = .notAsked,
+        version: AppVersion = .unknown,
+        machine: String? = nil
     ) {
         self.engines = engines
         self.speechInUse = speechInUse
@@ -143,6 +187,9 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
         self.permissions = permissions
         self.measurements = measurements
         self.cleaning = cleaning
+        self.suggestionModel = suggestionModel
+        self.version = version
+        self.machine = machine
     }
 }
 
@@ -167,6 +214,10 @@ public struct DiagnosticsSummary: Sendable, Equatable {
 public struct DiagnosticsPresentation: Sendable, Equatable {
     /// The verdict, above everything else on the page.
     public let summary: DiagnosticsSummary
+    /// One card per model Uttrflow runs.
+    public let models: [DiagnosticsModelCard]
+    /// The build and this Mac, before the permissions.
+    public let system: [DiagnosticsRow]
     /// Absent until something has been timed, in which case ``latencyEmptyState`` says so.
     public let latency: DiagnosticsLatency?
     /// Shown instead of ``latency`` until something has been timed.
@@ -189,6 +240,8 @@ public struct DiagnosticsPresentation: Sendable, Equatable {
     /// Builds the page from its parts.
     public init(
         summary: DiagnosticsSummary,
+        models: [DiagnosticsModelCard] = [],
+        system: [DiagnosticsRow] = [],
         latency: DiagnosticsLatency?,
         latencyEmptyState: MainEmptyState?,
         reliability: [MainStatistic],
@@ -200,6 +253,8 @@ public struct DiagnosticsPresentation: Sendable, Equatable {
         copyAction: MainAction
     ) {
         self.summary = summary
+        self.models = models
+        self.system = system
         self.latency = latency
         self.latencyEmptyState = latencyEmptyState
         self.reliability = reliability
@@ -233,6 +288,8 @@ public enum DiagnosticsPresenter {
 
         return DiagnosticsPresentation(
             summary: summary(engines: engines, permissions: permissions, storage: storage),
+            models: models(for: snapshot, locale: locale),
+            system: systemRows(for: snapshot),
             latency: summaries.isEmpty ? nil : latency(for: summaries, missing: missing),
             latencyEmptyState: summaries.isEmpty ? noTimingsYet : nil,
             reliability: reliability(for: snapshot.measurements, locale: locale),
@@ -243,6 +300,94 @@ public enum DiagnosticsPresenter {
             footnote: footnote,
             copyAction: MainAction(
                 title: "Copy Diagnostics", intent: .copy(report(for: snapshot, locale: locale))))
+    }
+
+    // MARK: - Models
+
+    /// The two recognisers, the clean-up engine in use, and the model AI suggestions need.
+    static func models(for snapshot: DiagnosticsSnapshot, locale: Locale) -> [DiagnosticsModelCard] {
+        let speech = snapshot.speechInUse ?? snapshot.engines.speech
+        return [
+            downloadedSpeechCard(snapshot, inUse: speech == .whisperKit, locale: locale),
+            DiagnosticsModelCard(
+                title: "Speech (Faster)", symbolName: "mic", tint: .info,
+                name: name(for: SpeechEngineKind.appleSpeech), chips: ["Built in", onDevice],
+                status: speech == .appleSpeech ? "In use" : "Ready", state: .good),
+            cleanUpCard(snapshot),
+            suggestionsCard(snapshot.suggestionModel),
+        ]
+    }
+
+    /// Where every model on the page runs.
+    static let onDevice = "On-device"
+
+    /// The downloaded recogniser: whether it is on the disk, how big, and for which languages.
+    static func downloadedSpeechCard(
+        _ snapshot: DiagnosticsSnapshot, inUse: Bool, locale: Locale
+    ) -> DiagnosticsModelCard {
+        let card = { (chips: [String], status: String, state: DiagnosticsState) in
+            DiagnosticsModelCard(
+                title: "Speech", symbolName: "waveform", tint: .dictation,
+                name: name(for: SpeechEngineKind.whisperKit), chips: chips + [onDevice],
+                status: status, state: state)
+        }
+        guard let model = snapshot.speechModel else { return card([], "Not checked yet", .unknown) }
+        guard model.isInstalled else {
+            return card([], "Not downloaded", inUse ? .attention : .unknown)
+        }
+        let size = model.bytesOnDisk.map { [MainFormatting.bytes($0, locale: locale)] } ?? []
+        let languages = model.isMultilingual ? "Every language" : "English"
+        return card(size + [languages], inUse ? "In use" : "Ready", .good)
+    }
+
+    /// The clean-up engine that tidies now, or what is still being asked.
+    static func cleanUpCard(_ snapshot: DiagnosticsSnapshot) -> DiagnosticsModelCard {
+        let ordered = snapshot.engines.resolvedTransformerPreference
+        let card = { (name: String, chips: [String], status: String, state: DiagnosticsState) in
+            DiagnosticsModelCard(
+                title: "Clean-up", symbolName: "wand.and.stars", tint: .suggestion, name: name,
+                chips: chips, status: status, state: state)
+        }
+        guard let inUse = ordered.first(where: { snapshot.transformerAvailability[$0] == true }) else {
+            return card("Not checked yet", [], "Checking", .unknown)
+        }
+        let origin = inUse == .localModel ? "Downloaded" : "Built in"
+        return card(name(for: inUse), inUse == .cloud ? [origin] : [origin, onDevice], "In use", .good)
+    }
+
+    /// The model AI suggestions need, and how far along it is.
+    static func suggestionsCard(_ readiness: SuggestionModelReadiness) -> DiagnosticsModelCard {
+        let (status, state): (String, DiagnosticsState) =
+            switch readiness {
+            case .notAsked: ("Off", .unknown)
+            case .downloading(let fraction):
+                (
+                    fraction.map { "Downloading \(MenuBarPresenter.percentage(of: $0))%" } ?? "Downloading",
+                    .unknown
+                )
+            case .loading: ("Loading", .unknown)
+            case .ready: ("Loaded", .good)
+            case .releasedForMemory: ("Set aside for memory", .unknown)
+            case .failed: ("Could not be fetched", .attention)
+            }
+        return DiagnosticsModelCard(
+            title: "AI suggestions", symbolName: "sparkles", tint: .amber,
+            name: name(for: TransformerKind.localModel), chips: ["About 3 GB", onDevice],
+            status: status, state: state)
+    }
+
+    // MARK: - This Mac
+
+    /// The build and the machine, as facts with nothing to press.
+    static func systemRows(for snapshot: DiagnosticsSnapshot) -> [DiagnosticsRow] {
+        var rows: [DiagnosticsRow] = []
+        if snapshot.version.isKnown {
+            rows.append(DiagnosticsRow(title: "Uttrflow", detail: snapshot.version.tag, state: .good))
+        }
+        if let machine = snapshot.machine {
+            rows.append(DiagnosticsRow(title: "macOS", detail: machine, state: .good))
+        }
+        return rows
     }
 
     // MARK: - The verdict
@@ -562,6 +707,10 @@ public enum DiagnosticsPresenter {
     ) -> String {
         let stages = stageRows(for: StageLatency.summarise(snapshot.measurements))
         var lines = ["Uttrflow diagnostics", footnote, ""]
+        let system = systemRows(for: snapshot)
+        if !system.isEmpty {
+            lines += system.map { "\($0.title): \($0.detail)" } + [""]
+        }
 
         if stages.isEmpty {
             lines.append("Timings: none recorded yet")
@@ -580,7 +729,11 @@ public enum DiagnosticsPresenter {
             lines += ["", "Clean-up steps, last dictation"] + counted
         }
 
+        let models = models(for: snapshot, locale: locale).map {
+            DiagnosticsRow(title: $0.title, detail: $0.status, state: $0.state)
+        }
         let sections: [(String, [DiagnosticsRow])] = [
+            ("Models", models),
             ("Engines", engineRows(for: snapshot)),
             ("Permissions", permissionRows(for: snapshot)),
             ("On disk", storageRows(for: snapshot, locale: locale)),

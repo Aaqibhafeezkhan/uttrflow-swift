@@ -128,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private(set) var suggestionModel: SuggestionModelReadiness = .notAsked {
         didSet {
             guard suggestionModel != oldValue else { return }
-            settingsWindow.setSuggestionModel(suggestionModel)
+            settingsPage.setSuggestionModel(suggestionModel)
             refreshMenuBar()
         }
     }
@@ -216,8 +216,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Internal so a test can install one and read back what an intent opened it on.
     var mainWindow: MainWindowController?
-    /// The settings window over *this* app's stores, never a second set of actors on the same files.
-    private lazy var settingsWindow = SettingsWindowController(
+    /// The Settings page over *this* app's stores, never a second set of actors on the same files.
+    private lazy var settingsPage = SettingsPageController(
         store: settingsStore,
         personalisation: Self.personalisation(
             in: container, dictionary: dictionary, history: history, clipboard: clipboard,
@@ -497,7 +497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func showMainWindowFromMenu(_ sender: Any?) { show(.main(.home)) }
     @objc func showSettingsFromMenu(_ sender: Any?) { show(.settings(.general)) }
-    @objc func showDiagnosticsFromMenu(_ sender: Any?) { show(.main(.diagnostics)) }
+    @objc func showDiagnosticsFromMenu(_ sender: Any?) { show(.settings(.diagnostics)) }
 
     /// Shows or hides the sidebar's names, and does nothing when there is no window yet.
     @objc func toggleSidebarFromMenu(_ sender: Any?) { mainWindow?.toggleSidebar() }
@@ -911,7 +911,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var unarmedShortcuts: Set<ShortcutAction> = [] {
         didSet {
             guard unarmedShortcuts != oldValue else { return }
-            settingsWindow.setUnarmedShortcuts(unarmedShortcuts)
+            settingsPage.setUnarmedShortcuts(unarmedShortcuts)
         }
     }
 
@@ -1781,10 +1781,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Not `presentOnboardingIfNeeded()`, which returns silently once the flow is finished.
             presentOnboarding()
         case .settings(let tab):
-            settingsWindow.onClose = { [weak self] in self?.redrawMainWindow() }
-            settingsWindow.show(tab, identity: signedInIdentity)
-            // So the sidebar's Settings row lights up as the window appears.
-            redrawMainWindow()
+            settingsPage.open(tab)
+            let window = mainWindow ?? makeMainWindow()
+            mainWindow = window
+            window.showSettings(settingsPage.model)
+            // So the sidebar's Settings row lights up as the page appears.
+            refreshMainWindow()
         case .main(let tab):
             let window = mainWindow ?? makeMainWindow()
             mainWindow = window
@@ -1807,6 +1809,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             redrawMainWindow()
         }
         window.onBecameVisible = { [weak self] in self?.catchUpMainWindow() }
+        window.onSettingsLostFocus = { [weak self] in self?.settingsPage.surfaceDidLoseFocus() }
         window.onDraft = { [weak self] in
             guard let self else { return }
             // A refusal describes one attempt, and describes nothing once the typing changes.
@@ -1916,8 +1919,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     speechModel: speechModelLoad, speechDownload: speechReadiness.download)),
             sidebar: SidebarPresenter.sidebar(
                 for: SidebarSnapshot(
-                    // The page the window shows; Settings is a window and lights nothing.
-                    selection: .page(mainWindow?.page ?? .home),
+                    // The page the window shows, which may be the Settings page on one of its tabs.
+                    selection: mainWindow?.isShowingSettings == true
+                        ? .settings(settingsPage.tab) : .page(mainWindow?.page ?? .home),
                     entries: entries,
                     correctionsToday: corrections.filter {
                         Calendar.autoupdatingCurrent.isDate($0.when, inSameDayAs: now)
@@ -1957,15 +1961,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for: SnippetsSnapshot(
                     snippets: knownSnippets, draft: snippetDraft, refusal: snippetRefusal,
                     query: query(for: .snippets), now: now)),
-            style: StylePagePresenter.page(
-                for: StylePageSnapshot(
-                    settings: settings, capabilities: SettingsCapabilities.everything)),
             diagnostics: DiagnosticsPresenter.page(
                 for: DiagnosticsSnapshot(
                     engines: settings.engines, speechInUse: speechInUse,
                     transformerAvailability: transformerAvailability,
                     speechModel: speechModelPresence, permissions: knownPermissions,
-                    measurements: measurements, cleaning: lastCleaning)),
+                    measurements: measurements, cleaning: lastCleaning,
+                    suggestionModel: suggestionModel, version: .ofThisBuild,
+                    machine: MachineDescription.current)),
             account: accountPage(at: now),
             shortcutKeycaps: SettingsShortcut.keycaps(for: settings.hotkey))
     }
@@ -2062,12 +2065,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The last answer each gate gave; absent means unchecked, which the pages draw as silence.
     private var knownPermissions: [PermissionKind: PermissionStatus] = [:]
-
-    /// Who is signed in, read from the cached profile so Settings knows even before the main window is drawn.
-    private var signedInIdentity: AccountIdentity? {
-        guard let account = account.profiles.load()?.account else { return nil }
-        return AccountPagePresenter.identity(for: account, picture: knownPicture?.bytes)
-    }
 
     private func refreshPicture() async {
         guard let path = account.profiles.load()?.account.avatarPath else {
@@ -2214,9 +2211,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             switch change {
             case .checkForUpdatesNow: updates.checkForUpdates()
             case .chooseApplicationToTurnOffSuggestions:
-                // Applied through the Settings window, whose own copy of the settings would otherwise go stale.
+                // Applied through the Settings page, whose own copy of the settings would otherwise go stale.
                 ApplicationPicker.choose(given: settings.suggestions) { [weak self] identifier in
-                    self?.settingsWindow.apply(.suggestionsHere(application: identifier, isOn: false))
+                    self?.settingsPage.apply(.suggestionsHere(application: identifier, isOn: false))
                 }
             case .openPage(let page): show(.main(page))
             default: break
@@ -2308,7 +2305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func settingsChanged(to updated: Settings) {
         let previous = settings
         settings = updated
-        settingsWindow.synchronize(settings: updated)
+        settingsPage.synchronize(settings: updated)
         recordingSounds?.apply(updated)
         applyAppearance()
         applyLaunchAtLogin()
