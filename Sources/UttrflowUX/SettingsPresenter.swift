@@ -518,7 +518,8 @@ public enum SettingsPresenter {
     private static func pageRow(_ page: MainTab, explanation: String) -> SettingsRow {
         SettingsRow(
             id: "page.\(page.rawValue)", label: SidebarPresenter.title(for: page),
-            explanation: explanation, control: .action(title: "Open", change: .openPage(page)))
+            explanation: explanation, control: .action(title: "Open", change: .openPage(page)),
+            icon: .symbol("text.badge.checkmark", .info))
     }
 
     /// One transcription quality, as a segmented option.
