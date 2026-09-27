@@ -46,7 +46,7 @@ struct SettingsDiagnosticsView: View {
             }
             Text(presentation.footnote)
                 .font(.system(size: 11))
-                .foregroundStyle(SettingsPalette.ink(0.45))
+                .foregroundStyle(PagePalette.quiet)
                 .padding(.horizontal, 4)
         }
     }

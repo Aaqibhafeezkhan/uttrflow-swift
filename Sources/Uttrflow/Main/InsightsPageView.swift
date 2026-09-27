@@ -13,7 +13,9 @@ struct InsightsPageView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             if let empty = presentation.emptyState {
+                // The same room below as the charts leave, so the footnote clears the window's edge.
                 MainEmptyStateView(state: empty, onIntent: onIntent)
+                    .padding(.bottom, 22)
             } else {
                 ScrollView {
                     HStack(alignment: .top, spacing: 18) {
