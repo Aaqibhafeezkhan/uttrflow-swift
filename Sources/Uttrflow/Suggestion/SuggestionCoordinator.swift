@@ -91,6 +91,8 @@ final class SuggestionCoordinator {
     private var lastKeystroke = Date.distantPast
     /// One turn at a time, with a turn that never returns left behind so the loop cannot die with it.
     private var turns = TurnGate()
+    /// The step the newest turn is waiting on and the bundle identifier it read, so a stall names where it stuck.
+    private var progress: (turn: Int, step: SuggestionTurnStep, application: String)?
     /// What this turn has already been told about the moment, so one line costs one walk.
     private let contextCache = SuggestionContextCache()
     /// True while an accepted completion is being inserted, so the keys it posts wake no further turn.
@@ -345,7 +347,9 @@ final class SuggestionCoordinator {
             // A Return or a switch waiting its turn is never overwritten by the tick that follows it.
             if again.map({ reason.urgency > $0.urgency }) ?? true { again = reason }
         case .stalled(let turn):
-            Self.log.error("STALL a turn ran past \(TurnGate.stallSeconds)s and is left behind")
+            Self.log.error(
+                "\(SuggestionLog.stall(step: self.progress?.step, application: self.progress?.application, afterSeconds: TurnGate.stallSeconds), privacy: .public)"
+            )
             generating?.cancel()
             running?.cancel()
             start(turn, because: reason)
@@ -369,18 +373,28 @@ final class SuggestionCoordinator {
         wake(next)
     }
 
+    /// Notes the step a turn is about to wait on, ignored for a turn already left behind.
+    private func entering(_ step: SuggestionTurnStep, turn number: Int) {
+        guard progress?.turn == number else { return }
+        progress?.step = step
+    }
+
     // MARK: One turn
 
-    /// Whether a turn may read the focused field at all: never in Uttrflow, nor where suggestions are off or paused.
+    /// The bundle identifier prefix every Uttrflow build carries, the release and the dev build alike.
+    nonisolated static let uttrflowBundlePrefix = "com.uttrflow."
+
+    /// Whether a turn may read the focused field at all: never in any Uttrflow build, nor where suggestions are off or paused.
     nonisolated static func shouldRead(
         front: String, own: String?, preferences: SuggestionPreferences, at moment: Date
     ) -> Bool {
-        front != own && preferences.isEnabled(in: front, at: moment)
+        front != own && !front.hasPrefix(uttrflowBundlePrefix) && preferences.isEnabled(in: front, at: moment)
     }
 
     /// Reads the field, asks the corpus and draws the answer, all off the keystroke path; a turn left behind touches nothing.
     private func turn(_ number: Int, because reason: SuggestionReason) async {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "nil"
+        progress = (number, .read, front)
         // Taken before the read, since a key pressed while a slow field is being read is one the read may have missed.
         let keystrokesSeen = session.keystrokes
         let shouldRead = Self.shouldRead(
@@ -412,7 +426,10 @@ final class SuggestionCoordinator {
         modelPass.freshStart(
             surfaceChanged: reading.surface != session.surface, lineIsEmpty: snapshot.currentLine.isEmpty)
         // A password field is refused here, before its value has been passed to anything at all.
-        if !snapshot.isSecure { await remember(snapshot, as: reading, because: reason, at: started) }
+        if !snapshot.isSecure {
+            entering(.remember, turn: number)
+            await remember(snapshot, as: reading, because: reason, at: started)
+        }
         guard turns.isCurrent(number) else { return }
         lastReading = reading
         lastSnapshot = snapshot
@@ -422,6 +439,7 @@ final class SuggestionCoordinator {
             acceptKey: preferences.acceptKeys.key(forBundleIdentifier: snapshot.bundleIdentifier),
             isQuiet: preferences.isQuiet, sawKeystrokes: keystrokesSeen)
         if let rejected = turn.rejected, let surface = reading.surface {
+            entering(.reject, turn: number)
             try? await store.recordRejected(rejected, in: surface)
         }
 
@@ -429,6 +447,7 @@ final class SuggestionCoordinator {
         case .settled(let update):
             settle(update, in: snapshot, since: started)
         case .query(let query):
+            entering(.corpus, turn: number)
             let candidates = await candidates(for: query)
             let ready = await generator?.isReady ?? false
             guard turns.isCurrent(number) else { return }
@@ -445,6 +464,7 @@ final class SuggestionCoordinator {
                 return settle(update, in: snapshot, since: started)
             }
             // The machine says first what the next word may be: anything, one of its values, or nothing here, which no pass can improve on.
+            entering(.options, turn: number)
             let options = await verifier.options(for: query.typed, in: query.surface, now: Date())
             guard turns.isCurrent(number) else { return }
             switch options {
@@ -489,7 +509,9 @@ final class SuggestionCoordinator {
     ) async -> SuggestionUpdate? {
         switch session.resolve(candidates, for: query, now: Date(), elapsedMilliseconds: since(started)) {
         case .settled(let update): return update
-        case .verify(let request): return await verify(number, request, since: started)
+        case .verify(let request):
+            entering(.verify, turn: number)
+            return await verify(number, request, since: started)
         case nil: return nil
         }
     }
@@ -505,6 +527,7 @@ final class SuggestionCoordinator {
             panel.hide()
             armedOffer = nil
         }
+        entering(.redraw, turn: number)
         guard let fresh = await FocusedFieldReader.read(), turns.isCurrent(number),
             ModelPass.isFresh(
                 keystrokesBefore: keystrokesSeen, keystrokesNow: session.keystrokes,
@@ -548,6 +571,7 @@ final class SuggestionCoordinator {
                 return try await generator.completions(for: query.typed, in: situation)
             }
             generating = pass
+            entering(.generate, turn: number)
             let answer = await pass.result
             generating = nil
             // A pass the next keystroke cancelled, or a turn left behind, answers a line that is gone: nothing is drawn or kept.
@@ -560,6 +584,7 @@ final class SuggestionCoordinator {
                     "\(SuggestionLog.generateFailed(typed: query.typed, error: error), privacy: .public)")
                 return
             case .success(let lines):
+                entering(.attest, turn: number)
                 let standing = await attested(lines, for: query)
                 guard turns.isCurrent(number) else { return }
                 invented = !lines.isEmpty && standing.isEmpty
@@ -585,6 +610,7 @@ final class SuggestionCoordinator {
             typed: query.typed, choices: choices, leader: leader)
         {
             // The machine's values still pass the gate, since a listed name can be destructive or stale by now.
+            entering(.attest, turn: number)
             let others = await attested(listed, for: query)
             guard turns.isCurrent(number), !others.isEmpty,
                 let expanded = session.expandGenerated(others, for: query)
@@ -600,6 +626,7 @@ final class SuggestionCoordinator {
             return try await generator.alternatives(for: query.typed, in: situation, excluding: leader)
         }
         generating = more
+        entering(.alternatives, turn: number)
         let followUp = await more.result
         generating = nil
         guard !more.isCancelled, turns.isCurrent(number) else { return }
@@ -611,6 +638,7 @@ final class SuggestionCoordinator {
             }
             return
         }
+        entering(.attest, turn: number)
         let standing = await attested(others, for: query)
         guard turns.isCurrent(number), !standing.isEmpty,
             let expanded = session.expandGenerated(standing, for: query)

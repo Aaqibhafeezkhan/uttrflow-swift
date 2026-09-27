@@ -69,6 +69,12 @@ enum SuggestionLog {
         "a completion landed nowhere: \(String(describing: error)) typedChars=\(typed.count)"
     }
 
+    /// A turn left behind, named by the step it was waiting on and the bundle identifier of the application it read.
+    static func stall(step: SuggestionTurnStep?, application: String?, afterSeconds seconds: Double) -> String
+    {
+        "STALL step=\(step?.rawValue ?? "unknown") app=\(application ?? "unknown") after=\(Int(seconds))s left behind"
+    }
+
     /// An error's type and case, without the payload, which may hold the text a model was given or wrote.
     static func failure(_ error: any Error) -> String {
         let type = String(describing: Swift.type(of: error))
@@ -83,4 +89,28 @@ enum SuggestionLog {
         let bridged = error as NSError
         return "\(type) domain=\(bridged.domain) code=\(bridged.code)"
     }
+}
+
+/// The step a suggestion turn is waiting on, which is what a stall log names.
+enum SuggestionTurnStep: String, Sendable {
+    /// Reading the focused field of the application in front.
+    case read
+    /// Handing the line to capture.
+    case remember
+    /// Recording a declined suggestion in the store.
+    case reject
+    /// Asking the corpus and the machine for candidates.
+    case corpus
+    /// Putting remembered candidates through the gates.
+    case verify
+    /// Asking the machine which words may come next.
+    case options
+    /// Waiting on a model pass for the line.
+    case generate
+    /// Checking the model's lines against the machine.
+    case attest
+    /// Reading the field again before drawing.
+    case redraw
+    /// Waiting on a model pass for the list behind the drawn line.
+    case alternatives
 }
