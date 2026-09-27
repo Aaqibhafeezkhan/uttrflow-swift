@@ -9,7 +9,7 @@ the two things that are not obvious from the code.
 | --- | --- | --- |
 | Resting grip | 9 × 34 | Three dots drawn straight on the desktop; no slab, because a slab around nine points reads as a box somebody forgot to delete. Six points of invisible hoverable padding all round. |
 | Hovered | orb 30 + hint 30 high | The orb keeps the grip's side so it stays under the pointer |
-| Listening | 32 high | The mark on the anchored edge and the live meter |
+| Listening | 32 high | The meter and a running clock on tinted glass, the clock on the anchored edge; no mark |
 | Working | 40-point orb | Three bars rising and settling in turn, for as long as there is work left |
 | Inserted | 26-point disc | A success needs no words: the text is already in the document |
 | Nothing heard, too short | 28 high, words up to 200 wide | The struck level with its sentence, readable at rest; a too-short hold says to hold longer |
@@ -41,7 +41,12 @@ fails when one would need a fourth line, and the whole notice is on the pointer 
   arrival: twenty sideways jumps a second reads as stepping rather than flowing. In Low Power
   Mode or at serious thermal pressure it drops to the 20 Hz data rate and accepts the step, per
   `MotionBudget`; see `Docs/performance.md`.
-- Meter width is fixed at 56 points; how many bars fit is a consequence of the width.
+- Meter width is fixed at 100 points; how many bars fit is a consequence of the width, and
+  `DockBars.capacity` is held to cover it. The first and last 20% fade up from nothing, so bars
+  enter and leave softly rather than at a hard edge.
+- The clock beside it reads the time since the key went down as `0:04`, advanced by the
+  meter's own 20 Hz arrivals so it adds no timer of its own. Once the cap is near the countdown
+  takes its place, because the time left matters more than the time spent.
 - `meterAmplitude` 0.9 keeps a loud syllable from touching the glass.
 - Working is a 40-point glass orb whose three bars rise to full height and settle to 40% in
   turn, each 0.15 s behind the one to its left, over one second. It runs for as long as there
@@ -57,14 +62,12 @@ fails when one would need a fourth line, and the whole notice is on the pointer 
   state draws its own. A tick is a claim about the words, and only
   ``DictationState/inserted`` may make it.
 
-### Why the loud threshold is carried by opacity, not hue
+### Why the loud threshold is carried by opacity
 
-The two teals cannot carry the threshold on their own. On a light desktop the pair is
-`#067A87` against `#29C0B4` and separates at 2.24:1, which reads. On a dark desktop the
-waveform teal lightens to `#00C3D0` and the pair collapses to 1.05:1 and inverts, because
-the accent is then the fractionally darker of the two. So hue keeps its job and weight is
-added beside it: quiet bars are drawn at `meterQuietOpacity` 0.62. It introduces no colour
-the app does not already own and works on both grounds, because opacity depends on neither.
+The meter is one colour, `dockMeter`: white on the dark glass and dictation teal `#128077` on
+the light. Quiet bars are drawn at `meterQuietOpacity` 0.62 and loud ones at full strength. An
+earlier pair of teals could not carry the threshold by hue, collapsing to 1.05:1 on a dark
+desktop, and opacity works on both grounds because it depends on neither.
 
 ## The tick is a tick
 
@@ -77,8 +80,7 @@ It used to be the mark opening into a check: one stroke whose turn widened from 
 6 and whose arms splayed to 44° and −32°, on the reasoning that the `u` and a check differ
 only by how far they open. Drawn at 14 points in a 26-point disc it did not read as a check.
 The turn stays a turn at that size, so what arrives is a bowl — an upside-down `u` — and a
-confirmation nobody reads as confirmation is not one. The identity is carried by the mark on
-the pill a few points to its left; the tick's job is to be unmistakable.
+confirmation nobody reads as confirmation is not one. The tick's job is to be unmistakable.
 
 ## Colours
 
@@ -97,8 +99,6 @@ the pill a few points to its left; the tick's job is to be unmistakable.
 
   The bright `dockWarning` `#FF8D28` and `dockSuccess` `#34C759` measure 2.31:1 under white
   and about 2:1 on light glass, so the dock never draws with them.
-- `dockWeightInk` is fixed, not `.primary`: the weight's disc is the same teal in both
-  appearances, so ink that followed the appearance would vanish in one of them.
 - The panel's own `hasShadow` is off: AppKit draws a shadow around a transparent panel's
   opaque content, and every form already carries the one the design asks for. Two shadows
   around a nine-point grip is what made the resting button look boxed.

@@ -126,6 +126,13 @@ struct DockBarsTests {
         #expect(DockMetrics.meterQuietOpacity > 0.4)
     }
 
+    /// A row shorter than the meter would leave a gap on the side sound flows away to.
+    @Test("the row holds enough bars to cross the whole meter")
+    func rowFillsTheMeter() {
+        let step = DockMetrics.meterBarWidth + DockMetrics.meterBarSpacing
+        #expect(CGFloat(DockBars.capacity) * step >= DockMetrics.meterWidth + step)
+    }
+
     @Test("half scale is where the accent starts")
     func accentThreshold() {
         #expect(!DockBars.isLoud(0))

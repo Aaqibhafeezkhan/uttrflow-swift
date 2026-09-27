@@ -194,24 +194,30 @@ struct DockView: View {
         .glass(cornerRadius: DockMetrics.orbSize / 2)
     }
 
-    /// Listening: the mark on the anchored edge and a live meter, and the time left once the cap is near.
+    /// Listening: a live meter and a running clock, the clock on the anchored edge.
     private func listening() -> some View {
-        compact { towardsLeading in
-            // On the far side of the meter from the mark, so the mark stays on the anchored edge.
-            if !towardsLeading { remainingTime() }
-            LevelMeterView(model: model, towardsLeading: towardsLeading)
-            if towardsLeading { remainingTime() }
+        let clockLeads = model.anchor == .bottomLeft
+        return HStack(spacing: 8) {
+            if clockLeads { clock() }
+            LevelMeterView(model: model, towardsLeading: clockLeads)
+            if !clockLeads { clock() }
         }
+        .padding(.horizontal, 12)
+        .frame(height: DockMetrics.listeningHeight)
+        .glass(cornerRadius: DockMetrics.listeningHeight / 2)
+        .padding(DockMetrics.gripHitPadding)
     }
 
-    /// The countdown to the cap, drawn only once the presenter has one to say.
-    @ViewBuilder private func remainingTime() -> some View {
-        if let remaining = model.presentation.secondaryLine {
-            Text(remaining)
-                .font(.system(size: DockMetrics.footnoteSize, weight: .medium))
-                .monospacedDigit()
-                .fixedSize()
-        }
+    /// The time since the key went down, or the time left once the cap is near.
+    private func clock() -> some View {
+        DockClock(model: model)
+    }
+
+    /// The countdown when the presenter has one, otherwise the elapsed time as "0:04".
+    static func clockText(for presentation: DockPresentation, startedAt: Date?, now: Date) -> String {
+        if let remaining = presentation.secondaryLine { return remaining }
+        let seconds = startedAt.map { now.timeIntervalSince($0) } ?? 0
+        return DictationPresenter.elapsed(.seconds(max(seconds, 0)))
     }
 
     /// Working: a glass orb whose three bars keep settling for as long as there is work left to do.
@@ -220,40 +226,6 @@ struct DockView: View {
             .frame(width: DockMetrics.workingOrbSize, height: DockMetrics.workingOrbSize)
             .glass(cornerRadius: DockMetrics.workingOrbSize / 2)
             .padding(DockMetrics.gripHitPadding)
-    }
-
-    /// The listening pill: the mark on the anchored edge, `centre` beside it.
-    private func compact(
-        @ViewBuilder _ centre: (_ towardsLeading: Bool) -> some View
-    ) -> some View {
-        let weightLeads = model.anchor == .bottomLeft
-        return HStack(spacing: 9) {
-            if weightLeads { weight() }
-            centre(weightLeads)
-            if !weightLeads { weight() }
-        }
-        .padding(.leading, weightLeads ? 5 : 12)
-        .padding(.trailing, weightLeads ? 12 : 5)
-        .frame(height: DockMetrics.compactHeight)
-        .glass(cornerRadius: DockMetrics.compactHeight / 2)
-        .padding(DockMetrics.gripHitPadding)
-    }
-
-    /// The mark, on the edge the panel is parked against.
-    private func weight() -> some View {
-        UttrflowMark()
-            .stroke(
-                Color.dockWeightInk,
-                style: StrokeStyle(
-                    lineWidth: UttrflowMark.lineWidth(forHeight: DockMetrics.weightMarkHeight),
-                    lineCap: .round, lineJoin: .round)
-            )
-            .frame(
-                width: DockMetrics.weightMarkHeight * UttrflowMark.aspectRatio,
-                height: DockMetrics.weightMarkHeight
-            )
-            .frame(width: DockMetrics.weightSize, height: DockMetrics.weightSize)
-            .background(Color.dockActive, in: .circle)
     }
 
     // MARK: - Notices
@@ -430,9 +402,9 @@ enum DockMetrics {
     /// How wide the hint grows to say why the shortcut cannot be heard, which wraps over a few lines.
     static let unheardWidth: CGFloat = 240
     static let orbSize: CGFloat = 30
-    static let compactHeight: CGFloat = 32
-    static let weightSize: CGFloat = 22
-    static let weightMarkHeight: CGFloat = 10
+    static let listeningHeight: CGFloat = 32
+    /// The running clock beside the meter.
+    static let clockSize: CGFloat = 11
     static let workingOrbSize: CGFloat = 40
     /// The disc an insertion is drawn in.
     static let badgeSize: CGFloat = 26
@@ -458,10 +430,10 @@ enum DockMetrics {
 
 // MARK: - Parts
 
-/// The level as a row of capsules, redrawn up to the motion budget's rate and clipped so new bars enter from the edge.
+/// The level as a row of capsules, redrawn up to the motion budget's rate and faded so bars enter and leave softly.
 private struct LevelMeterView: View {
     let model: DockViewModel
-    /// Whether the mark is on the leading edge; sound always flows in from the side away from the mark.
+    /// Whether the clock is on the leading edge; sound always flows in from the side away from the clock.
     let towardsLeading: Bool
 
     var body: some View {
@@ -480,6 +452,31 @@ private struct LevelMeterView: View {
         }
         .frame(width: DockMetrics.meterWidth, height: DockMetrics.meterHeight)
         .clipShape(.rect)
+        .mask {
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: DockMetrics.meterFade),
+                    .init(color: .black, location: 1 - DockMetrics.meterFade),
+                    .init(color: .clear, location: 1),
+                ], startPoint: .leading, endPoint: .trailing)
+        }
+    }
+}
+
+/// The running clock, advanced by the meter's own arrivals so it adds no timer of its own.
+private struct DockClock: View {
+    let model: DockViewModel
+
+    var body: some View {
+        Text(
+            DockView.clockText(
+                for: model.presentation, startedAt: model.recordingStartedAt, now: model.lastArrival)
+        )
+        .font(.system(size: DockMetrics.clockSize, weight: .medium, design: .monospaced))
+        .monospacedDigit()
+        .opacity(0.6)
+        .fixedSize()
     }
 }
 
@@ -591,9 +588,11 @@ private struct Badge: View {
 extension DockMetrics {
     static let meterBarWidth: CGFloat = 2.2
     static let meterBarSpacing: CGFloat = 1.8
-    static let meterHeight: CGFloat = 18
+    static let meterHeight: CGFloat = 22
     /// Fixed rather than derived from a bar count: the row scrolls, so the width decides how many fit.
-    static let meterWidth: CGFloat = 56
+    static let meterWidth: CGFloat = 100
+    /// How far in from each end the meter fades up from nothing, as a share of its width.
+    static let meterFade: CGFloat = 0.2
     /// The tallest a capsule gets, as a share of the meter's height; under one so it never touches the glass.
     static let meterAmplitude: CGFloat = 0.9
     /// How often a bar arrives — the rate the panel polls the microphone at.
@@ -628,9 +627,8 @@ extension DockMetrics {
         phase: Double, towardsLeading: Bool
     ) {
         let step = meterBarWidth + meterBarSpacing
-        let loud = GraphicsContext.Shading.color(.dockActive)
-        let quiet = GraphicsContext.Shading.color(
-            Color.dockWaveform.opacity(meterQuietOpacity))
+        let loud = GraphicsContext.Shading.color(.dockMeter)
+        let quiet = GraphicsContext.Shading.color(Color.dockMeter.opacity(meterQuietOpacity))
         for (index, level) in levels.enumerated() {
             // One step before the panel starts, so the newest bar enters from beyond the edge.
             let offset = (CGFloat(index) + CGFloat(phase) - 1) * step
@@ -674,10 +672,8 @@ extension Color {
     static let dockAccentWash = Color(rgb: BrandPalette.Teal.wash)
     /// Recording and destructive: the main window's critical tone and its destructive buttons.
     static let dockRecording = Color(rgb: BrandPalette.Semantic.recording)
-    /// The live accent: what is selected, what is running, the weight the meter hangs off.
+    /// The live accent: what is selected, what is running.
     static let dockActive = Color(rgb: BrandPalette.Teal.primary)
-    /// Ink for the mark inside the weight's disc; fixed, since the disc is the same teal in both appearances.
-    static let dockWeightInk = Color(rgb: BrandPalette.Teal.inkOnDisc)
     /// Words and glyphs on the dock's glass: white when dark, ink when light.
     static let dockInk = Color(nsColor: .orbit(BrandPalette.Redesign.textStrong))
     /// The dock's glass tint over the system material.
@@ -685,6 +681,8 @@ extension Color {
     /// The hairline round the dock's glass.
     static let dockGlassEdge = Color(nsColor: .orbit(BrandPalette.Redesign.dockGlassEdge))
     static let dockShadow = Color(nsColor: .orbit(BrandPalette.Redesign.dockShadow))
+    /// The listening meter: white on the dark glass, dictation teal on the light.
+    static let dockMeter = Color(nsColor: .orbit(BrandPalette.Redesign.dockMeter))
     static let dockSuccess = Color(rgb: BrandPalette.Semantic.success)
     static let dockWarning = Color(rgb: BrandPalette.Semantic.warning)
     /// The warning as text on the dock's glass, which the bright tone fails on a light desktop.
@@ -702,9 +700,6 @@ extension Color {
     static let successInk = Color(nsColor: .orbit(BrandPalette.Semantic.successInk))
     /// A failure as text; `dockRecording` is for dots, icons and fills.
     static let criticalInk = Color(nsColor: .orbit(BrandPalette.Semantic.criticalInk))
-
-    /// The waveform teal, deepened on a light desktop where the bright one vanishes against the glass.
-    static let dockWaveform = Color(nsColor: .orbit(BrandPalette.Teal.waveform))
 }
 
 extension LinearGradient {

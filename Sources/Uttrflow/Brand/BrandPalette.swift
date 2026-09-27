@@ -45,12 +45,8 @@ enum BrandPalette {
         static let wash: UInt32 = 0xEF_F8F7
         /// Ink on a teal fill.
         static let inkOnFill: UInt32 = 0x04_332F
-        /// Ink for the mark inside the dock's teal disc.
-        static let inkOnDisc: UInt32 = 0x04_100F
         /// The accent as a mark on a surface that follows the appearance.
         static let ink = BrandTone(dark: bright, light: 0x0E_6B64)
-        /// The waveform, deepened on a light desktop.
-        static let waveform = BrandTone(dark: 0x00_C3D0, light: 0x06_7A87)
         /// The callout ground behind secondary ink.
         static let calloutWash = BrandTone(dark: 0x10_1E1D, light: wash)
         /// The onboarding and settings rail, top to bottom.
