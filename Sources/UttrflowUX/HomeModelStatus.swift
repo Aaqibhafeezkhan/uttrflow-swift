@@ -44,6 +44,9 @@ public struct HomeModelStatus: Sendable, Equatable {
         self.accessibilityLabel = accessibilityLabel
     }
 
+    /// The line under a long load's estimate, since only the first load after a restart is slow.
+    static let afterRestart = "Only after a restart. Everything else already works."
+
     /// The download under way, at a share from 0 to 1.
     public static func downloading(_ fraction: Double) -> HomeModelStatus {
         let percent = MenuBarPresenter.percentage(of: fraction)
@@ -57,11 +60,15 @@ public struct HomeModelStatus: Sendable, Equatable {
     public static func load(_ load: SpeechModelLoad) -> HomeModelStatus {
         switch load {
         case .loading:
-            let subtitle =
-                load.showsEstimate ? load.detail : "Loading the speech model, usually a few seconds"
+            guard let estimate = load.estimate else {
+                return HomeModelStatus(
+                    title: "Getting ready…", subtitle: "Loading the speech model", tone: .dictation,
+                    progress: .sliding, action: nil, accessibilityLabel: load.accessibilityLabel)
+            }
             return HomeModelStatus(
-                title: "Getting ready…", subtitle: subtitle, tone: .dictation, progress: .sliding,
-                action: nil, accessibilityLabel: load.accessibilityLabel)
+                title: estimate.heading, subtitle: afterRestart, tone: .dictation,
+                progress: .fraction(estimate.fraction), action: nil,
+                accessibilityLabel: "\(estimate.spokenHeading). \(afterRestart)")
         case .failed:
             return HomeModelStatus(
                 title: load.status, subtitle: "Nothing was lost. Try loading it again.",

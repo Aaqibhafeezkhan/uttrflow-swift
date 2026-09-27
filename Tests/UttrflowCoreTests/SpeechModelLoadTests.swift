@@ -72,7 +72,29 @@ struct SpeechModelLoadTests {
 
         #expect(!label.contains("…"))
         #expect(!label.contains("–"))
-        #expect(label.hasPrefix("Loading the speech model. "))
-        #expect(label.contains("about 2 to 3 minutes"))
+        #expect(label.hasPrefix("Loading the speech model, "))
+        #expect(label.contains("about 1 minute left"))
+        #expect(!SpeechModelLoad.loading(elapsed: .seconds(1)).accessibilityLabel.contains("minute"))
+    }
+
+    @Test("a load gives an estimate only once it has run past the silent first seconds")
+    func loadGivesTheEstimate() {
+        #expect(SpeechModelLoad.loading(elapsed: .seconds(4)).estimate == nil)
+        #expect(
+            SpeechModelLoad.loading(elapsed: .seconds(5)).estimate
+                == SpeechModelLoadEstimate(elapsed: .seconds(5)))
+        #expect(SpeechModelLoad.failed.estimate == nil)
+        #expect(SpeechModelLoad.missing.estimate == nil)
+    }
+
+    @Test("VoiceOver hears the minutes written out once the estimate shows")
+    func spokenLabel() {
+        let label = SpeechModelLoad.loading(elapsed: .seconds(90)).accessibilityLabel
+
+        #expect(
+            label
+                == "Loading the speech model, about 1 minute left. Dictation starts working as soon as it’s ready."
+        )
+        #expect(!label.contains("~"))
     }
 }

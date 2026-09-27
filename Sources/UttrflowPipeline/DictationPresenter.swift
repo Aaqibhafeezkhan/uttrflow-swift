@@ -25,8 +25,8 @@ public struct DockPresentation: Sendable, Equatable {
 public enum DockModelSetup: Sendable, Equatable {
     /// Downloading, at a share from 0 to 1.
     case downloading(Double)
-    /// On disk and loading into memory.
-    case loading
+    /// On disk and loading into memory, with the estimated share once the load has run long enough to have one.
+    case loading(Double?)
     /// The load ended without a model that can transcribe.
     case failed
     /// Not on disk.
@@ -215,12 +215,12 @@ public enum DictationPresenter {
     static func resting(_ load: SpeechModelLoad) -> DockPresentation {
         switch load {
         case .loading:
-            // The estimate stays in the words read aloud and under the pointer; the capsule says only this.
+            // A spinner for the first seconds, then a ring filled to the estimate beside the time left.
             DockPresentation(
-                symbolName: "hourglass", primaryLine: "Getting ready…",
-                secondaryLine: load.showsEstimate ? load.detail : nil,
+                symbolName: "hourglass", primaryLine: dockLine(for: load.estimate),
+                secondaryLine: load.estimate.flatMap { $0.isHolding ? nil : $0.shortTimeLeft },
                 showsWaveform: false, showsProgress: false, isRecording: false, action: nil,
-                accessibilityLabel: load.accessibilityLabel, setup: .loading)
+                accessibilityLabel: load.accessibilityLabel, setup: .loading(load.estimate?.fraction))
         case .failed:
             DockPresentation(
                 symbolName: "exclamationmark.triangle", primaryLine: load.line, secondaryLine: load.detail,
@@ -235,6 +235,12 @@ public enum DictationPresenter {
                 isRecording: false, action: .downloadSpeechModel,
                 accessibilityLabel: load.accessibilityLabel, setup: .missing)
         }
+    }
+
+    /// "Getting ready…" before the estimate, "Getting ready" beside one, and "Almost ready" once it holds.
+    static func dockLine(for estimate: SpeechModelLoadEstimate?) -> String {
+        guard let estimate else { return "Getting ready…" }
+        return estimate.isHolding ? "Almost ready" : "Getting ready"
     }
 
     /// The words read aloud with the notice, withheld when the field they went into is secure.

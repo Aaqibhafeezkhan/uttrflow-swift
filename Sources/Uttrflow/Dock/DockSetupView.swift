@@ -22,12 +22,19 @@ struct DockSetupView: View {
                         .opacity(0.55)
                 }
             }
-        case .loading:
+        case .loading(let estimate):
             capsule {
-                DockSetupSpinner()
+                if let estimate {
+                    DockSetupRing(fraction: estimate)
+                } else {
+                    DockSetupSpinner()
+                }
                 Text(presentation.primaryLine ?? "")
+                if let left = presentation.secondaryLine {
+                    Text(left).opacity(0.55)
+                }
             }
-            .help(DockView.hoverText(for: presentation, primaryLine: presentation.primaryLine ?? ""))
+            .help(presentation.accessibilityLabel)
         case .failed:
             warning(accent: .dockSetupWarning, badgeOpacity: 0.2, width: DockSetupMetrics.failedWidth)
         case .missing:
@@ -81,11 +88,12 @@ struct DockSetupView: View {
     }
 }
 
-/// The download's ring, filled clockwise from the top to the share done.
+/// The ring filled clockwise from the top to the share done, easing between ticks unless motion is held still.
 private struct DockSetupRing: View {
     let fraction: Double
 
     var body: some View {
+        let motion = MotionBudgetObserver.shared.budget
         ZStack {
             Circle().stroke(Color.dockSetupTrack, lineWidth: DockSetupMetrics.ringLine)
             Circle()
@@ -95,6 +103,7 @@ private struct DockSetupRing: View {
                     style: StrokeStyle(lineWidth: DockSetupMetrics.ringLine, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
+                .animation(motion.workingBarsMove ? .linear(duration: 1) : nil, value: fraction)
         }
         .frame(width: DockSetupMetrics.ringDiameter, height: DockSetupMetrics.ringDiameter)
         .frame(width: DockSetupMetrics.ringBox, height: DockSetupMetrics.ringBox)

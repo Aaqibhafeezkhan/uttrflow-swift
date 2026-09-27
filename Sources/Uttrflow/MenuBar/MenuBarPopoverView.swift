@@ -150,7 +150,11 @@ private struct MenuBarProgressBar: View {
                 Capsule().fill(MenuBarColour.track)
                 switch progress {
                 case .fraction(let fraction):
+                    // Eases between ticks, and only steps under Reduce Motion.
                     Capsule().fill(MenuBarColour.progress).frame(width: width * fraction)
+                        .animation(
+                            MotionBudget.current().workingBarsMove ? .linear(duration: 1) : nil,
+                            value: fraction)
                 case .indeterminate:
                     Capsule().fill(MenuBarColour.progress)
                         .frame(width: width * 0.3)

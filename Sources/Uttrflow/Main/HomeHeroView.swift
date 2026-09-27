@@ -186,7 +186,7 @@ struct HomeModelStatusView: View {
     }
 }
 
-/// The thin bar under the status: filled to the share downloaded, or a segment sliding across while the model loads.
+/// The thin bar under the status: filled to a share, or a segment sliding across while nothing measures the wait.
 struct HomeModelBar: View {
     let progress: HomeModelProgress
 
@@ -205,9 +205,13 @@ struct HomeModelBar: View {
             Capsule().fill(PagePalette.ringTrack)
             switch progress {
             case .fraction(let fraction):
+                // Eases between ticks, and only steps under Reduce Motion.
                 Capsule()
                     .fill(Self.fill)
                     .frame(width: Self.width * fraction)
+                    .animation(
+                        MotionBudgetObserver.shared.budget.workingBarsMove ? .linear(duration: 1) : nil,
+                        value: fraction)
             case .sliding:
                 let motion = MotionBudgetObserver.shared.budget
                 TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !motion.workingBarsMove)) {

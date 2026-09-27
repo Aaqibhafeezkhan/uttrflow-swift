@@ -70,6 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var speechReadiness: SpeechModelReadiness = .notInstalled
     /// When the load under way began, so the estimate is said only once a load has run long enough to need it.
     private var speechLoadStarted: ContinuousClock.Instant?
+    /// Redraws the load's estimate once a second while a load runs, and is gone once it ends.
+    private var speechLoadTicker: Task<Void, Never>?
     /// The recogniser the pipeline transcribes with, which Diagnostics names rather than the setting.
     private var speechInUse: SpeechEngineKind?
 
@@ -396,11 +398,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         speechReadiness = .loading
         speechLoadStarted = .now
         refreshSpeechModelSurfaces()
-        // One redraw when the estimate is due, so a load that is still going starts giving the minutes.
-        Task { [weak self] in
+        // Silent through the first seconds a warm load needs, then a redraw a second until the load ends.
+        speechLoadTicker?.cancel()
+        speechLoadTicker = Task { [weak self] in
             try? await Task.sleep(for: SpeechModelLoad.estimateAfter)
-            guard let self, speechReadiness == .loading else { return }
-            refreshSpeechModelSurfaces()
+            while !Task.isCancelled {
+                guard let self, speechReadiness == .loading else { return }
+                refreshSpeechModelSurfaces()
+                try? await Task.sleep(for: SpeechModelLoadEstimate.redrawInterval)
+            }
         }
         Task { [weak self] in
             guard let pipeline = self?.pipeline else { return }
@@ -410,6 +416,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let isReady = await pipeline.isReady
             speechReadiness =
                 isReady ? .ready : modelStore.isInstalled(.default) ? .loadFailed : .notInstalled
+            speechLoadTicker?.cancel()
+            speechLoadTicker = nil
             refreshSpeechModelSurfaces()
             // The load ended, one way or another; an automatic update check may now start.
             updates.modelLoadingSettled()
@@ -1720,6 +1728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             activity: activity,
             failure: failure,
             speechModel: speechReadiness,
+            speechLoadElapsed: speechLoadStarted.map { $0.duration(to: .now) } ?? .zero,
             recordingAdvice: recordingAdvice,
             recents: recents.previews.map {
                 MenuBarRecent(title: $0.title, fullText: $0.dictation.text)
