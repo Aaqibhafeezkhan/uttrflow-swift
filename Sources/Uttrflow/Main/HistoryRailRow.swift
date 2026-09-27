@@ -27,15 +27,29 @@ struct HistoryRailRow: View {
         .padding(.bottom, 8)
         .background(alignment: .topLeading) { line }
         .contextMenu {
-            ForEach(row.more) { action in
-                Button(action.title, role: action.isDestructive ? .destructive : nil) {
-                    onIntent(action.intent)
-                }
+            ForEach(offered) { menuItem($0) }
+            if !offered.isEmpty && !row.more.isEmpty { Divider() }
+            ForEach(row.more) { menuItem($0) }
+        }
+        .rowActions(offered + row.more, onIntent: onIntent)
+    }
+
+    /// What the row's buttons do, offered again in its context menu and to VoiceOver.
+    private var offered: [MainAction] {
+        [row.recording?.play, row.recording?.retry].compactMap(\.self) + row.actions
+    }
+
+    /// One context menu item, its symbol beside it and red when it deletes.
+    private func menuItem(_ action: MainAction) -> some View {
+        Button(role: action.isDestructive ? .destructive : nil) {
+            onIntent(action.intent)
+        } label: {
+            if let symbol = action.symbolName {
+                Label(action.title, systemImage: symbol)
+            } else {
+                Text(action.title)
             }
         }
-        .rowActions(
-            [row.recording?.play, row.recording?.retry].compactMap(\.self) + row.actions + row.more,
-            onIntent: onIntent)
     }
 
     /// This row's stretch of the line, teal fading to faint across the day.
