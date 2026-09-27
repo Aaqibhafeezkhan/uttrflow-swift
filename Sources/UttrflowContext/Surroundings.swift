@@ -65,6 +65,9 @@ public struct Surroundings: Sendable, Equatable {
         "AXValueIndicator", "AXSplitter", "AXListMarker",
     ]
 
+    /// The roles that hold a web page, beyond which a browser's own tab strip, toolbar and infobars sit.
+    static let pageRoles: Set<String> = ["AXWebArea"]
+
     /// Collects the text around the focused element, nearest first, within the budget and the caps.
     public static func collect<Tree: ElementTree>(
         around focused: Tree.Element, in tree: Tree, windowTitle: String?, windowFrame: CGRect? = nil,
@@ -76,8 +79,10 @@ public struct Surroundings: Sendable, Equatable {
         var levels: [[String]] = []
         var child = focused
         var climbed = 0
-        // Each ancestor's other children are one ring further out, so the message list beside a compose box comes first.
-        while climbed < maximumAncestors, !walk.isExhausted, let parent = tree.parent(of: child) {
+        // Each ancestor's other children are one ring further out, so the message list beside a compose box comes first; a page is never left.
+        while climbed < maximumAncestors, !walk.isExhausted, !pageRoles.contains(tree.role(of: child) ?? ""),
+            let parent = tree.parent(of: child)
+        {
             climbed += 1
             let siblings = tree.children(of: parent)
             let position = siblings.firstIndex(of: child) ?? siblings.count

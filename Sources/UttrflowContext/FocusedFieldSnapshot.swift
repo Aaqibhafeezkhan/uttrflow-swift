@@ -48,7 +48,7 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
     public let readMicroseconds: Int
     /// The title of the window holding the field, which names the conversation, the note or the thread the field belongs to.
     public let windowTitle: String?
-    /// The line the caret is on, up to the caret, less the shell prompt a terminal reports in front of it; read once, when the snapshot is taken.
+    /// The line the caret is on up to the caret, from a sentence start in prose too long to complete whole, less a terminal's shell prompt.
     public let currentLine: String
     /// Whether the caret's line ran past `lineReadLimit`, so `currentLine` is only its last stretch and too long to complete.
     public let isLineCut: Bool
@@ -97,7 +97,9 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
         self.markedText = markedText
         self.readMicroseconds = readMicroseconds
         self.windowTitle = windowTitle
-        let line = Self.caretLine(of: value, at: selection, in: bundleIdentifier, windowTitle: windowTitle)
+        let prose = role == Self.proseRole && !TerminalApplications.contains(bundleIdentifier)
+        let line = Self.caretLine(
+            of: value, at: selection, in: bundleIdentifier, prose: prose, windowTitle: windowTitle)
         self.currentLine = line.text
         self.isLineCut = line.isCut
     }
@@ -129,8 +131,11 @@ extension FocusedFieldSnapshot {
             && FullScreenProgram.isNamed(inWindowTitle: windowTitle)
     }
 
-    /// The line capture may learn, which is nothing when the line was too long to read whole.
-    public var learnableLine: String { isLineCut ? "" : currentLine }
+    /// The line capture may learn, which is nothing when the line was too long to read whole or text follows the caret on it.
+    public var learnableLine: String { isLineCut || hasTextAfterCaret ? "" : currentLine }
+
+    /// Whether the field shows text after the caret on its line, so the line up to the caret is a cut, not a finished value.
+    public var hasTextAfterCaret: Bool { rowAhead != nil && !caretAtLineEnd }
 
     /// How many characters back from the caret its line is read; a prompt and a line to complete both fit well inside it.
     public static let lineReadLimit = ShellPrompt.searchLimit + SuggestionSession.maximumTypedLength + 1
@@ -140,14 +145,15 @@ extension FocusedFieldSnapshot {
 
     /// The caret's line as `currentLine` holds it, and whether the read limit cut it.
     private static func caretLine(
-        of value: String?, at selection: NSRange?, in bundleIdentifier: String, windowTitle: String?
+        of value: String?, at selection: NSRange?, in bundleIdentifier: String, prose: Bool,
+        windowTitle: String?
     ) -> (text: String, isCut: Bool) {
         guard let value else { return ("", false) }
         let isTerminal = TerminalApplications.contains(bundleIdentifier)
         // A full-screen program's line is not typed at the shell, so nothing of it is completed or learned.
         if isTerminal, FullScreenProgram.isNamed(inWindowTitle: windowTitle) { return ("", false) }
         let caret = index(in: value, atUTF16Offset: selection?.location ?? value.utf16.count)
-        let start = lineStart(in: value, before: caret)
+        let start = lineStart(in: value, before: caret, prose: prose)
         let line = String(value[start.index..<caret])
         // A cut line is kept whole, so its length alone refuses it.
         guard !start.isCut else { return (line, true) }
@@ -172,11 +178,63 @@ extension FocusedFieldSnapshot {
         return (index, false)
     }
 
+    /// Where the line a suggestion continues begins: in prose too long to complete whole, the earliest sentence within reach of the caret.
+    static func lineStart(
+        in value: String, before caret: String.Index, prose: Bool
+    ) -> (index: String.Index, isCut: Bool) {
+        let start = lineStart(in: value, before: caret)
+        guard prose,
+            start.isCut || value.distance(from: start.index, to: caret) > SuggestionSession.maximumTypedLength
+        else { return start }
+        return sentenceStart(in: value, after: start.index, before: caret).map { ($0, false) } ?? start
+    }
+
+    /// The earliest sentence start no more than `maximumTypedLength` characters before the caret, with something typed after it.
+    static func sentenceStart(
+        in value: String, after lineStart: String.Index, before caret: String.Index
+    ) -> String.Index? {
+        var index = caret
+        var read = 0
+        var found: String.Index?
+        defer { tally?.record(read) }
+        while index > lineStart, read < SuggestionSession.maximumTypedLength {
+            let before = value.index(before: index)
+            read += 1
+            if index < caret, value[before].isWhitespace, !value[index].isWhitespace,
+                endsASentence(value, at: before, after: lineStart)
+            {
+                found = index
+            }
+            index = before
+        }
+        return found
+    }
+
+    /// The marks that end a sentence, and the quotes and brackets that may close one after its mark.
+    private static let sentenceEnds: Set<Character> = [".", "?", "!"]
+    private static let sentenceClosers: Set<Character> = ["\"", "'", ")", "”", "’", "]"]
+
+    /// Whether the whitespace at `space` follows a sentence's end mark, spaces, closing quotes and brackets stepped over.
+    private static func endsASentence(
+        _ value: String, at space: String.Index, after lineStart: String.Index
+    ) -> Bool {
+        var index = space
+        while index > lineStart {
+            index = value.index(before: index)
+            let character = value[index]
+            if sentenceClosers.contains(character) || character.isWhitespace { continue }
+            // An ellipsis trails off inside a sentence rather than ending it.
+            guard sentenceEnds.contains(character) else { return false }
+            return !(character == "." && index > lineStart && value[value.index(before: index)] == ".")
+        }
+        return false
+    }
+
     /// The text before the caret's line, at most this long, which is what the line is a continuation of; nothing when the line is too long to read whole.
     public func preceding(maxLength: Int) -> String? {
         guard let value else { return nil }
         let caret = Self.index(in: value, atUTF16Offset: selection?.location ?? value.utf16.count)
-        let start = Self.lineStart(in: value, before: caret)
+        let start = Self.lineStart(in: value, before: caret, prose: isProse)
         guard !start.isCut, start.index > value.startIndex else { return nil }
         var earlier = value[..<value.index(before: start.index)].suffix(maxLength)
         while let last = earlier.last, last.isWhitespace { earlier.removeLast() }

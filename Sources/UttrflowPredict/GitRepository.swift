@@ -132,18 +132,29 @@ struct GitRepository: Sendable {
         Self.isRefName(name) && has("refs/heads/\(name)")
     }
 
-    /// Whether any remote has a branch of this name, which `checkout` and `switch` turn into a local one.
+    /// Whether exactly one remote has a branch of this name, which is when `checkout` and `switch` turn it into a local one.
     func hasRemoteBranch(named name: String) -> Bool {
-        guard Self.isRefName(name) else { return false }
+        remotes(holdingBranch: name)?.count == 1
+    }
+
+    /// The remotes with a branch of this name, loose or packed, each counted once; absent when `packed-refs` cannot be read whole.
+    func remotes(holdingBranch name: String) -> Set<String>? {
+        guard Self.isRefName(name) else { return [] }
+        guard let packed = packedRefs else { return nil }
+        var holding: Set<String> = []
         let remotes = TerminalPath.joined(commonDirectory, "refs/remotes")
-        for remote in files.names(inDirectory: remotes, limit: Self.remoteLimit) ?? []
-        where has("refs/remotes/\(remote)/\(name)") {
-            return true
+        for remote in files.names(inDirectory: remotes, limit: Self.remoteLimit) ?? [] {
+            let ref = TerminalPath.joined(commonDirectory, "refs/remotes/\(remote)/\(name)")
+            if case .file = files.kind(atPath: ref) { holding.insert(remote) }
         }
-        return packedRefs?.contains { ref in
-            guard ref.hasPrefix("refs/remotes/") else { return false }
-            return ref.dropFirst("refs/remotes/".count).drop { $0 != "/" }.dropFirst() == name
-        } ?? false
+        for ref in packed where ref.hasPrefix("refs/remotes/") {
+            let rest = ref.dropFirst("refs/remotes/".count)
+            guard let slash = rest.firstIndex(of: "/"), rest[rest.index(after: slash)...] == name else {
+                continue
+            }
+            holding.insert(String(rest[..<slash]))
+        }
+        return holding
     }
 
     /// Whether a name is anything `checkout` could take as a commit: `HEAD` and its relatives, a branch, a tag, a remote's branch or a loose object's id.
