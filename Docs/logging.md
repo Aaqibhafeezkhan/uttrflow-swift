@@ -38,6 +38,7 @@ typed line, and `SuggestionLogTests` checks each one against invented text; `TUR
 | `VERIFY` | `typedChars`, candidates in and out, elapsed time, `firstChars` |
 | `ACCEPT` | the completion's `chars`, `typedChars`, the insertion route |
 | `CONTEXT` | the lengths of the window title, the surroundings and the preceding text, and how many recent lines |
+| `STALL` | the step the turn left behind was waiting on, and the bundle identifier of the application it read |
 
 A run is followed by these sizes and by the order of the lines, which is enough for
 `Scripts/e2e_predict.sh`: it types text it chose, so it knows the length to expect.
