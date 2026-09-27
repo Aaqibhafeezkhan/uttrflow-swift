@@ -325,10 +325,10 @@ struct CopiedRunTests {
 struct FirstSentenceTests {
     @Test("A reply that runs into a second sentence is ended at the first")
     func aReplyEndsAtItsFirstSentence() {
-        let raw = "ok sounds good, see you at 5. Let me know if anything changes and I will update the doc."
+        let raw = "ok sounds good, see you at 3. Let me know if anything changes and I will update the doc."
         #expect(
             CompletionText.finished([raw], typed: "ok sounds g", in: deckChat) == [
-                "ok sounds good, see you at 5."
+                "ok sounds good, see you at 3."
             ])
         #expect(CompletionText.firstSentence(of: "sure! on my way", typed: "su") == "sure!")
         #expect(CompletionText.firstSentence(of: "is it done?? I need it", typed: "is") == "is it done??")
