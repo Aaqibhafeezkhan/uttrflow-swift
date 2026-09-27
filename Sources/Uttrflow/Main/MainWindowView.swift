@@ -91,7 +91,7 @@ struct MainWindowView: View {
     }
 
     /// Whether the page draws its own title, and so its own margins.
-    private var drawsOwnHeader: Bool { [.home, .insights].contains(model.page) }
+    private var drawsOwnHeader: Bool { [.home, .history, .insights].contains(model.page) }
 
     /// Whether the page draws the redesign's title bar and margins.
     private var isRedesigned: Bool { [.dictionary, .snippets].contains(model.page) }
@@ -109,10 +109,9 @@ struct MainWindowView: View {
         case .dictation:
             DictationPageView(presentation: model.content.dictation, onIntent: onIntent)
         case .history:
-            ScrollView {
-                HistoryPageView(presentation: model.content.history, onIntent: onIntent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            HistoryPageView(
+                presentation: model.content.history, chrome: model.chrome, query: $model.searchQuery,
+                searchFocusRequest: model.searchFocusRequest, onIntent: onIntent, onSearch: onSearch)
         case .dictionary:
             DictionaryPageView(
                 presentation: model.content.dictionary, draft: reporting($model.wordDraft),

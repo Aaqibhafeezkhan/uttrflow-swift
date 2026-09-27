@@ -4,6 +4,7 @@ import AppKit
 import UttrflowAccount
 import UttrflowCore
 import UttrflowPermissions
+import UttrflowPipeline
 import UttrflowSettings
 import UttrflowSpeech
 import UttrflowUX
@@ -80,8 +81,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     var isRequired: Bool { flow.isRequired }
 
     /// Puts the window on screen and brings the app forward; a first run is the one moment that is right.
-    func present(skippingWelcome: Bool = false, askingToSignIn: Bool = false) {
-        model.skipsWelcome = skippingWelcome
+    func present(askingToSignIn: Bool = false) {
         model.asksToSignIn = askingToSignIn
         let window = window ?? makeWindow()
         self.window = window
@@ -102,6 +102,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
+        // Dark in every appearance, so the window's own buttons sit on the aurora the way it is drawn.
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = NSColor(rgb: BrandPalette.Onboarding.windowGround)
         window.delegate = self
         let hosting = NSHostingView(rootView: OnboardingView(model: model))
         // One fixed size, so a long page cannot stretch the window under the user mid-flow.
@@ -113,6 +116,22 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private func close() {
         window?.close()
         window = nil
+    }
+
+    /// Shows a dictation on the last page, where the first try fills the page's own field.
+    func dictationChanged(to state: DictationState) {
+        guard let trial = Self.trial(for: state) else { return }
+        model.tried(trial)
+    }
+
+    /// What a dictation's state means for the first try, or `nil` for a state that changes nothing.
+    nonisolated static func trial(for state: DictationState) -> OnboardingTrial? {
+        switch state {
+        case .recording: .listening
+        case .inserted(let outcome): .heard(outcome.text)
+        case .failed(let failure): .heard(failure.transcript ?? "")
+        case .idle, .transcribing, .tidying, .inserting: nil
+        }
     }
 
     /// Re-reads the permissions, since macOS says nothing when one is granted in System Settings.

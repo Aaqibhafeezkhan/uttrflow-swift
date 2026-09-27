@@ -1,5 +1,6 @@
 // The History page: kept dictations grouped by day, searched, and cut to the retention promise.
 public import Foundation
+public import UttrflowCore
 public import UttrflowHistory
 public import UttrflowSettings
 private import Synchronization
@@ -24,23 +25,73 @@ public struct HistoryApplication: Sendable, Equatable {
     }
 }
 
-/// One dictation, ready to draw.
+/// A recording whose words were lost, as its row draws it: the pill to hear it and the way to retry.
+public struct HistoryRecording: Sendable, Equatable {
+    /// How long it runs, on a clock: "0:06".
+    public let duration: String
+    /// "Couldn’t turn this into text", or "Transcribing…" while a retry runs.
+    public let message: String
+    /// Plays the recording, or stops it while it is playing.
+    public let play: MainAction
+    /// Whether it is playing now, so the button shows stop.
+    public let isPlaying: Bool
+    /// Runs it through transcription again; absent while that is already happening.
+    public let retry: MainAction?
+
+    /// Builds the recording's parts.
+    public init(
+        duration: String, message: String, play: MainAction, isPlaying: Bool, retry: MainAction?
+    ) {
+        self.duration = duration
+        self.message = message
+        self.play = play
+        self.isPlaying = isPlaying
+        self.retry = retry
+    }
+}
+
+/// One dictation, or one recording still owed its words, ready to draw.
 public struct HistoryRow: Sendable, Equatable, Identifiable {
-    /// The dictation's identity.
+    /// The dictation's identity, or the recording's.
     public let id: UUID
     /// Absent when nothing was known about where the text went, rather than labelled "Unknown".
     public let application: HistoryApplication?
     /// How long ago, in words: "2 minutes ago".
     public let when: String
-    /// What was said.
+    /// What was said; empty for a recording, which has no words yet.
     public let text: String
+    /// The time on the rail, on the 24-hour clock: "10:41".
+    public let time: String
+    /// "0:09 · 23 words", or just the words when nothing timed it.
+    public let length: String
+    /// "2 changes" when the clean-up changed anything; absent otherwise.
+    public let tag: String?
+    /// Whether the user flagged it as wrong.
+    public let isFlagged: Bool
+    /// The buttons shown while the row is pointed at: copy, copy to paste elsewhere, flag.
+    public let actions: [MainAction]
+    /// What the row's context menu offers.
+    public let more: [MainAction]
+    /// Set on a recording whose words were lost, which draws in place of the text.
+    public let recording: HistoryRecording?
 
-    /// Builds a row from its parts.
-    public init(id: UUID, application: HistoryApplication?, when: String, text: String) {
+    /// Builds a row from its parts; everything after the text defaults to a bare dictation.
+    public init(
+        id: UUID, application: HistoryApplication?, when: String, text: String,
+        time: String = "", length: String = "", tag: String? = nil, isFlagged: Bool = false,
+        actions: [MainAction] = [], more: [MainAction] = [], recording: HistoryRecording? = nil
+    ) {
         self.id = id
         self.application = application
         self.when = when
         self.text = text
+        self.time = time
+        self.length = length
+        self.tag = tag
+        self.isFlagged = isFlagged
+        self.actions = actions
+        self.more = more
+        self.recording = recording
     }
 }
 
@@ -50,14 +101,17 @@ public struct HistoryDay: Sendable, Equatable, Identifiable {
     public let title: String
     /// The day's dictations, in the store's order.
     public let rows: [HistoryRow]
+    /// "4 dictations · 1,284 words", beside the title.
+    public let summary: String
 
     /// The title, which is unique on the page.
     public var id: String { title }
 
-    /// Builds a day.
-    public init(title: String, rows: [HistoryRow]) {
+    /// Builds a day; the summary defaults to none.
+    public init(title: String, rows: [HistoryRow], summary: String = "") {
         self.title = title
         self.rows = rows
+        self.summary = summary
     }
 }
 
@@ -67,11 +121,14 @@ public struct HistoryRetentionNotice: Sendable, Equatable {
     public let sentence: String
     /// The way to the privacy settings.
     public let link: MainAction
+    /// The promise cut to a phrase for the caption: "kept for 30 days".
+    public let phrase: String
 
-    /// Builds the notice.
-    public init(sentence: String, link: MainAction) {
+    /// Builds the notice; the phrase defaults to none.
+    public init(sentence: String, link: MainAction, phrase: String = "") {
         self.sentence = sentence
         self.link = link
+        self.phrase = phrase
     }
 }
 
@@ -85,6 +142,12 @@ public struct HistorySnapshot: Sendable, Equatable {
     public let settings: Settings
     /// Whether captured audio is written to disk, read from the app so the notice cannot claim otherwise.
     public let keepsRecordings: Bool
+    /// Recordings whose words were lost, newest first, each waiting for a retry.
+    public let recordings: [KeptRecording]
+    /// The recording going through transcription again right now, if one is.
+    public let retrying: UUID?
+    /// The recording playing right now, if one is.
+    public let playing: UUID?
     /// The clock the page is drawn against.
     public let now: Date
 
@@ -94,12 +157,18 @@ public struct HistorySnapshot: Sendable, Equatable {
         query: String = "",
         settings: Settings = .default,
         keepsRecordings: Bool = false,
+        recordings: [KeptRecording] = [],
+        retrying: UUID? = nil,
+        playing: UUID? = nil,
         now: Date
     ) {
         self.entries = entries
         self.query = query
         self.settings = settings
         self.keepsRecordings = keepsRecordings
+        self.recordings = recordings
+        self.retrying = retrying
+        self.playing = playing
         self.now = now
     }
 }
@@ -114,27 +183,31 @@ public struct HistoryPresentation: Sendable, Equatable {
     public let retentionNotice: HistoryRetentionNotice
     /// Whether the search field is worth showing. Hidden when there is nothing to search.
     public let showsSearch: Bool
+    /// The four stat tiles across the top, the same figures home shows; empty when nothing is kept.
+    public let tiles: [HomeStatTile]
 
-    /// Builds the page from its parts.
+    /// Builds the page from its parts; no tiles unless given.
     public init(
         days: [HistoryDay],
         emptyState: MainEmptyState?,
         retentionNotice: HistoryRetentionNotice,
-        showsSearch: Bool
+        showsSearch: Bool,
+        tiles: [HomeStatTile] = []
     ) {
         self.days = days
         self.emptyState = emptyState
         self.retentionNotice = retentionNotice
         self.showsSearch = showsSearch
+        self.tiles = tiles
     }
 }
 
 /// Turns the stored dictations into the history page, applying retention rather than trusting the list.
 public enum HistoryPresenter {
     /// What the empty search field says.
-    public static let searchPlaceholder = "Search"
+    public static let searchPlaceholder = "Search everything you said"
     /// The sentence under the page's name: everything is here, and none of it left the Mac.
-    public static let caption = "Every dictation, kept on this Mac."
+    public static let caption = "Every dictation, kept on this Mac"
 
     /// Draws the History page from a snapshot.
     public static func page(
@@ -145,14 +218,22 @@ public enum HistoryPresenter {
         let kept = retained(
             snapshot.entries, days: snapshot.settings.transcriptRetentionDays, now: snapshot.now)
         let matching = matches(kept, query: snapshot.query, locale: locale)
-        let days = group(matching, snapshot: snapshot, calendar: calendar, locale: locale)
+        // Recordings have no words to match, so a search leaves them out.
+        let waiting = snapshot.query.isEmpty ? snapshot.recordings : []
+        let days = group(
+            matching, recordings: waiting, snapshot: snapshot, calendar: calendar, locale: locale)
+        let today = todayAndEarlier(in: kept, now: snapshot.now, calendar: calendar).today
 
         return HistoryPresentation(
             days: days,
             emptyState: days.isEmpty
                 ? emptyState(for: snapshot) : nil,
             retentionNotice: notice(for: snapshot),
-            showsSearch: !kept.isEmpty
+            showsSearch: !kept.isEmpty,
+            tiles: kept.isEmpty
+                ? []
+                : HomeDashboard.tiles(
+                    kept: kept, today: today, now: snapshot.now, calendar: calendar, locale: locale)
         )
     }
 
@@ -178,7 +259,8 @@ public enum HistoryPresenter {
 
         return HistoryRetentionNotice(
             sentence: sentence,
-            link: MainAction(title: "Change in Privacy settings", intent: .go(.settings(.privacy)))
+            link: MainAction(title: "change in Settings › Privacy", intent: .go(.settings(.privacy))),
+            phrase: "kept for \(MainFormatting.count(text, "day", "days"))"
         )
     }
 
@@ -202,24 +284,73 @@ public enum HistoryPresenter {
 
     /// Groups by day in the store's order, merging days as met, so a moved clock cannot make two "Today"s.
     static func group(
-        _ entries: [HistoryEntry], snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
+        _ entries: [HistoryEntry], recordings: [KeptRecording] = [], snapshot: HistorySnapshot,
+        calendar: Calendar, locale: Locale
     ) -> [HistoryDay] {
-        var grouped: [(day: Date, rows: [HistoryRow])] = []
+        var grouped: [(day: Date, rows: [HistoryRow], words: Int, dictations: Int)] = []
 
-        for entry in entries {
-            let day = calendar.startOfDay(for: entry.when)
-            let row = row(for: entry, relativeTo: snapshot.now, locale: locale)
+        for item in interleaved(entries, recordings) {
+            let day = calendar.startOfDay(for: item.when)
+            let row = row(for: item, snapshot: snapshot, calendar: calendar, locale: locale)
+            let words = item.entry.map { MainFormatting.words(in: $0.text) } ?? 0
             if let index = grouped.firstIndex(where: { $0.day == day }) {
                 grouped[index].rows.append(row)
+                grouped[index].words += words
+                grouped[index].dictations += 1
             } else {
-                grouped.append((day, [row]))
+                grouped.append((day, [row], words, 1))
             }
         }
 
-        return grouped.map { day, rows in
+        return grouped.map { day, rows, words, dictations in
             HistoryDay(
                 title: title(for: day, snapshot: snapshot, calendar: calendar, locale: locale),
-                rows: rows)
+                rows: rows,
+                summary: """
+                    \(MainFormatting.count(dictations, "dictation", "dictations")) · \
+                    \(words == 1 ? "1 word" : "\(words.formatted(.number.locale(locale))) words")
+                    """)
+        }
+    }
+
+    /// A dictation or a recording, whichever a row is drawn from.
+    enum Item {
+        case entry(HistoryEntry)
+        case recording(KeptRecording)
+
+        /// When it happened.
+        var when: Date {
+            switch self {
+            case .entry(let entry): entry.when
+            case .recording(let recording): recording.when
+            }
+        }
+
+        /// The dictation, when this is one.
+        var entry: HistoryEntry? {
+            if case .entry(let entry) = self { entry } else { nil }
+        }
+    }
+
+    /// The store's order kept, each recording placed before the first dictation older than it.
+    static func interleaved(_ entries: [HistoryEntry], _ recordings: [KeptRecording]) -> [Item] {
+        var items = entries.map(Item.entry)
+        for recording in recordings {
+            let index = items.firstIndex { $0.entry != nil && $0.when < recording.when } ?? items.count
+            items.insert(.recording(recording), at: index)
+        }
+        return items
+    }
+
+    /// One dictation or recording as a row.
+    static func row(
+        for item: Item, snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
+    ) -> HistoryRow {
+        switch item {
+        case .entry(let entry):
+            row(for: entry, relativeTo: snapshot.now, calendar: calendar, locale: locale)
+        case .recording(let recording):
+            row(for: recording, snapshot: snapshot, calendar: calendar, locale: locale)
         }
     }
 
@@ -231,13 +362,77 @@ public enum HistoryPresenter {
             ?? day.formatted(.dateTime.day().month(.wide).locale(locale))
     }
 
-    /// One dictation as a row.
-    static func row(for entry: HistoryEntry, relativeTo now: Date, locale: Locale) -> HistoryRow {
-        HistoryRow(
+    /// One dictation as a row, with the buttons it offers when pointed at.
+    static func row(
+        for entry: HistoryEntry, relativeTo now: Date,
+        calendar: Calendar = .autoupdatingCurrent, locale: Locale
+    ) -> HistoryRow {
+        let (tag, tone) = HomeDashboard.outcome(of: entry.changes)
+        return HistoryRow(
             id: entry.id,
             application: application(for: entry),
             when: when(entry.when, relativeTo: now, locale: locale),
-            text: entry.text)
+            text: entry.text,
+            time: HomeDashboard.time(entry.when, calendar: calendar, locale: locale),
+            length: length(of: entry),
+            // Only a change is worth a tag; "as dictated" is what every quiet row already says.
+            tag: tone == .changed ? tag : nil,
+            isFlagged: entry.isFlagged,
+            actions: [
+                MainAction(title: "Copy", symbolName: "doc.on.doc", intent: .copy(entry.text)),
+                // From the main window Uttrflow is in front, so the button says what it actually does. See `Docs/insertion.md`.
+                MainAction(
+                    title: "Copy to Paste Elsewhere", symbolName: "arrow.turn.down.left",
+                    intent: .copy(entry.text)),
+                MainAction(
+                    title: entry.isFlagged ? "Unflag" : "Flag",
+                    symbolName: entry.isFlagged ? "flag.fill" : "flag",
+                    intent: .flagDictation(entry.id)),
+            ],
+            more: [.delete(.forgetDictation(entry.id))])
+    }
+
+    /// A recording whose words were lost, as a row with the way to hear it and to retry it.
+    static func row(
+        for recording: KeptRecording, snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
+    ) -> HistoryRow {
+        let retrying = snapshot.retrying == recording.id
+        let playing = snapshot.playing == recording.id
+        return HistoryRow(
+            id: recording.id,
+            application: nil,
+            when: when(recording.when, relativeTo: snapshot.now, locale: locale),
+            text: "",
+            time: HomeDashboard.time(recording.when, calendar: calendar, locale: locale),
+            length: clock(recording.duration),
+            more: retrying ? [] : [.delete(.forgetRecording(recording.id))],
+            recording: HistoryRecording(
+                duration: clock(recording.duration),
+                message: retrying ? "Transcribing…" : "Couldn’t turn this into text",
+                play: MainAction(
+                    title: playing ? "Stop" : "Play Recording",
+                    symbolName: playing ? "stop.fill" : "play.fill",
+                    intent: .playRecording(recording.id)),
+                isPlaying: playing,
+                retry: retrying
+                    ? nil
+                    : MainAction(
+                        title: "Retry", symbolName: "arrow.clockwise",
+                        intent: .retryRecording(recording.id))))
+    }
+
+    /// "0:09 · 23 words"; the words stand alone when nothing timed the dictation.
+    static func length(of entry: HistoryEntry) -> String {
+        let words = MainFormatting.count(MainFormatting.words(in: entry.text), "word", "words")
+        guard let spoken = entry.spokenFor else { return words }
+        return "\(clock(spoken)) · \(words)"
+    }
+
+    /// A duration on a clock, minutes and two-digit seconds: "0:06", "12:40".
+    static func clock(_ duration: Duration) -> String {
+        let seconds = max(0, Int(duration.inSeconds.rounded()))
+        let remainder = seconds % 60
+        return "\(seconds / 60):\(remainder < 10 ? "0" : "")\(remainder)"
     }
 
     /// "2 minutes ago" against the snapshot's clock, not the real one, so the row agrees with retention.

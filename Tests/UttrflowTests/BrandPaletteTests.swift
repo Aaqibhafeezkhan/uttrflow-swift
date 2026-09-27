@@ -28,7 +28,8 @@ struct BrandPaletteTests {
         #expect(BrandPalette.Teal.ink.dark == BrandPalette.Teal.bright)
         #expect(BrandPalette.Teal.calloutWash.light == BrandPalette.Teal.wash)
         #expect(BrandPalette.Surface.control.dark == BrandPalette.Surface.raised)
-        #expect(BrandPalette.Surface.onboardingControl.dark == BrandPalette.Surface.raised)
+        #expect(BrandPalette.Onboarding.brandAurora == BrandPalette.Redesign.auroraStops)
+        #expect(BrandPalette.Onboarding.caret == BrandPalette.Teal.deep)
     }
 }
 
