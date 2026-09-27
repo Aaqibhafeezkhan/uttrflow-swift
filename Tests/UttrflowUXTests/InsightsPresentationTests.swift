@@ -153,17 +153,25 @@ struct InsightsCalendarShadeTests {
         #expect(!quiet.usesDeepInk)
     }
 
-    /// Past a 0.6 shade the page's white ink falls below the deep ink's contrast on the teal in dark.
-    @Test("the deep ink starts where the tile's shade passes 0.6")
+    /// Between the two inks' limits neither clears 4.5:1 in dark, so a tile steps over that band.
+    @Test("no tile is shaded between the page ink's ceiling and the deep ink's floor")
     func deepInk() {
         let day = { (fraction: Double) in
             InsightsCalendarDay(
                 date: HistoryFixture.now, number: "1", words: 1, fraction: fraction, isToday: false,
                 detail: "")
         }
-        #expect(!day(0.52).usesDeepInk)
-        #expect(day(0.53).usesDeepInk)
-        #expect(day(1).usesDeepInk)
+        let shades = (0...100).map { day(Double($0) / 100) }
+        #expect(
+            shades.allSatisfy {
+                $0.shade <= InsightsCalendarDay.inkCeiling || $0.shade >= InsightsCalendarDay.deepInkFloor
+            })
+        #expect(shades.allSatisfy { $0.usesDeepInk == ($0.shade >= InsightsCalendarDay.deepInkFloor) })
+        #expect(zip(shades, shades.dropFirst()).allSatisfy { $0.shade <= $1.shade })
+        #expect(day(0.42).shade == InsightsCalendarDay.inkCeiling)
+        #expect(day(0.6).shade == InsightsCalendarDay.deepInkFloor)
+        #expect(!day(0.42).usesDeepInk)
+        #expect(day(0.6).usesDeepInk)
     }
 
     @Test("a tile's share and a calendar's blanks are kept in range")

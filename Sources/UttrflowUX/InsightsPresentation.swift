@@ -68,10 +68,20 @@ public struct InsightsCalendarDay: Sendable, Equatable, Identifiable {
     public var id: Date { date }
     /// A day with nothing said, drawn as a bare tile.
     public var isSilent: Bool { words == 0 }
-    /// The teal's opacity: a floor so a quiet day still reads as spoken on, rising to full on the busiest.
-    public var shade: Double { isSilent ? 0 : 0.15 + 0.85 * fraction }
-    /// Whether the deep ink reads better than the page's ink on this tile; the two cross at 0.6 in dark.
-    public var usesDeepInk: Bool { shade > 0.6 }
+    /// The teal's opacity, from a floor to full, stepping over the band where no number ink reaches 4.5:1.
+    public var shade: Double {
+        if isSilent { return 0 }
+        let smooth = 0.15 + 0.85 * fraction
+        guard smooth > Self.inkCeiling, smooth < Self.deepInkFloor else { return smooth }
+        return smooth < (Self.inkCeiling + Self.deepInkFloor) / 2 ? Self.inkCeiling : Self.deepInkFloor
+    }
+    /// Whether the number is drawn in the deep ink, which is on every tile at or past ``deepInkFloor``.
+    public var usesDeepInk: Bool { shade >= Self.deepInkFloor }
+
+    /// The deepest shade the page's ink still clears 4.5:1 on in dark. See `Docs/redesign-tokens.md`.
+    public static let inkCeiling = 0.5
+    /// The palest shade the deep ink clears 4.5:1 on in dark.
+    public static let deepInkFloor = 0.72
 
     /// Builds a tile; the fraction is clamped to 0…1.
     public init(
@@ -89,7 +99,7 @@ public struct InsightsCalendarDay: Sendable, Equatable, Identifiable {
 /// The range laid out as weeks, first weekday on the left.
 public struct InsightsCalendar: Sendable, Equatable {
     /// The shades the legend steps through, from less to more.
-    public static let legend: [Double] = [0.15, 0.4, 0.65, 0.9]
+    public static let legend: [Double] = [0.15, 0.4, 0.72, 0.9]
 
     /// The months the range spans: "August – September".
     public let title: String
