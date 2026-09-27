@@ -674,13 +674,10 @@ struct DictationHistoryCacheTests {
         _ = await store.records(keeping: week)
         try await store.append(spoken("Next."), keeping: week)
         #expect(await store.cache.diskReads == 1)
+        // Lands a metadata-only change after the write, as the backup flag does a moment later.
+        #expect(setxattr(sandbox.file.path, "com.example.touched", "1", 1, 0, 0) == 0)
         _ = await store.records(keeping: week)
-        // The backup flag each write sets moves the file's change time a moment later, which can force this read.
-        await withKnownIssue(
-            "a store's own write is decoded again once its backup flag lands", isIntermittent: true
-        ) {
-            #expect(await store.cache.diskReads == 1)
-        }
+        #expect(await store.cache.diskReads == 1)
         #expect(await store.records(keeping: week).map(\.text) == ["Next.", "Seed."])
     }
 
