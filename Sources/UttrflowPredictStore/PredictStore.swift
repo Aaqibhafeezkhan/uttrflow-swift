@@ -401,6 +401,23 @@ public actor PredictStore: PredictionStore {
         try increment(.rejected, forText: text, in: surface)
     }
 
+    /// Takes back one acceptance the person undid: the use and the acceptance it added, and the line when that was all it held.
+    public func retractAcceptance(_ text: String, in surface: Surface) throws(PredictStoreError) {
+        let text = Spelling.canonical(text)
+        try database.transaction { () throws(PredictStoreError) in
+            guard let entry = try supplier(of: text, in: surface) else { return }
+            try database.run(
+                """
+                UPDATE entry SET count = count - 1, accepted = accepted - 1, self_sourced = self_sourced - 1
+                WHERE id = ? AND count > 0 AND accepted > 0 AND self_sourced > 0
+                """
+            ) { $0.bind(1, entry) }
+            try database.run("DELETE FROM entry WHERE id = ? AND count = 0 AND superseded_by IS NULL") {
+                $0.bind(1, entry)
+            }
+        }
+    }
+
     /// Marks an entry wrong in this folder and points at what replaces it, so it is never proposed here again.
     public func supersede(
         _ text: String, with replacement: String, in surface: Surface
