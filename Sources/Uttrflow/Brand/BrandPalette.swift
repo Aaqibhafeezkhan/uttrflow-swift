@@ -45,12 +45,8 @@ enum BrandPalette {
         static let wash: UInt32 = 0xEF_F8F7
         /// Ink on a teal fill.
         static let inkOnFill: UInt32 = 0x04_332F
-        /// Ink for the mark inside the dock's teal disc.
-        static let inkOnDisc: UInt32 = 0x04_100F
         /// The accent as a mark on a surface that follows the appearance.
         static let ink = BrandTone(dark: bright, light: 0x0E_6B64)
-        /// The waveform, deepened on a light desktop.
-        static let waveform = BrandTone(dark: 0x00_C3D0, light: 0x06_7A87)
         /// The callout ground behind secondary ink.
         static let calloutWash = BrandTone(dark: 0x10_1E1D, light: wash)
         /// The onboarding and settings rail, top to bottom.
@@ -157,5 +153,16 @@ enum BrandPalette {
         static let infoAccent = BrandTone(dark: 0x6B_B4F5, light: 0x1E_6FC4)
         /// The aurora gradient's stops, first to last, in both appearances.
         static let auroraStops: [UInt32] = [0x7A_3FD1, 0x4B_3FC0, 0x1F_8FB0, 0x2F_E0CF]
+        /// The floating button's glass over the system material: violet-black when dark, frosted white when light.
+        static let dockGlass = BrandLayer(
+            tone: BrandTone(dark: 0x10_0D1E, light: 0xFF_FFFF), darkOpacity: 0.72, lightOpacity: 0.9)
+        /// The hairline round the floating button's glass.
+        static let dockGlassEdge = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x10_1316), darkOpacity: 0.14, lightOpacity: 0.1)
+        /// The floating button's shadow, lighter on a light desktop.
+        static let dockShadow = BrandLayer(
+            tone: BrandTone(dark: 0x00_0000, light: 0x10_1316), darkOpacity: 0.5, lightOpacity: 0.22)
+        /// The listening meter: white on the dark glass, dictation teal on the light.
+        static let dockMeter = BrandTone(dark: textStrong.dark, light: dictationAccent.light)
     }
 }

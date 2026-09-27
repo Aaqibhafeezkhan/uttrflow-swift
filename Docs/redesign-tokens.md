@@ -24,8 +24,14 @@ translucent card film, hairline, sidebar island and secondary text of the dark a
 | `clipboardAccent` | `#FFB05C` | `#B5650F` |
 | `infoAccent` | `#6BB4F5` | `#1E6FC4` |
 | `auroraStops` | `#7A3FD1` `#4B3FC0` `#1F8FB0` `#2FE0CF` | same |
+| `dockGlass` | `#100D1E` at 72% | `#FFFFFF` at 90% |
+| `dockGlassEdge` | white at 14% | `#101316` at 10% |
+| `dockShadow` | black at 50% | `#101316` at 22% |
+| `dockMeter` | `#FFFFFF` | `#128077` |
 
 Text tones clear 4.5:1 on the page and on a card; accents clear 3:1 there, the bar for marks.
+The floating button's ink clears 4.5:1 on its glass and the meter 3:1, measured over the
+same dark and light desktops `Docs/app-dock.md` uses.
 `BrandPaletteTests` measures both.
 
 ## Typeface
