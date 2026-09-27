@@ -39,9 +39,13 @@ private final class BlockingPictureSource: ClipboardSource, @unchecked Sendable 
     func frontmostApplicationName() -> String? { nil }
 }
 
-/// Whether the semaphore is signalled in time, waited on synchronously so the test cannot hang.
-private func signalled(_ semaphore: DispatchSemaphore, within seconds: Double) -> Bool {
-    semaphore.wait(timeout: .now() + seconds) == .success
+/// Whether the semaphore is signalled in time, waited on a thread of its own so no cooperative thread is held.
+private func signalled(_ semaphore: DispatchSemaphore, within seconds: Double) async -> Bool {
+    await withCheckedContinuation { continuation in
+        Thread.detachNewThread {
+            continuation.resume(returning: semaphore.wait(timeout: .now() + seconds) == .success)
+        }
+    }
 }
 
 @Suite("Matching an announced picture", .serialized)
@@ -54,14 +58,14 @@ struct AnnouncedPictureReadTests {
         source.bumpChangeCount()
 
         let tick = Task { await watcher.newClip(at: Date()) }
-        #expect(signalled(source.entered, within: 30))
+        #expect(await signalled(source.entered, within: 30))
 
         let announced = DispatchSemaphore(value: 0)
         DispatchQueue.global().async {
             watcher.ignoreNextWrite(of: "pasted by Uttrflow")
             announced.signal()
         }
-        #expect(signalled(announced, within: 20), "the paste waited on the picture read")
+        #expect(await signalled(announced, within: 20), "the paste waited on the picture read")
 
         source.release()
         _ = await tick.value
