@@ -835,6 +835,20 @@ struct BorrowedFeedbackTests {
         #expect(found.first?.evidence?.accepted == 1)
     }
 
+    @Test("A line refused in another folder keeps its refusals until the person types it again by hand.")
+    func typingALineByHandForgivesItsRefusals() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        for _ in 0..<3 { try await store.record("git status --short", in: folderOne, at: moment) }
+        for _ in 0..<3 { try await store.recordRejected("git status --short", in: folderTwo) }
+        #expect(try await store.candidates(for: folderTwo, matching: "git s").first?.evidence?.rejected == 3)
+        try await store.record("git status --short", in: folderOne, selfSourced: true, at: moment)
+        #expect(try await store.candidates(for: folderTwo, matching: "git s").first?.evidence?.rejected == 3)
+        try await store.record("git status --short", in: folderTwo, at: moment)
+        #expect(try await store.candidates(for: folderTwo, matching: "git s").first?.evidence?.rejected == 0)
+        #expect(try await store.candidates(for: folderOne, matching: "git s").first?.evidence?.rejected == 0)
+    }
+
     @Test("A line known in both folders is counted once, against this folder's own entry.")
     func aLineInBothFoldersCountsOnce() async throws {
         let corpus = Corpus()

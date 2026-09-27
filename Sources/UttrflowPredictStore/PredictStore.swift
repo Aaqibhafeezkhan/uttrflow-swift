@@ -372,6 +372,8 @@ public actor PredictStore: PredictionStore {
                 $0.bind(4, Int64(selfSourced ? 1 : 0))
                 $0.bind(5, moment.timeIntervalSince1970)
             })
+        // Typing the line by hand takes back every refusal of it in this field, which is what brings a retired line back.
+        if !selfSourced { try forgiveRefusals(of: text, in: surface) }
         // This whole value retires the shorter fragments it grew out of, so only it is ever proposed.
         try supersedeFragments(surfaceIdentifier: id, of: text)
         if let previous, !previous.isEmpty {
@@ -542,6 +544,23 @@ public actor PredictStore: PredictionStore {
                 $0.bind(1, replacement)
                 $0.bind(2, id)
                 $0.bind(3, text)
+            })
+    }
+
+    /// Clears the refusals of one line in every folder of the field, since a line typed by hand is one the person wants.
+    private func forgiveRefusals(of text: String, in surface: Surface) throws(PredictStoreError) {
+        try database.run(
+            """
+            UPDATE entry SET rejected = 0
+            WHERE text = ? AND rejected > 0 AND surface_id IN (
+              SELECT id FROM surface WHERE bundle_id = ? AND role = ? AND locator = ?
+            )
+            """,
+            {
+                $0.bind(1, text)
+                $0.bind(2, surface.bundleIdentifier)
+                $0.bind(3, surface.role)
+                $0.bind(4, surface.locator ?? "")
             })
     }
 

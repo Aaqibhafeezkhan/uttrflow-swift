@@ -90,10 +90,13 @@ struct FrecencyTests {
         #expect(abs(lowest - Frecency.acceptanceFloor) < 1e-9)
     }
 
-    @Test("An always-refused candidate keeps exactly the floor's share of an unoffered one's score.")
+    @Test(
+        "An always-refused candidate not yet retired keeps exactly the floor's share of an unoffered one's score."
+    )
     func refusalScalesScoreByTheFloor() {
         let unoffered = Frecency.score(remembered(accepted: 0, rejected: 0), now: moment)
-        let refused = Frecency.score(remembered(accepted: 0, rejected: 8), now: moment)
+        let refused = Frecency.score(
+            remembered(accepted: 0, rejected: Frecency.retiringRefusals - 1), now: moment)
         #expect(abs(refused - unoffered * Frecency.acceptanceFloor) < 1e-9)
     }
 
@@ -104,7 +107,17 @@ struct FrecencyTests {
         let refused = Frecency.score(remembered(count: 4, rejected: 12), now: moment)
         let fresh = Frecency.score(remembered(count: 4), now: moment)
         #expect(refused < fresh)
-        #expect(refused > 0)
+        #expect(refused == 0)
+    }
+
+    @Test(
+        "A line refused enough times against its acceptances is retired, below the support floor, however often it was used.",
+        arguments: [(0, 3, true), (0, 2, false), (1, 6, true), (1, 5, false), (4, 14, false), (4, 15, true)])
+    func sustainedRefusalRetires(accepted: Int, rejected: Int, retired: Bool) {
+        let entry = remembered(count: 300, accepted: accepted, rejected: rejected)
+        let score = Frecency.score(entry, now: moment)
+        #expect((score == 0) == retired)
+        if !retired { #expect(score >= PredictionEngine.supportFloor) }
     }
 
     @Test("A fuzzy match is worth less than an exact one on the same evidence.")

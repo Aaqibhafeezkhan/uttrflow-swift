@@ -355,7 +355,7 @@ public struct SuggestionSession: Sendable, Equatable {
         }
     }
 
-    /// Applies one rung of the escape ladder and says what is left on screen.
+    /// Applies one rung of the escape ladder and says what is left on screen; it asks for quiet, so the store is not told the line was wrong.
     private mutating func dismiss(_ dismissal: Dismissal) -> SuggestionUpdate {
         generation += 1
         switch dismissal {
