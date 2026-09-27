@@ -19,7 +19,8 @@ struct SecretShapesOracleTests {
         "private_key", "access-key", "secret_key", "SECRET-KEYS", "auth_token", "client_secret",
         "clientsecret", "\u{212A}",
         "api_\u{212A}ey", "\u{301}", "é", "e\u{301}", "\"\u{301}", "'\u{301}", ";\u{301}", "\u{37E}",
-        "x", "a", "Z", "J", "y", "e", "0", "1", "9", "٣", "½", "4111", "1111 ", "abc123", "hunter2",
+        "x", "a", "Z", "J", "y", "e", "0", "1", "9", "٣", "½", "4111", "1111 ", "1111\u{A0}", "\u{2009}",
+        "\u{FF14}\u{FF11}", "\u{3000}", "abc123", "hunter2",
         "Qv7RkT2mXeL9pAz4", "\u{0}", "\u{FEFF}", "😀", "🇺🇸", "\u{200D}", "'s", "x.", "rgb(", "(", ")",
         "func ", "import ", "//", "select ", "  ", "#", "?", "{", "}", "return", "if(",
         "AAAAAAAAAAAAAAAAAAAAAAAA", "user", "pass", ":x@", "a1", "-----BEGIN", "\\", "$", "*", "-- ",
@@ -41,7 +42,9 @@ struct SecretShapesOracleTests {
         "var password: String", "pwd=\"\"", "token='a\nb'", "x.password=abc123",
         "\"privateKey\": \"MIIE\",", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "Qv7RkT2mXeL9pAz4NbHc8FwJdY3gS6uH", "4111 1111 1111 1111",
-        "4111111111111111", "5555-5555-5555-4444", "378282246310005", "6011 1111 1111 1117",
+        "4111111111111111", "5555-5555-5555-4444", "4111.1111.1111.1111",
+        "4111\u{A0}1111\u{A0}1111\u{A0}1111",
+        "\u{FF14}\u{FF11}\u{FF11}\u{FF11}1111\u{2009}1111 1111", "378282246310005", "6011 1111 1111 1117",
         "3530 1113 3330 0000", "4222 222 222 222", "4111 1111 1111 1112", "https://example.com/a b",
         "http://x", "rgb(1, 2, 3)", "hsla( 0 )", "oklch()", "color(display-p3 1 0 0)",
         "func greet() {}", "  // note", "\n\n  select * from t", "if (x) return", "import Foundation",
@@ -321,9 +324,10 @@ enum BacktrackingPatterns {
         }
     }
 
-    /// `CardNumberShape.matches` as it read before the runs: the pattern over the whole clip.
-    static func hasCardNumber(_ text: String) -> Bool {
-        text.matches(of: CardNumberShape.candidate).contains { match in
+    /// `CardNumberShape.matches` as it read before the runs: the pattern over the whole clip, in its printed form.
+    static func hasCardNumber(_ original: String) -> Bool {
+        let text = CardNumberShape.printedForm(of: original[...]) ?? original
+        return text.matches(of: CardNumberShape.candidate).contains { match in
             CardNumberShape.standsAlone(match.range, in: text)
                 && CardNumberShape.isCardNumber(match.output.0.filter(\.isNumber))
         }
