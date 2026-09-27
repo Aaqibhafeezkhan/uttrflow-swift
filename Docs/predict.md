@@ -242,6 +242,18 @@ tap, the panel, and the corpus. It reads the field off the main thread, and a tu
 takes longer than `SuggestionSession.turnBudgetInMilliseconds` draws nothing at all —
 answering a moment that has passed is worse than answering nothing.
 
+**The field read has a budget of its own.** Each Accessibility message gives up after
+`FocusedFieldReader.elementTimeoutInSeconds`, but giving up only stops the waiting: the other
+application still does the work for every message that was sent, on the thread that also
+handles the user's typing. So one read asks each question once — the field's names in one
+batched message, the caret, the window and the frames once each — and the whole read stops
+at the next question once `FieldReadBudget.allowanceInNanoseconds` (40 ms) has passed. A
+field whose read ran over is then asked nothing at all for a rest that starts at 10 s and
+doubles on each further overrun up to 5 minutes (`SlowFields`); a read that keeps to the
+budget ends the rest. A very long web text area, whose caret questions each run into the
+timeout, therefore costs its application one read per rest rather than one per turn, and
+draws no suggestion.
+
 ### One ghost, and only while it is true
 
 **There is one panel for the process** (`SuggestionPanelController.shared`), so a loop
@@ -250,7 +262,17 @@ replaces, and a stopped loop draws nothing. The view is not animated: a new sugg
 replaces the old one whole, measured before the panel is placed, so the two are never
 drawn in the same spot at once.
 
-**A ghost is withdrawn by anything that may move the caret** — a key, a click, a scroll, the
+**A key that types the ghost's next letters keeps it.** On a plain append with the highlight
+unmoved, `SuggestionSession.typedThrough` carries the offer past the key and the panel moves the
+rest of the ghost by exactly the width the typed letters took off it, in one frame change and
+without hiding it; the turn the key wakes reads the new line and redraws only if it differs.
+
+**A ghost is drawn whole or not at all.** The panel measures the ghost line at its full width
+in the view it draws and refuses one wider than the room to the field's edge, and a ghost
+that is not on screen whole claims no key, so Tab never inserts what was not shown. Drawing
+the offer already on screen, at the same caret within a point, lays out and places nothing.
+
+**Any other key withdraws the ghost, as does anything else that may move the caret** — a click, a scroll, the
 application in front changing, a Space change or the display sleeping. Each one hides the
 panel, disarms the keys and calls `SuggestionSession.invalidate`, which voids every answer
 still being worked out: `resolve`, `resolveGenerated` and `expandGenerated` return nothing
@@ -292,10 +314,13 @@ When the corpus and the machine both have nothing for the line and the generator
 `isReady`, the turn takes the model path in `SuggestionCoordinator.generate` instead of
 `resolve`:
 
-- **Reuse first.** The model's last answer for this field is kept, and while the line still
-  begins one of its lines — typing on, or backspacing — that answer is drawn again and no
-  pass runs. An empty answer is remembered against the exact line it was given for, so a
-  tick does not ask the same question again; the next keystroke asks afresh.
+- **Reuse first, only while typing on.** The model's last answer is kept with the line it
+  was given for and the text before that line. While the user types forward from that line,
+  in the same field and after the same text, the answer is drawn again with no pass, after
+  it meets the machine's gate again. A deletion, a move to another line, or a change to the
+  text before the line forgets it, so a continuation the user deleted is not offered back and
+  one written for one place is not offered in another. An empty answer is remembered against
+  the exact line and place it was given for, so a tick does not ask the same question again.
 - **120 ms debounce.** A pass sleeps what is left of `generationDebounceInMilliseconds`
   since the key was pressed, which is nothing when the pause was already that long; the
   next keystroke still cancels the pass, so a burst still costs one pass for its last
