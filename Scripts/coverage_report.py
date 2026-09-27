@@ -192,6 +192,7 @@ EXCLUDED_FILES = {
     ),
     "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item and its on-screen popover",
     "Uttrflow/MenuBar/MenuBarPopoverView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/MenuBar/MenuBarProgressBar.swift": "SwiftUI, drawn from a tested presentation; the run it slides is tested",
     "Uttrflow/MenuBar/MenuBarGlass.swift": "SwiftUI glass and colours, values from BrandPalette",
     "UttrflowSpeech/TokenizerDownload.swift": "fetches the tokenizer over the real network at install time",
     "UttrflowSpeech/WhisperKitBackend.swift": "loads a downloaded model and decodes real speech",

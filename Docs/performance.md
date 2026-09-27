@@ -787,6 +787,30 @@ is the card's `background`, for its `visibleRect` and watched every enclosing `N
 does not see SwiftUI's scroll clipping: the scrolled-out card still cost 31.4% across the rise,
 and 31.1% once the window was shortened below it.
 
+### The menu bar popover's loading bar
+
+The popover's unknown-length bar was a SwiftUI `repeatForever` offset inside the glass, so every
+display frame ran SwiftUI's animation pass on the main thread and invalidated the group that
+carries the aurora's `blur(40)` and the glass's `shadow(radius: 20)`. The run is now a
+`CAGradientLayer` slid by a `CABasicAnimation` (`MenuBarSlidingRun.swift`), drawn above the glass
+through an anchor preference, so a frame costs the app nothing and the glass is never redrawn for
+it. It moves only while `moves` (from `MotionBudgetObserver`) allows and while it is in a window;
+the controller empties the panel on close, which removes the layer.
+
+Measured on 28 September 2026 in a debug test build, the popover hosted in an on-screen borderless
+window, main-thread time over three-second samples, on a machine under heavy unrelated load
+(load average about 100), so the before figures carry that noise:
+
+| | main thread, share of a core |
+|---|---|
+| SwiftUI `repeatForever` inside the glass (10 samples) | 14–97%, median 66% |
+| Core Animation run above the glass (8 samples) | 0.0% in every sample |
+| no bar, for comparison | 0.0% |
+
+Offscreen renders of the popover match the old one within 1/255 except on the bar's rounded ends
+(at most 7/255). `ImageRenderer` cannot draw a platform view, so an offscreen render of the
+loading state shows SwiftUI's placeholder where the run is; the live popover does not.
+
 ### The clipboard poll
 
 macOS offers no notification for a copy, so `PasteboardWatcher` reads the change count on a

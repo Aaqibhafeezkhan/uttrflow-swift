@@ -58,6 +58,18 @@ struct MenuBarPopoverView: View {
         .frame(width: Self.width, alignment: .leading)
         .background(alignment: .top) { MenuBarAurora() }
         .menuBarGlass()
+        // Above the glass, so a moving bar never re-renders the blur and shadow under it.
+        .overlayPreferenceValue(MenuBarProgressSlot.Key.self) { slot in
+            GeometryReader { proxy in
+                if let slot {
+                    let frame = proxy[slot.bounds]
+                    MenuBarProgressFill(progress: slot.progress, width: frame.width)
+                        .frame(width: frame.width, height: frame.height, alignment: .leading)
+                        .offset(x: frame.minX, y: frame.minY)
+                }
+            }
+            .allowsHitTesting(false)
+        }
         .contextMenu { MenuBarMenuItems(items: presentation.items, onCommand: onCommand) }
         .padding(Self.shadowMargin)
     }
@@ -195,43 +207,6 @@ private struct MenuBarStatusView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// A thin teal bar: filled to a fraction, or a short run sliding across when the fraction is unknown.
-private struct MenuBarProgressBar: View {
-    let progress: MenuBarProgress
-    @State private var sliding = false
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            ZStack(alignment: .leading) {
-                Capsule().fill(MenuBarColour.track)
-                switch progress {
-                case .fraction(let fraction):
-                    // Eases between ticks, and only steps under Reduce Motion.
-                    Capsule().fill(MenuBarColour.progress).frame(width: width * fraction)
-                        .animation(
-                            MotionBudget.current().workingBarsMove ? .linear(duration: 1) : nil,
-                            value: fraction)
-                case .indeterminate:
-                    Capsule().fill(MenuBarColour.progress)
-                        .frame(width: width * 0.3)
-                        .offset(x: sliding ? width : -width * 0.3)
-                        .onAppear {
-                            // Held still under Reduce Motion, Low Power Mode and thermal pressure.
-                            guard MotionBudget.current().demonstrationMoves else { return }
-                            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: false)) {
-                                sliding = true
-                            }
-                        }
-                }
-            }
-            .clipShape(Capsule())
-        }
-        .frame(height: 3)
-        .accessibilityHidden(true)
     }
 }
 
