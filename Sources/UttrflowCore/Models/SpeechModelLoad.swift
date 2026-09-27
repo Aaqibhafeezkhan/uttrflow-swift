@@ -21,6 +21,12 @@ public enum SpeechModelLoad: Sendable, Equatable {
         return elapsed >= Self.estimateAfter
     }
 
+    /// The guessed progress and time left, only for a load past ``estimateAfter``.
+    public var estimate: SpeechModelLoadEstimate? {
+        guard case .loading(let elapsed) = self, showsEstimate else { return nil }
+        return SpeechModelLoadEstimate(elapsed: elapsed)
+    }
+
     /// Whether the load is still under way, as opposed to over and failed.
     public var isLoading: Bool {
         if case .loading = self { return true }
@@ -68,7 +74,9 @@ public enum SpeechModelLoad: Sendable, Equatable {
 
     /// What VoiceOver reads: the heading and the sentence, with nothing only an eye can parse.
     public var accessibilityLabel: String {
-        "\(String(title.filter { $0 != "…" })). \(sentence(range: "2 to 3"))"
+        let heading = String(title.filter { $0 != "…" })
+        if let estimate { return "\(heading), \(estimate.spokenTimeLeft). \(Self.whenReady)" }
+        return "\(heading). \(sentence(range: "2 to 3"))"
     }
 
     /// The one way forward: a download of a model that is missing or failed to load, and nothing while it is still going.

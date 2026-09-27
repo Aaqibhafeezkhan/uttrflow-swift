@@ -10,7 +10,7 @@ struct SpeechModelDockTests {
     func restingShowsTheLoad() {
         let dock = DictationPresenter.dock(for: .idle, speechModel: .loading(elapsed: .seconds(2)))
 
-        #expect(dock.setup == .loading)
+        #expect(dock.setup == .loading(nil), "a spinner, since a warm load is over before an estimate helps")
         #expect(dock.primaryLine == "Getting ready…")
         #expect(dock.secondaryLine == nil)
         #expect(dock.action == nil)
@@ -18,13 +18,38 @@ struct SpeechModelDockTests {
         #expect(!dock.accessibilityLabel.contains("minutes"))
     }
 
-    @Test("keeps the minutes for the pointer and VoiceOver once the load has run long enough to need them")
+    @Test("a long load draws a ring filled to the estimate, with the short time left beside it")
     func longLoadGivesTheEstimate() {
-        let dock = DictationPresenter.dock(for: .idle, speechModel: .loading(elapsed: .seconds(30)))
+        let dock = DictationPresenter.dock(for: .idle, speechModel: .loading(elapsed: .seconds(90)))
+        let estimate = SpeechModelLoadEstimate(elapsed: .seconds(90))
 
-        #expect(dock.primaryLine == "Getting ready…")
-        #expect(dock.secondaryLine == "First load after restart: about 2–3 min")
-        #expect(dock.accessibilityLabel.contains("2 to 3 minutes"))
+        #expect(dock.setup == .loading(estimate.fraction))
+        #expect(dock.primaryLine == "Getting ready")
+        #expect(dock.secondaryLine == "~1 min")
+        #expect(dock.accessibilityLabel.contains("about 1 minute left"))
+        #expect(!dock.showsProgress)
+    }
+
+    @Test(
+        "the short time left counts down on the button",
+        arguments: [(10, "~2 min"), (100, "~1 min"), (120, "<1 min")])
+    func buttonCountsDown(seconds: Int, short: String) {
+        let dock = DictationPresenter.dock(for: .idle, speechModel: .loading(elapsed: .seconds(seconds)))
+
+        #expect(dock.secondaryLine == short)
+        #expect(dock.primaryLine == "Getting ready")
+    }
+
+    @Test("a load past the typical time holds its ring below full and says it is almost ready")
+    func holdingLoad() {
+        let dock = DictationPresenter.dock(
+            for: .idle, speechModel: .loading(elapsed: SpeechModelLoadEstimate.typicalColdLoad + .seconds(40))
+        )
+
+        #expect(dock.setup == .loading(SpeechModelLoadEstimate.ceiling))
+        #expect(dock.primaryLine == "Almost ready")
+        #expect(dock.secondaryLine == nil)
+        #expect(dock.setup?.actionTitle == nil)
     }
 
     @Test("resting after a failed load says so and offers Retry, which loads it again")
@@ -93,7 +118,7 @@ struct SpeechModelDockTests {
         #expect(dock.symbolName == "hourglass", "the quiet disc would drop the sentence")
         #expect(dock.primaryLine == "Speech model still loading…")
         #expect(dock.secondaryLine == "First load after restart: about 2–3 min")
-        #expect(dock.accessibilityLabel.hasPrefix("Loading the speech model."))
+        #expect(dock.accessibilityLabel.hasPrefix("Loading the speech model, about 2 minutes left."))
     }
 
     @Test("the refusal still reads without the load beside it")

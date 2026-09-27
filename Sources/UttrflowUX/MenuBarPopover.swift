@@ -147,7 +147,8 @@ extension MenuBarPresenter {
                 progress: fraction.map { .fraction(min(max($0, 0), 1)) } ?? .indeterminate)
         case .loading:
             return MenuBarStatus(
-                title: statusLine, detail: "Loading the speech model", progress: .indeterminate)
+                title: statusLine, detail: "Loading the speech model",
+                progress: loadEstimate(for: state).map { .fraction($0.fraction) } ?? .indeterminate)
         case .loadFailed:
             return MenuBarStatus(
                 title: "Model didn’t load", detail: "Nothing was lost", emphasis: .attention,

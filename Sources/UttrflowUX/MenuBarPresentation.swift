@@ -118,6 +118,8 @@ public struct MenuBarState: Sendable, Equatable {
     /// The last thing that went wrong and has not yet been dealt with.
     public var failure: FailurePresentation?
     public var speechModel: SpeechModelReadiness
+    /// How long the speech model's load has run, which paces its estimate; ignored unless it is loading.
+    public var speechLoadElapsed: Duration
     /// How a long recording is going, so the status line can count it down.
     public var recordingAdvice: DictationAdvice
     /// Newest first.
@@ -149,6 +151,7 @@ public struct MenuBarState: Sendable, Equatable {
         activity: DictationActivity = .idle,
         failure: FailurePresentation? = nil,
         speechModel: SpeechModelReadiness = .ready,
+        speechLoadElapsed: Duration = .zero,
         recordingAdvice: DictationAdvice = .keepGoing,
         recents: [MenuBarRecent] = [],
         clips: [Clip] = [],
@@ -164,6 +167,7 @@ public struct MenuBarState: Sendable, Equatable {
         self.activity = activity
         self.failure = failure
         self.speechModel = speechModel
+        self.speechLoadElapsed = speechLoadElapsed
         self.recordingAdvice = recordingAdvice
         self.recents = recents
         self.clips = clips
@@ -426,7 +430,7 @@ public enum MenuBarPresenter {
             guard let fraction else { return "Setting up…" }
             return "Setting up… \(percentage(of: fraction))%"
         case .loading:
-            return "Getting ready…"
+            return loadEstimate(for: state)?.heading ?? "Getting ready…"
         case .loadFailed:
             return "Speech model didn't load"
         case .notInstalled:
@@ -439,6 +443,12 @@ public enum MenuBarPresenter {
             case .finished: "Inserted"
             }
         }
+    }
+
+    /// The load's estimate once it has run long enough to need one, and `nil` otherwise.
+    static func loadEstimate(for state: MenuBarState) -> SpeechModelLoadEstimate? {
+        guard state.speechModel == .loading else { return nil }
+        return SpeechModelLoad.loading(elapsed: state.speechLoadElapsed).estimate
     }
 
     /// What an update in progress says, with "checking" absent unless the user asked.

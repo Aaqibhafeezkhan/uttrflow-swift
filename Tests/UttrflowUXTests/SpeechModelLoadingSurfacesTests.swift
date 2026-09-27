@@ -23,7 +23,7 @@ struct SpeechModelLoadingSurfacesTests {
         let status = try #require(page.hero.modelStatus)
 
         #expect(status.title == "Getting ready…")
-        #expect(status.subtitle == "Loading the speech model, usually a few seconds")
+        #expect(status.subtitle == "Loading the speech model")
         #expect(status.tone == .dictation)
         #expect(status.progress == .sliding)
         #expect(status.action == nil, "the dimmed start pill stands where a button would")
@@ -36,14 +36,72 @@ struct SpeechModelLoadingSurfacesTests {
         #expect(page.nextStep == nil, "the hero is the only place the load is shown")
     }
 
-    @Test("the hero gains the minutes only once the load has run on")
+    @Test("the hero gains the time left and a bar filled to the estimate only once the load has run on")
     func homeEstimateWaits() throws {
         let early = try #require(home(.loading(elapsed: .seconds(3))).hero.modelStatus)
         let late = try #require(home(.loading(elapsed: .seconds(90))).hero.modelStatus)
 
+        #expect(!early.title.contains("min"))
         #expect(!early.subtitle.contains("min"))
-        #expect(late.subtitle == "First load after restart: about 2–3 min")
-        #expect(late.accessibilityLabel.contains("2 to 3 minutes"))
+        #expect(early.progress == .sliding)
+        #expect(late.title == "Getting ready · about 1 min left")
+        #expect(late.subtitle == "Only after a restart. Everything else already works.")
+        #expect(late.progress == .fraction(SpeechModelLoadEstimate(elapsed: .seconds(90)).fraction))
+        #expect(late.tone == .dictation)
+        #expect(late.action == nil)
+        #expect(
+            late.accessibilityLabel
+                == "Getting ready, about 1 minute left. Only after a restart. Everything else already works.")
+    }
+
+    @Test("the hero holds its bar below full once the typical load time has passed")
+    func homeHolds() throws {
+        let status = try #require(
+            home(.loading(elapsed: SpeechModelLoadEstimate.typicalColdLoad + .seconds(30))).hero.modelStatus)
+
+        #expect(status.title == "Almost ready…")
+        #expect(status.progress == .fraction(SpeechModelLoadEstimate.ceiling))
+        #expect(
+            status.accessibilityLabel == "Almost ready. Only after a restart. Everything else already works.")
+    }
+
+    @Test("the menu bar says the same time left as the hero, over a bar filled to the estimate")
+    func menuBarGivesTheEstimate() throws {
+        let state = MenuBarState(speechModel: .loading, speechLoadElapsed: .seconds(90))
+        let menu = MenuBarPresenter.present(state)
+        let hero = try #require(home(.loading(elapsed: .seconds(90))).hero.modelStatus)
+
+        #expect(menu.statusLine == "Getting ready · about 1 min left")
+        #expect(menu.statusLine == hero.title)
+        #expect(
+            menu.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Getting ready · about 1 min left", detail: "Loading the speech model",
+                        progress: .fraction(SpeechModelLoadEstimate(elapsed: .seconds(90)).fraction))))
+        #expect(!MenuBarPresenter.canStartDictation(in: state))
+    }
+
+    @Test("the menu bar keeps its sliding bar and no minutes through a load's first seconds")
+    func menuBarWaitsForTheEstimate() {
+        let menu = MenuBarPresenter.present(
+            MenuBarState(speechModel: .loading, speechLoadElapsed: .seconds(4)))
+
+        #expect(menu.statusLine == "Getting ready…")
+        #expect(
+            menu.header
+                == .status(
+                    MenuBarStatus(
+                        title: "Getting ready…", detail: "Loading the speech model", progress: .indeterminate)
+                ))
+    }
+
+    @Test("the menu bar ignores a load time once the model is ready")
+    func menuBarIgnoresElapsedWhenReady() {
+        let menu = MenuBarPresenter.present(
+            MenuBarState(speechModel: .ready, speechLoadElapsed: .seconds(90)))
+
+        #expect(menu.statusLine == "Ready")
     }
 
     @Test("the waveform comes back once the model has loaded")
