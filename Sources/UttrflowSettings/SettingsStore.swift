@@ -145,8 +145,9 @@ public struct Settings: Sendable, Equatable, Codable {
     /// What a user gets before they configure anything.
     public static let `default` = Settings()
 
-    /// The defaults an install onboarded before ⌃⌥ held became the dictation shortcut keeps, with ⌥Space.
-    public static let earlierInstall = Settings(shortcuts: .earlierDefault)
+    /// The defaults an install onboarded on an earlier build keeps: ⌥Space, and transcripts kept for a week.
+    public static let earlierInstall = Settings(
+        shortcuts: .earlierDefault, transcriptRetentionDays: Settings.defaultRetentionDays)
 }
 
 extension Settings {

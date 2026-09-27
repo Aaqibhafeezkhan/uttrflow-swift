@@ -183,9 +183,10 @@ counts. Installs onboarded before it keep ⌥Space, the earlier default, which i
 The settings file is what tells the two apart, and it did not always exist: settings are saved
 when something is changed, so an install whose user never opened Settings has none. At launch,
 before the first read, `UserDefaultsSettingsStore.pinDefaults(onboarded:)` saves one when it is
-missing — ⌥Space when the onboarding record says onboarding finished, ⌃⌥ otherwise — so a later
-change of default never moves anybody. A saved file that names no dictation shortcut is read with
-⌥Space for the same reason. Reset in Settings gives back ⌃⌥, the current default, to everybody.
+missing or is no JSON object — ⌥Space and a week of transcripts when the onboarding record says
+onboarding finished, the current defaults otherwise — so a later change of default never moves
+anybody. A saved file that names no dictation shortcut is read with ⌥Space for the same reason.
+Reset in Settings gives back ⌃⌥, the current default, to everybody.
 
 ## What is testable
 
@@ -238,3 +239,7 @@ clip.
 ⌫ and ⌘⌫ are left to the search field, which is why Delete takes ⇧ as well; ⌘C is the
 field's copy, so the row's is ⌘⇧C. A chord that acted on a row only while the field was
 empty would be a trap, so none of them does.
+
+The panel takes its row chords before the main menu sees them (`QuickPanel.performKeyEquivalent`).
+Window ▸ Minimise is also ⌘M, and the menu swallows a key equivalent even when its item is
+disabled, so without that ⌘M would never reach Move.

@@ -138,6 +138,23 @@ struct WindowLifetimeTests {
         #expect(finishCount == 0)
     }
 
+    @Test("the onboarding window is kept on close, so the controller's reference is its only owner")
+    func onboardingWindowIsNotReleasedWhenClosed() {
+        let window = onboardingController().makeWindow()
+        #expect(window.isReleasedWhenClosed == false)
+    }
+
+    @Test("a closed onboarding window is freed once, by its last reference")
+    func closedOnboardingWindowIsFreedOnce() {
+        weak var closed: NSWindow?
+        autoreleasepool {
+            let window = onboardingController().makeWindow()
+            closed = window
+            window.close()
+        }
+        #expect(closed == nil)
+    }
+
     @Test("the flow finish event calls the controller's finish callback")
     func flowFinishCallsController() throws {
         let controller = onboardingController()

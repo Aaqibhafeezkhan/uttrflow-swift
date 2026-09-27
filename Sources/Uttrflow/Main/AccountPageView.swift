@@ -209,9 +209,12 @@ struct AccountActionButton: View {
 
     @State private var isHovered = false
 
+    /// The window's question host, when there is one; an action that asks first asks through it.
+    @Environment(MainConfirmationCenter.self) private var confirmations: MainConfirmationCenter?
+
     var body: some View {
         Button {
-            onIntent(action.intent)
+            MainConfirmationCenter.press(action, in: confirmations, onIntent: onIntent)
         } label: {
             HStack(spacing: 8) {
                 if let symbol = action.symbolName {

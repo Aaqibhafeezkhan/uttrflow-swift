@@ -101,7 +101,7 @@ struct MainPageTests {
         #expect(
             MainTab.allCases == [
                 .home,
-                .dictation, .history, .dictionary, .corrections, .insights, .snippets,
+                .history, .dictionary, .corrections, .insights, .snippets,
                 .account,
             ])
     }
@@ -109,7 +109,7 @@ struct MainPageTests {
     /// Stored, so a rename of the case must not change what a saved window position means.
     @Test("each page has a stable stored name")
     func rawValues() {
-        #expect(MainTab.dictation.rawValue == "dictation")
+        #expect(MainTab.history.rawValue == "history")
         #expect(MainTab.account.rawValue == "account")
         #expect(MainTab(rawValue: "insights") == .insights)
     }

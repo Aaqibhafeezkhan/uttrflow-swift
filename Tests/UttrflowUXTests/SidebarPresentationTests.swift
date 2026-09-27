@@ -8,7 +8,7 @@ import Testing
 extension HistoryFixture {
     /// The sidebar over these inputs.
     static func sidebar(
-        selection: SidebarDestination = .page(.dictation),
+        selection: SidebarDestination = .page(.corrections),
         entries: [HistoryEntry] = [],
         correctionsToday: Int = 0,
         shortcutKeys: [String] = ["⌥", "Space"],
@@ -42,7 +42,7 @@ struct SidebarOrderTests {
         }
         #expect(
             Set(MainTab.allCases).subtracting(reached)
-                == [.dictation, .corrections, .account])
+                == [.corrections, .account])
     }
 
     @Test("the rows fall into three groups, with a heading over the user's words")

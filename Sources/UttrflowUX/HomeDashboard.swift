@@ -23,6 +23,20 @@ public enum HomeMood: String, Sendable, Equatable, CaseIterable {
         }
     }
 
+    /// The hours at which home changes: midnight for the date line, then each hour the mood turns.
+    public static let boundaryHours: [Int] = [0] + (1..<24).filter { at(hour: $0) != at(hour: $0 - 1) }
+
+    /// The first moment after `date` at which the mood or the date changes, skipping hours a clock change removes.
+    public static func nextBoundary(after date: Date, calendar: Calendar) -> Date {
+        let candidates = boundaryHours.compactMap {
+            calendar.nextDate(
+                after: date, matching: DateComponents(hour: $0, minute: 0, second: 0),
+                matchingPolicy: .nextTime, repeatedTimePolicy: .first, direction: .forward)
+        }
+        // An hour later is the safe answer if a calendar ever finds none of them.
+        return candidates.min() ?? date.addingTimeInterval(3600)
+    }
+
     /// The greeting's opening words.
     public var salutation: String {
         switch self {

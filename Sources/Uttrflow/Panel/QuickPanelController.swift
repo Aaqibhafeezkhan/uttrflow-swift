@@ -9,6 +9,31 @@ import SwiftUI
 final class QuickPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// Set while a row chord is sent through the window, so the send cannot come back here.
+    private var isSendingChord = false
+
+    /// Sends a row chord to the panel's own key handler before the main menu can swallow it, as Minimise does ⌘M.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard !isSendingChord, Self.isRowChord(event) else {
+            return super.performKeyEquivalent(with: event)
+        }
+        isSendingChord = true
+        defer { isSendingChord = false }
+        sendEvent(event)
+        return true
+    }
+
+    /// Whether `event` is ⌘, with or without ⇧, on a key some row action is bound to.
+    static func isRowChord(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown else { return false }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers.contains(.command), modifiers.isDisjoint(with: [.option, .control]),
+            let character = event.charactersIgnoringModifiers?.lowercased().first
+        else { return false }
+        let chord = PanelChord(character, shifted: modifiers.contains(.shift))
+        return PanelRowAction.allCases.contains { $0.chord == chord }
+    }
 }
 
 /// The panel's content, with the two things AppKit will not give a hosted view for free.
