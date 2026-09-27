@@ -21,10 +21,10 @@ pipeline above knows there is more than one way to be recording.
   waits for its turn and returns once the click has been handled, so a caller that awaits it still
   sees the dictation it started or finished.
 - The cap (`Docs/stuck-recording.md`) is queued the same way. Its timer only submits "the cap
-  was reached", and the queue finishes the dictation, so a press cannot start the next dictation
-  while the capped one is still being inserted and learnt from. Each cap carries the generation
-  of the dictation it was started for, and a cap that arrives after another dictation has begun
-  neither finishes it nor stops that dictation's own cap.
+  was reached", and the queue closes the microphone, so the capped dictation ends like any other
+  and a press made while it is processed is decided as the section below says. Each cap carries
+  the generation of the dictation it was started for, and a cap that arrives after another
+  dictation has begun neither finishes it nor stops that dictation's own cap.
 
 ## A press made while the last dictation is processed
 
@@ -38,6 +38,10 @@ pipeline is busy, `startRecording()` refuses it, no cue sounds, and the release 
 nothing listening and does nothing. The dock is showing the dictation still being processed, which
 is what tells the user why. The press is never held until the words land and then judged by the
 clock at that moment, which turned a long hold into a slip and lost the start of a held one.
+
+The pipeline stays busy until the words are on screen. Counting and learning run after that, and
+a press made then starts the next dictation, so those last steps read everything they need about
+their own dictation before their first await.
 
 `toggleFromControl()`, `setActivation(_:)` and `handle(_:)` still return only once the words have
 been inserted, without holding the queue while they wait.
