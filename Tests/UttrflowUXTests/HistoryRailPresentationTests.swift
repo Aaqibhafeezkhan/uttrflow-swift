@@ -69,7 +69,7 @@ struct HistoryRailPresentationTests {
         let changed = RecordedChanges(
             corrections: [
                 RecordedCorrection(
-                    heard: "teh", wrote: "the", wordRange: 0..<1, entryID: UUID(),
+                    heard: "tha", wrote: "the", wordRange: 0..<1, entryID: UUID(),
                     reason: .heardAsStrayLetters, heardConfidence: 0.3)
             ])
         let result = page(entries: [
