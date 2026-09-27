@@ -68,6 +68,24 @@ struct RegisterTests {
         #expect(!register.hints.contains { $0.hasPrefix("this person writes") })
     }
 
+    @Test("Emoji in a chat are prose, not symbols, so the line stays a reply.")
+    func emojiAreNotSymbols() {
+        let chat = GenerationSituation(
+            application: "Chat", field: "Message", surroundings: thread,
+            recentLines: ["haha 😂😂", "ok 👍", "see you 🙏", "love it ❤️", "yes 👍🏽", "family 👨‍👩‍👧"],
+            isMultiline: true)
+        let register = Register.infer(from: chat, typed: "sounds")
+        #expect(register.symbolShare <= Register.symbolicShare)
+        #expect(register.kind == "reply")
+        #expect(register.hints.contains("this person writes casually, without sentence punctuation"))
+        #expect(!register.hints.contains("the text here is commands, code or queries rather than prose"))
+        #expect(Register.symbolShare(of: ["😂👍🙏"]) == 0)
+        #expect(Register.symbolShare(of: ["ls | grep x 🙂"]) > 0)
+        #expect(!Register.isPictograph("#"))
+        #expect(!Register.isPictograph("1"))
+        #expect(!Register.isPictograph("$"))
+    }
+
     @Test("Full sentences in a document read as formal prose.")
     func proseIsFormal() {
         let register = Register.infer(from: essay, typed: "We")

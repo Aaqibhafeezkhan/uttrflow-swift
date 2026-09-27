@@ -242,11 +242,16 @@ public struct Register: Sendable, Equatable {
         return sorted[sorted.count / 2]
     }
 
-    /// The share of the visible characters that are neither letters, digits nor whitespace.
+    /// Whether a character is drawn as an emoji, which decorates prose and is never a command's symbol.
+    static func isPictograph(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { $0.properties.isEmojiPresentation || $0.value == 0xFE0F }
+    }
+
+    /// The share of the visible characters that are neither letters, digits nor whitespace, emoji left out.
     static func symbolShare(of texts: [String]) -> Double {
         var visible = 0
         var symbols = 0
-        for character in texts.joined() where !character.isWhitespace {
+        for character in texts.joined() where !character.isWhitespace && !isPictograph(character) {
             visible += 1
             if !character.isLetter, !character.isNumber { symbols += 1 }
         }
