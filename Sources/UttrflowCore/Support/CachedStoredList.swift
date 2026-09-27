@@ -4,28 +4,24 @@ import Darwin
 
 public import struct Foundation.URL
 
-/// What identifies one version of a file on disk: its inode, size and change times.
+/// What identifies one version of a file's contents: its inode, size and modification time, not metadata changes.
 public struct FileStamp: Equatable, Sendable {
     let inode: UInt64
     let size: Int64
     let modified: timespec
-    let changed: timespec
 
     /// The file's stamp, or `nil` when nothing is there to stat.
     public static func of(_ url: URL) -> FileStamp? {
         var info = stat()
         guard stat(url.path(percentEncoded: false), &info) == 0 else { return nil }
         return FileStamp(
-            inode: info.st_ino, size: info.st_size, modified: info.st_mtimespec,
-            changed: info.st_ctimespec)
+            inode: info.st_ino, size: info.st_size, modified: info.st_mtimespec)
     }
 
     public static func == (lhs: FileStamp, rhs: FileStamp) -> Bool {
         lhs.inode == rhs.inode && lhs.size == rhs.size
             && lhs.modified.tv_sec == rhs.modified.tv_sec
             && lhs.modified.tv_nsec == rhs.modified.tv_nsec
-            && lhs.changed.tv_sec == rhs.changed.tv_sec
-            && lhs.changed.tv_nsec == rhs.changed.tv_nsec
     }
 }
 
