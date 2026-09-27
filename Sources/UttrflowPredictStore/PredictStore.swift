@@ -386,6 +386,8 @@ public actor PredictStore: PredictionStore {
                 $0.bind(4, Int64(selfSourced ? 1 : 0))
                 $0.bind(5, moment.timeIntervalSince1970)
             })
+        // Typing the line by hand takes back every refusal of it in this field, which is what brings a retired line back.
+        if !selfSourced { try forgiveRefusals(of: text, in: surface) }
         // This whole value retires the shorter fragments it grew out of, so only it is ever proposed.
         try supersedeFragments(surfaceIdentifier: id, of: text)
         if let previous, !previous.isEmpty {
@@ -411,6 +413,23 @@ public actor PredictStore: PredictionStore {
     /// Notes that a suggestion was shown and typed past, which is the user saying no.
     public func recordRejected(_ text: String, in surface: Surface) throws(PredictStoreError) {
         try increment(.rejected, forText: text, in: surface)
+    }
+
+    /// Takes back one acceptance the person undid: the use and the acceptance it added, and the line when that was all it held.
+    public func retractAcceptance(_ text: String, in surface: Surface) throws(PredictStoreError) {
+        let text = Spelling.canonical(text)
+        try database.transaction { () throws(PredictStoreError) in
+            guard let entry = try supplier(of: text, in: surface) else { return }
+            try database.run(
+                """
+                UPDATE entry SET count = count - 1, accepted = accepted - 1, self_sourced = self_sourced - 1
+                WHERE id = ? AND count > 0 AND accepted > 0 AND self_sourced > 0
+                """
+            ) { $0.bind(1, entry) }
+            try database.run("DELETE FROM entry WHERE id = ? AND count = 0 AND superseded_by IS NULL") {
+                $0.bind(1, entry)
+            }
+        }
     }
 
     /// Marks an entry wrong in this folder and points at what replaces it, so it is never proposed here again.
@@ -556,6 +575,23 @@ public actor PredictStore: PredictionStore {
                 $0.bind(1, replacement)
                 $0.bind(2, id)
                 $0.bind(3, text)
+            })
+    }
+
+    /// Clears the refusals of one line in every folder of the field, since a line typed by hand is one the person wants.
+    private func forgiveRefusals(of text: String, in surface: Surface) throws(PredictStoreError) {
+        try database.run(
+            """
+            UPDATE entry SET rejected = 0
+            WHERE text = ? AND rejected > 0 AND surface_id IN (
+              SELECT id FROM surface WHERE bundle_id = ? AND role = ? AND locator = ?
+            )
+            """,
+            {
+                $0.bind(1, text)
+                $0.bind(2, surface.bundleIdentifier)
+                $0.bind(3, surface.role)
+                $0.bind(4, surface.locator ?? "")
             })
     }
 

@@ -43,6 +43,10 @@ public actor CaptureSession {
     private var isRetryingCommits = false
     /// True while held acceptances are being retried, so a re-entrant retry does not write the same one twice.
     private var isRetryingAcceptances = false
+    /// The last acceptance written, watched for an undo until the line moves on or `undoWindow` passes.
+    private var lastAcceptance: (text: String, surface: Surface, moment: Date)?
+    /// How long after an acceptance a line cut back inside the accepted text reads as the person undoing it.
+    static let undoWindow: Double = 10
 
     /// A session writing to this sink, remembering its answers in this file.
     public init(
@@ -66,6 +70,7 @@ public actor CaptureSession {
         // A failed write here is already held for a retry, so it does not cost the new field its event.
         if !isFocused(reading) { _ = try? await flush(with: .focusLeft(at: event.moment)) }
         focused = reading
+        await retractIfUndone(event, in: reading)
         guard let surface = reading.surface,
             let commit = detector.receive(event, admitting: { policy.admits($0, in: reading) })
         else { return .nothing }
@@ -98,7 +103,34 @@ public actor CaptureSession {
             hold(failure.remaining)
             throw failure.underlying
         }
+        lastAcceptance = (text, surface, moment)
         return .recorded(text)
+    }
+
+    /// Takes back the last acceptance when the line, read soon after in its field, is cut back inside the accepted text.
+    private func retractIfUndone(_ event: CaptureEvent, in reading: FieldReading) async {
+        guard let last = lastAcceptance else { return }
+        guard reading.surface == last.surface, event.moment.timeIntervalSince(last.moment) <= Self.undoWindow
+        else {
+            lastAcceptance = nil
+            return
+        }
+        switch event {
+        case .keystroke(let line, _):
+            let accepted = Array(last.text.unicodeScalars)
+            let now = Array(line.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars)
+            // Typing on past the acceptance keeps it; a line that has moved on to other text has not undone it.
+            if now.count > accepted.count, Array(now.prefix(accepted.count)) == accepted {
+                lastAcceptance = nil
+            }
+            guard now.count < accepted.count, Array(accepted.prefix(now.count)) == now else { return }
+            lastAcceptance = nil
+            try? await sink.retractAcceptance(last.text, in: last.surface)
+        case .returnPressed, .focusLeft, .applicationDeactivated:
+            lastAcceptance = nil
+        case .tick, .inserted:
+            return
+        }
     }
 
     /// How many acceptances are waiting for their write to be retried.
@@ -177,6 +209,7 @@ public actor CaptureSession {
         lastRecorded = lastRecorded.filter { $0.key.bundleIdentifier != application }
         unwrittenCommits.removeAll { $0.surface.bundleIdentifier == application }
         unwrittenAcceptances.removeAll { $0.surface.bundleIdentifier == application }
+        if lastAcceptance?.surface.bundleIdentifier == application { lastAcceptance = nil }
         if focused?.surface?.bundleIdentifier == application { detector.reset() }
     }
 
@@ -185,6 +218,7 @@ public actor CaptureSession {
         lastRecorded = [:]
         unwrittenCommits = []
         unwrittenAcceptances = []
+        lastAcceptance = nil
         detector.reset()
         try forgetEveryAnswer()
     }
