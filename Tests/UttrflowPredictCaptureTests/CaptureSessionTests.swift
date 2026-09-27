@@ -91,6 +91,32 @@ private actor GatedSink: CaptureSink {
     }
 }
 
+/// A sink that fails its first record, holds the second until released, and then lets every write through.
+private actor RetryGateSink: CaptureSink {
+    private(set) var recorded: [String] = []
+    private var calls = 0
+    private var gate: CheckedContinuation<Bool, Never>?
+
+    func record(
+        _ text: String, in surface: Surface, after previous: String?, selfSourced: Bool, at moment: Date
+    ) async throws {
+        calls += 1
+        if calls == 1 { throw FlakySinkError.transient }
+        if calls == 2, await withCheckedContinuation({ gate = $0 }) { throw FlakySinkError.transient }
+        recorded.append(text)
+    }
+
+    func supersede(_ text: String, with replacement: String, in surface: Surface) {}
+
+    var isWaiting: Bool { gate != nil }
+
+    /// Resumes the held record, failing it when asked.
+    func release(failing: Bool) {
+        gate?.resume(returning: failing)
+        gate = nil
+    }
+}
+
 private let start = Date(timeIntervalSince1970: 1_800_000_000)
 private let terminal = FieldReading(bundleIdentifier: "com.example.terminal", role: "AXTextArea")
 private let browser = FieldReading(
@@ -747,5 +773,62 @@ struct CaptureSessionFieldIdentityTests {
         await sink.release()
         _ = try await typed.value
         #expect(await sink.recorded.map(\.previous) == [nil, "hello"])
+    }
+}
+
+/// Which retry queue a reentrancy test drives.
+enum HeldQueue: CaseIterable, Sendable { case commits, acceptances }
+
+@Suite("Retrying held writes while the session is re-entered")
+struct CaptureSessionRetryReentrancyTests {
+    /// A session with one entry held in the given queue, and the sink whose next record will wait.
+    private func holdingOne(
+        _ queue: HeldQueue, _ scratch: borrowing Scratch
+    ) async throws -> (CaptureSession, RetryGateSink) {
+        let sink = RetryGateSink()
+        let session = try await session(
+            scratch, sink, allowing: ["com.example.terminal"], policy: only(.returnPressed))
+        switch queue {
+        case .commits:
+            _ = try await session.handle(.keystroke("git status", at: start), in: terminal)
+            _ = try? await session.handle(.returnPressed(at: start), in: terminal)
+            #expect(await session.unwrittenCommitCount() == 1)
+        case .acceptances:
+            _ = try? await session.accepted("git status", in: terminal, at: start)
+            #expect(await session.unwrittenAcceptanceCount() == 1)
+        }
+        return (session, sink)
+    }
+
+    @Test(
+        "Forgetting everything while a held write is suspended leaves the retry nothing to remove.",
+        arguments: HeldQueue.allCases, [false, true])
+    func forgetDuringRetry(queue: HeldQueue, resumeFailing: Bool) async throws {
+        let scratch = Scratch()
+        let (session, sink) = try await holdingOne(queue, scratch)
+        let retry = Task { try await session.handle(.tick(at: start.addingTimeInterval(1)), in: terminal) }
+        while !(await sink.isWaiting) { await Task.yield() }
+        try await session.forgetEverythingLearned()
+        await sink.release(failing: resumeFailing)
+        _ = try await retry.value
+        #expect(await session.unwrittenCommitCount() == 0)
+        #expect(await session.unwrittenAcceptanceCount() == 0)
+    }
+
+    @Test(
+        "A second retry arriving while the first is suspended does not write the held entry again.",
+        arguments: HeldQueue.allCases)
+    func concurrentRetryWritesOnce(queue: HeldQueue) async throws {
+        let scratch = Scratch()
+        let (session, sink) = try await holdingOne(queue, scratch)
+        let retry = Task { try await session.handle(.tick(at: start.addingTimeInterval(1)), in: terminal) }
+        while !(await sink.isWaiting) { await Task.yield() }
+        _ = try await session.handle(.tick(at: start.addingTimeInterval(2)), in: terminal)
+        #expect(await sink.recorded.isEmpty)
+        await sink.release(failing: false)
+        _ = try await retry.value
+        #expect(await sink.recorded == ["git status"])
+        #expect(await session.unwrittenCommitCount() == 0)
+        #expect(await session.unwrittenAcceptanceCount() == 0)
     }
 }
