@@ -341,12 +341,31 @@ public enum SettingsPresenter {
                     id: "learned",
                     title: "What Uttrflow has picked up",
                     rows: [forgetLearnedRow(personalisation)]),
+                pages,
             ],
             callout: SettingsCallout(
                 symbolName: "gauge",
                 message:
                     "Dictation runs on this Mac, so it works with or without an internet "
                     + "connection."))
+    }
+
+    /// The main window's pages that have no sidebar row, each a row that opens it.
+    static let pages = SettingsGroup(
+        id: "pages",
+        title: "More in the Uttrflow window",
+        rows: [
+            pageRow(.style, explanation: "How much tidying Uttrflow does to what you said."),
+            pageRow(.corrections, explanation: "What your dictionary changed after it heard you."),
+            pageRow(
+                .diagnostics, explanation: "What is installed, what is allowed, and how fast it runs."),
+        ])
+
+    /// A row that opens one page of the main window.
+    private static func pageRow(_ page: MainTab, explanation: String) -> SettingsRow {
+        SettingsRow(
+            id: "page.\(page.rawValue)", label: SidebarPresenter.title(for: page),
+            explanation: explanation, control: .action(title: "Open", change: .openPage(page)))
     }
 
     /// One transcription quality, as a segmented option.

@@ -65,3 +65,15 @@ The Dictation page compares today against earlier days once there is at least on
 (`comparisonFloor = 1`). The "Words dictated" figure is the total within the retention
 window and is never called a lifetime total, because older words are gone and cannot be
 counted.
+
+## The Insights calendar
+
+Insights draws the chosen range — 7, 30 or 90 days, today last — as weeks of tiles starting on
+the calendar's own first weekday. A tile's teal is `0.15 + 0.85 × words ÷ busiest day's words`,
+so a quiet day still reads as spoken on and the busiest is full strength; a day with nothing said
+is a bare tile. The figures beside it are the range's words and dictations, the pooled pace
+above, and the streak Home counts, so the two pages cannot disagree.
+
+A range longer than history is kept cannot be picked: it would be a calendar of days whose
+transcripts are already deleted. A week is always offered, and the page opens on a month where
+history reaches that far. The wait for seven days spoken on still comes first.

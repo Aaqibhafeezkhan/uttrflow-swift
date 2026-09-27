@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let menuBar = MenuBarController()
     private let dock = DockPanelController()
     private var recents = RecentDictations()
+    /// The newest clips as the popover last read them, so a row's position finds the clip it shows.
+    private var menuClips: [Clip] = []
     /// Where dictations are kept between launches, and the only thing that decides what is deleted.
     private let history: DictationHistoryStore
     /// Each dictation's audio, kept beside it only until its words land. See `Docs/recordings.md`.
@@ -860,7 +862,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard let pipeline else { return }
 
         menuBar.onCommand = { [weak self] intent in self?.carryOut(intent) }
-        menuBar.onMenuWillOpen = { [weak self] in self?.checkSecureInput() }
+        menuBar.onMenuWillOpen = { [weak self] in
+            self?.checkSecureInput()
+            self?.refreshMenuClips()
+        }
         secureInputObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -975,6 +980,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func clipArrived(_ noticed: NoticedClip) async {
         await keep(noticed)
         await refreshPanelIfOpen()
+        await readMenuClips()
+    }
+
+    /// Rereads the popover's clips in the background and redraws once they are in.
+    private func refreshMenuClips() {
+        Task { [weak self] in await self?.readMenuClips() }
+    }
+
+    /// The newest few clips for the popover, or none while the clipboard is switched off.
+    private func readMenuClips() async {
+        let clips =
+            settings.clipboardEnabled
+            ? Array(await clipboard.clips(keeping: retention).prefix(MenuBarPresenter.clipCount)) : []
+        guard clips != menuClips else { return }
+        menuClips = clips
+        refreshMenuBar()
     }
 
     /// Records one noticed clip; a refused write loses that clip, and giving up would lose all the rest.
@@ -1697,13 +1718,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             recents: recents.previews.map {
                 MenuBarRecent(title: $0.title, fullText: $0.dictation.text)
             },
-            canCheckForUpdates: UpdateController.isConfigured,
+            clips: menuClips,
             updateProgress: updates.progress,
             features: MenuBarFeatures(settings),
             shortcuts: settings.shortcuts,
             unarmedShortcuts: unarmedShortcuts,
             shortcutUnheard: shortcutUnheard,
-            suggestionModel: suggestionModel
+            suggestionModel: suggestionModel,
+            activation: settings.hotkeyActivation,
+            speechModelBytes: SpeechModel.default.downloadBytes
         )
     }
 
@@ -1723,12 +1746,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard let recent = recents.entries[safe: index] else { return }
             // And through the helper that announces the write, for the same reason.
             putOnClipboard(recent.text, used: nil)
+        case .insertClip(let index):
+            guard let clip = menuClips[safe: index] else { return }
+            if clip.image != nil { insertImage(clip) } else { insert(clip.text, used: clip.id) }
+        case .copyClip(let index):
+            guard let clip = menuClips[safe: index] else { return }
+            if clip.image != nil {
+                Task { [weak self] in _ = await self?.putImageOnClipboard(clip) }
+            } else {
+                putOnClipboard(clip.text, richText: clip.richText, used: clip.id)
+            }
         case .open(let destination):
             show(destination)
         case .openClipboard:
             Task { await toggleQuickPanel() }
-        case .checkForUpdates:
-            updates.checkForUpdates()
         case .setFeature(let feature, let isOn):
             apply(.toggle(feature.setting, isOn: isOn))
             refreshMenuBar()
@@ -1915,7 +1946,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     now: now)),
             insights: InsightsPresenter.page(
                 for: InsightsSnapshot(
-                    entries: entries, settings: settings, now: now)),
+                    entries: entries, settings: settings,
+                    range: InsightsRange(rawValue: scope(for: .insights)), now: now)),
             snippets: SnippetsPresenter.page(
                 for: SnippetsSnapshot(
                     snippets: knownSnippets, draft: snippetDraft, refusal: snippetRefusal,
@@ -1929,7 +1961,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     transformerAvailability: transformerAvailability,
                     speechModel: speechModelPresence, permissions: knownPermissions,
                     measurements: measurements, cleaning: lastCleaning)),
-            account: accountPage(at: now))
+            account: accountPage(at: now),
+            shortcutKeycaps: SettingsShortcut.keycaps(for: settings.hotkey))
     }
 
     /// Reads the account the pages draw from, the entitlement and the local choice together.
@@ -2134,6 +2167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .signIn:
             // Onboarding owns the whole sign-in conversation, so this asks for it explicitly.
             presentOnboarding(skippingWelcome: true, askingToSignIn: true)
+        case .dismissNotice:
+            actionNotice = nil
+            redrawMainWindow()
         case .signOut:
             // Cleared first and the server told after, so signing out never waits on a network.
             account.profiles.clear()
@@ -2170,6 +2206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 ApplicationPicker.choose(given: settings.suggestions) { [weak self] identifier in
                     self?.settingsWindow.apply(.suggestionsHere(application: identifier, isOn: false))
                 }
+            case .openPage(let page): show(.main(page))
             default: break
             }
             return

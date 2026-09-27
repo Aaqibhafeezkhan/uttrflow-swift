@@ -149,6 +149,8 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/AvatarView.swift": "SwiftUI; which of the two things it draws is decided in AccountPagePresentation",
     "Uttrflow/Main/MainWindowView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/MainPieces.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/MainEmptyStateScene.swift": "SwiftUI; which scene a page draws is decided and tested in MainEmptyScene",
+    "Uttrflow/Main/MainDialogs.swift": "SwiftUI, drawn from a tested MainNotice and MainConfirmation",
     "Uttrflow/Main/HistoryPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HistoryRailRow.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/RecordingPlayback.swift": "plays a sound out of the speakers",
@@ -177,7 +179,9 @@ EXCLUDED_FILES = {
     "Uttrflow/Dock/DockSetupView.swift": (
         "SwiftUI, drawn from DockModelSetup, which SpeechModelDockTests covers"
     ),
-    "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item",
+    "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item and its on-screen popover",
+    "Uttrflow/MenuBar/MenuBarPopoverView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/MenuBar/MenuBarGlass.swift": "SwiftUI glass and colours, values from BrandPalette",
     "UttrflowSpeech/TokenizerDownload.swift": "fetches the tokenizer over the real network at install time",
     "UttrflowSpeech/WhisperKitBackend.swift": "loads a downloaded model and decodes real speech",
     "UttrflowSpeech/AppleSpeechBackend.swift": "drives the system recogniser on real speech",

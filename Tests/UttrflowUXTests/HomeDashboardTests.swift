@@ -255,6 +255,12 @@ struct HomeActivityTests {
         #expect(search.title == "Search your words…")
     }
 
+    @Test("the top bar's search is live only once History has something to search")
+    func searchNeedsHistory() {
+        #expect(!HistoryFixture.home().canSearch)
+        #expect(HistoryFixture.home(entries: [HistoryFixture.entry()]).canSearch)
+    }
+
     @Test("a flagged row offers to unflag")
     func flagged() {
         let entry = HistoryFixture.entry(isFlagged: true)

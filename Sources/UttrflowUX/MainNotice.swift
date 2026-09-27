@@ -9,13 +9,22 @@ public struct MainNotice: Sendable, Equatable {
     public let symbolName: String
     /// How it is tinted.
     public let tone: MainTone
+    /// The one thing offered besides putting the notice away, when there is something to do.
+    public let action: MainAction?
 
     /// Builds a notice from its parts.
-    public init(message: String, symbolName: String, tone: MainTone) {
+    public init(message: String, symbolName: String, tone: MainTone, action: MainAction? = nil) {
         self.message = message
         self.symbolName = symbolName
         self.tone = tone
+        self.action = action
     }
+
+    /// The first sentence, drawn in bold as the notice's title.
+    public var headline: String { FailurePresenter.splitIntoSentences(message).headline }
+
+    /// Whatever follows the first sentence, drawn under the title; absent when there was only one.
+    public var detail: String? { FailurePresenter.splitIntoSentences(message).detail }
 }
 
 extension MainNotice {
@@ -30,7 +39,8 @@ extension MainNotice {
         self.init(
             message: failure?.userMessage ?? Self.unforeseenMessage,
             symbolName: drawing.symbolName,
-            tone: drawing.tone)
+            tone: drawing.tone,
+            action: Self.action(for: failure?.recovery))
     }
 
     /// How loudly a refusal is drawn, from what it cost the user alone.
@@ -40,5 +50,11 @@ extension MainNotice {
         case .recoverable: ("arrow.clockwise", .warning)
         case .informational: ("info.circle", .neutral)
         }
+    }
+
+    /// The button a recovery earns; a recovery that only dismisses earns none, as the notice already closes.
+    static func action(for recovery: RecoveryAction?) -> MainAction? {
+        guard let recovery, recovery != .pasteManually else { return nil }
+        return MainAction(title: MainPresenter.title(for: recovery), intent: .recover(recovery))
     }
 }

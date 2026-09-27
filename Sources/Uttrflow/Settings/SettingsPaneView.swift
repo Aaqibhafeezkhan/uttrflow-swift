@@ -35,21 +35,15 @@ struct SettingsPaneView: View {
             .padding(.vertical, SettingsMetrics.paneVerticalPadding)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .alert(
-            asked?.confirmation?.title ?? "",
-            isPresented: Binding(
-                get: { model.session.pendingRemoval != nil },
-                set: { isPresented in if !isPresented { model.dismissRemoval() } })
-        ) {
+        .overlay {
             if let asked, let confirmation = asked.confirmation {
-                // Cancel first and given Return, so a destructive button is never the default.
-                Button(confirmation.cancelTitle, role: .cancel) { model.dismissRemoval() }
-                    .keyboardShortcut(.defaultAction)
-                Button(confirmation.confirmTitle, role: .destructive) { model.confirm(asked) }
+                ConfirmationSheet(
+                    confirmation: MainConfirmation(confirmation),
+                    onCancel: { model.dismissRemoval() },
+                    onConfirm: { model.confirm(asked) })
             }
-        } message: {
-            Text(asked?.confirmation?.message ?? "")
         }
+        .animation(.easeOut(duration: 0.15), value: asked)
     }
 
     /// What is being asked, if anything; the session knows which button was pressed.

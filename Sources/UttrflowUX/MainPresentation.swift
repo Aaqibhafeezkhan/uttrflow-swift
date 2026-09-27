@@ -63,6 +63,8 @@ public enum MainIntent: Sendable, Equatable {
     case signIn
     /// End the session on this Mac.
     case signOut
+    /// Put away the notice in the window's corner.
+    case dismissNotice
 }
 
 /// Something a page offers the user to click.
@@ -88,6 +90,9 @@ public struct MainAction: Sendable, Equatable, Identifiable {
         self.intent = intent
         self.isDestructive = isDestructive
     }
+
+    /// What pressing it asks first, decided by its intent so every button for one act asks the same.
+    public var confirmation: MainConfirmation? { MainConfirmation.before(intent) }
 }
 
 /// A pane with nothing in it, or with something in the way, saying which of a dozen reasons applies.
@@ -106,8 +111,10 @@ public struct MainEmptyState: Sendable, Equatable {
     public let progress: MainProgress?
     /// The small print under the whole pane.
     public let footnote: String?
+    /// The small picture above the title, and the colour that glows behind it.
+    public let scene: MainEmptyScene
 
-    /// Builds an empty state; everything after the message is optional.
+    /// Builds an empty state; everything after the message is optional, and the scene follows the symbol.
     public init(
         symbolName: String,
         title: String,
@@ -115,7 +122,8 @@ public struct MainEmptyState: Sendable, Equatable {
         action: MainAction? = nil,
         chips: [MainStatistic] = [],
         progress: MainProgress? = nil,
-        footnote: String? = nil
+        footnote: String? = nil,
+        scene: MainEmptyScene? = nil
     ) {
         self.symbolName = symbolName
         self.title = title
@@ -124,6 +132,107 @@ public struct MainEmptyState: Sendable, Equatable {
         self.chips = chips
         self.progress = progress
         self.footnote = footnote
+        self.scene = scene ?? MainEmptyScene(symbolName: symbolName)
+    }
+}
+
+/// The colour a page is known by: dictation, suggestions, the clipboard, or information.
+public enum MainAccent: Sendable, Equatable, CaseIterable {
+    case dictation
+    case suggestion
+    case clipboard
+    case info
+}
+
+/// The small picture an empty page draws above its title, so each page is recognisable before it has content.
+public enum MainEmptyScene: Sendable, Equatable {
+    /// The shortcut's keys beside a waveform, for a page that fills as the user dictates.
+    case dictation
+    /// One of the user's own words on a chip, for the dictionary.
+    case word(String)
+    /// A phrase that expands on a chip, for snippets.
+    case phrase(String)
+    /// A few day bars, filled for the days already spoken on, for a page that waits to chart.
+    case chart
+    /// The state's own symbol on a tile, for everything else.
+    case symbol
+
+    /// The dictionary's example word, which is the one the app always spells right.
+    public static let exampleWord = "Uttrflow"
+    /// The snippets page's example phrase.
+    public static let examplePhrase = "my address"
+
+    /// The scene each page's symbol stands for; a symbol with no page of its own gets the plain tile.
+    public init(symbolName: String) {
+        switch symbolName {
+        case "mic", "clock", "waveform": self = .dictation
+        case "character.book.closed", "book": self = .word(Self.exampleWord)
+        case "doc.on.doc": self = .phrase(Self.examplePhrase)
+        case "chart.bar": self = .chart
+        default: self = .symbol
+        }
+    }
+
+    /// The page's colour, which the scene is drawn in and glows behind it.
+    public var accent: MainAccent {
+        switch self {
+        case .dictation, .symbol: .dictation
+        case .word: .clipboard
+        case .phrase: .suggestion
+        case .chart: .info
+        }
+    }
+}
+
+/// The question asked before a button does something that cannot be taken back.
+public struct MainConfirmation: Sendable, Equatable {
+    /// The question, ending in a question mark.
+    public let title: String
+    /// What happens and what stays.
+    public let message: String
+    /// The button that goes ahead.
+    public let confirmTitle: String
+    /// The button that changes nothing, which Return presses.
+    public let cancelTitle: String
+    /// The SF Symbol on the sheet's tile.
+    public let symbolName: String
+    /// The tile's colour.
+    public let tone: MainTone
+    /// Whether going ahead destroys something, which draws the confirm button in red.
+    public let isDestructive: Bool
+
+    /// Builds a question from its parts.
+    public init(
+        title: String, message: String, confirmTitle: String, cancelTitle: String = "Cancel",
+        symbolName: String, tone: MainTone, isDestructive: Bool
+    ) {
+        self.title = title
+        self.message = message
+        self.confirmTitle = confirmTitle
+        self.cancelTitle = cancelTitle
+        self.symbolName = symbolName
+        self.tone = tone
+        self.isDestructive = isDestructive
+    }
+
+    /// Settings' question in the same sheet, since whatever Settings asks first removes something.
+    public init(_ settings: SettingsConfirmation) {
+        self.init(
+            title: settings.title, message: settings.message, confirmTitle: settings.confirmTitle,
+            cancelTitle: settings.cancelTitle, symbolName: "trash", tone: .critical,
+            isDestructive: true)
+    }
+
+    /// Asked before signing out, because Uttrflow stops until the user signs in again.
+    public static let signOut = MainConfirmation(
+        title: "Sign out of Uttrflow?",
+        message: "Your dictations stay on this Mac. You’ll need to sign in again to keep using Uttrflow.",
+        confirmTitle: "Sign Out", symbolName: "rectangle.portrait.and.arrow.right", tone: .warning,
+        isDestructive: true)
+
+    /// What pressing a button for this intent asks first, or `nil` when it acts at once.
+    public static func before(_ intent: MainIntent) -> MainConfirmation? {
+        intent == .signOut ? signOut : nil
     }
 }
 

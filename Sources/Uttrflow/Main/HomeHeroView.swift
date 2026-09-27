@@ -320,6 +320,8 @@ struct HomeWaveform: View {
 struct HomeMoodPicture: View {
     let mood: HomeMood
 
+    @Environment(\.colorScheme) private var colorScheme
+
     /// The widest the picture is drawn, and the narrowest before it is left out.
     static let widest: CGFloat = 390
     static let narrowest: CGFloat = 150
@@ -349,10 +351,21 @@ struct HomeMoodPicture: View {
             .clipped()
             .mask {
                 LinearGradient(
-                    stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.42)],
+                    stops: colorScheme == .dark ? Self.darkFade : Self.lightFade,
                     startPoint: .leading, endPoint: .trailing)
             }
     }
+
+    /// Clear to opaque over the left 42%, which a dark picture on the dark card needs no more than.
+    static let darkFade: [Gradient.Stop] = [
+        .init(color: .clear, location: 0), .init(color: .black, location: 0.42),
+    ]
+
+    /// An eased ramp over the left 60%, so a dark picture on the white card starts with no visible edge.
+    static let lightFade: [Gradient.Stop] = [0, 0.02, 0.08, 0.19, 0.34, 0.52, 0.7, 0.85, 0.95, 1]
+        .enumerated().map { index, opacity in
+            .init(color: .black.opacity(opacity), location: Double(index) / 9 * 0.6)
+        }
 }
 
 /// The six mood pictures, read from the bundle once each.

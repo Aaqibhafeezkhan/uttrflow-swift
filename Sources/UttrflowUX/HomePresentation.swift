@@ -43,6 +43,8 @@ public struct HomePresentation: Sendable, Equatable {
     public let viewAll: MainAction?
     /// The search field in the top bar, which opens History's search.
     public let search: MainAction
+    /// Whether there is anything to search, the same test History uses to show its field.
+    public let canSearch: Bool
 
     /// Builds a page from its parts.
     public init(
@@ -63,7 +65,8 @@ public struct HomePresentation: Sendable, Equatable {
         tiles: [HomeStatTile],
         activity: [HomeActivityRow],
         viewAll: MainAction?,
-        search: MainAction
+        search: MainAction,
+        canSearch: Bool
     ) {
         self.greeting = greeting
         self.subtitle = subtitle
@@ -83,6 +86,7 @@ public struct HomePresentation: Sendable, Equatable {
         self.activity = activity
         self.viewAll = viewAll
         self.search = search
+        self.canSearch = canSearch
     }
 }
 
@@ -344,7 +348,8 @@ public enum HomePresenter {
                     HomeDashboard.activity(for: $0, calendar: calendar, locale: locale)
                 } : [],
             viewAll: kept.isEmpty ? nil : MainAction(title: "View all", intent: .show(.history)),
-            search: HomeDashboard.search)
+            search: HomeDashboard.search,
+            canSearch: !kept.isEmpty)
     }
 
     // MARK: - Showing the clipboard rather than mentioning it

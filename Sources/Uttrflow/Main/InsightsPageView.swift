@@ -1,156 +1,233 @@
-// The Insights page: a fortnight of dictations as bars, figures and places.
+// The Insights page: a calendar shaded by how much was said each day, a range switch, and four figures.
 
 import UttrflowUX
 import SwiftUI
 
-/// A fortnight of dictations, and only the things that can honestly be said about them.
+/// The calendar beside its figures, under a header that carries the range switch.
 struct InsightsPageView: View {
     let presentation: InsightsPresentation
     var onIntent: (MainIntent) -> Void
+    var onScope: (String) -> Void = { _ in }
 
     var body: some View {
-        if let empty = presentation.emptyState {
-            MainEmptyStateView(state: empty, onIntent: onIntent)
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    chart
-                    if !presentation.figures.isEmpty {
-                        HStack(alignment: .top, spacing: 12) {
-                            ForEach(presentation.figures) { MainFigureTile(statistic: $0) }
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            if let empty = presentation.emptyState {
+                MainEmptyStateView(state: empty, onIntent: onIntent)
+            } else {
+                ScrollView {
+                    HStack(alignment: .top, spacing: 18) {
+                        if let calendar = presentation.calendar {
+                            InsightsCalendarCard(calendar: calendar)
                         }
+                        VStack(spacing: 12) {
+                            ForEach(presentation.figures) { InsightsFigureTile(figure: $0) }
+                        }
+                        .frame(width: 220)
                     }
-                    if !presentation.places.isEmpty {
-                        places
-                    }
-                    if let footnote = presentation.footnote {
-                        MainFootnote(text: footnote)
-                    }
+                    .padding(.bottom, 22)
                 }
+                .scrollIndicators(.never)
             }
         }
+        .padding(.horizontal, 28)
+        .padding(.top, 34)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var chart: some View {
-        MainCard(padding: 13) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(presentation.chartTitle)
-                        .font(.system(size: MainMetrics.titleSize, weight: .semibold))
-                    Spacer(minLength: 8)
-                    Text(presentation.chartCaption)
-                        .font(.system(size: MainMetrics.footnoteSize))
-                        .foregroundStyle(.secondary)
-                }
-                InsightsBars(days: presentation.days, average: presentation.average)
-            }
-        }
-    }
-
-    private var places: some View {
-        MainCard(padding: 13) {
-            VStack(alignment: .leading, spacing: 9) {
-                Text("Where you dictate")
-                    .font(.system(size: MainMetrics.bodySize, weight: .semibold))
-                ForEach(presentation.places) { place in
-                    HStack(spacing: 8) {
-                        MainApplicationChip(application: place.application, showsName: true)
-                            .frame(width: 92, alignment: .leading)
-                        MainBar(fraction: place.share)
-                        Text(place.words)
-                            .font(.system(size: MainMetrics.footnoteSize))
-                            .monospacedDigit()
-                            .foregroundStyle(Color.mainDim)
-                            .frame(width: 84, alignment: .trailing)
-                        Text(place.percentage)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, alignment: .trailing)
-                    }
-                    .font(.system(size: MainMetrics.footnoteSize))
-                    .accessibilityElement(children: .combine)
+    /// The title with the range switch beside it, and the caption beneath.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center) {
+                Text(presentation.chrome.title)
+                    .font(BrandFont.display(size: 28, weight: .semibold))
+                    .tracking(-0.84)
+                    .foregroundStyle(PagePalette.text)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 12)
+                if !presentation.ranges.isEmpty {
+                    InsightsRangeSwitch(options: presentation.ranges, onPick: onScope)
                 }
             }
+            if let caption = presentation.chrome.caption {
+                Text(caption)
+                    .font(.system(size: 13))
+                    .foregroundStyle(PagePalette.quiet)
+            }
         }
+        .padding(.bottom, 18)
     }
 }
 
-/// One bar per day of the window, silent days included.
-struct InsightsBars: View {
-    let days: [InsightsDay]
-    /// The mean, drawn across the bars. Absent when there is nothing to average.
-    var average: InsightsAverage?
+/// The calendar's colours: one teal in both appearances, shaded by opacity, over the page's own ink.
+private enum InsightsPalette {
+    private typealias R = BrandPalette.Redesign
 
-    /// The tallest a bar may be drawn; the presenter has already scaled each day to the busiest.
-    private let height: CGFloat = 70
+    /// The teal every spoken-on tile is a shade of.
+    static let heat = Color(rgb: R.dictationAccent.dark)
+    /// The day number on a tile bright enough to need it.
+    static let deepInk = Color(rgb: R.calendarDeepInk)
+    /// A card's film and hairline, a wash of the page's ink.
+    static let cardFill = PagePalette.text.opacity(0.045)
+    static let cardEdge = PagePalette.text.opacity(0.08)
+    /// A day with nothing said.
+    static let bareTile = PagePalette.text.opacity(0.05)
+}
 
-    /// The room the day labels take, so the average line sits against the bars' own baseline.
-    private let labelHeight: CGFloat = 16
+/// Three segments; the picked one is filled, one beyond what is kept is dimmed and says why.
+struct InsightsRangeSwitch: View {
+    let options: [InsightsRangeOption]
+    var onPick: (String) -> Void
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            ForEach(days) { day in
-                VStack(spacing: 6) {
-                    Spacer(minLength: 0)
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(colour(for: day))
-                        // A silent day still gets a sliver, so it reads as a day with nothing in it.
-                        .frame(height: day.isSilent ? 4 : max(6, height * day.fraction))
-                    Text(day.label)
-                        .font(.system(size: 9))
-                        .monospacedDigit()
-                        .foregroundStyle(.tertiary)
+        HStack(spacing: 0) {
+            ForEach(options) { option in
+                Button {
+                    onPick(option.id)
+                } label: {
+                    Text(option.title)
+                        .font(.system(size: 12, weight: option.isSelected ? .semibold : .medium))
+                        .foregroundStyle(
+                            option.isSelected ? Color.redesignWindow : PagePalette.text.opacity(0.65)
+                        )
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background {
+                            if option.isSelected {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(PagePalette.text)
+                            }
+                        }
+                        .contentShape(.rect)
                 }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(day.label): \(day.words) words")
+                .buttonStyle(.plain)
+                .disabled(!option.isAvailable)
+                .opacity(option.isAvailable ? 1 : 0.4)
+                .help(option.unavailableReason ?? "")
+                .accessibilityAddTraits(option.isSelected ? .isSelected : [])
             }
         }
-        .frame(height: 86)
-        .overlay(alignment: .bottomLeading) { averageLine }
-    }
-
-    /// A dashed rule at the mean over the bars, labelled at its right-hand end.
-    @ViewBuilder private var averageLine: some View {
-        if let average {
-            ZStack(alignment: .topTrailing) {
-                Rectangle()
-                    .fill(Color.mainMuted.opacity(0.45))
-                    .frame(height: 1)
-                    .mask(dashes)
-                Text(average.label)
-                    .font(.system(size: 9))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.mainDim)
-                    .padding(.horizontal, 3)
-                    .background(Color.mainCard)
-                    .offset(y: -11)
-            }
-            .padding(.bottom, labelHeight + height * average.fraction)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Average, \(average.label)")
-        }
-    }
-
-    private var dashes: some View {
-        // Dashed, so it reads as a reference rather than as one more bar on its side.
-        HorizontalRule()
-            .stroke(style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-            .foregroundStyle(.black)
-    }
-
-    private func colour(for day: InsightsDay) -> Color {
-        if day.isSilent { return .secondary.opacity(0.35) }
-        return day.isToday ? .dockAccent : .dockAccentLight
+        .padding(3)
+        .background(
+            PagePalette.text.opacity(0.06), in: .rect(cornerRadius: 10, style: .continuous))
     }
 }
 
-/// A horizontal rule, as a shape, so it can be dashed.
-struct HorizontalRule: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        return path
+/// The range as weeks of tiles, a legend from less to more above them.
+struct InsightsCalendarCard: View {
+    let calendar: InsightsCalendar
+
+    /// Past this many weeks a square tile would push the grid off the window, so tiles flatten.
+    private static let squareWeeks = 6
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(calendar.title.uppercased())
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .tracking(0.84)
+                    .foregroundStyle(PagePalette.text.opacity(0.42))
+                Spacer(minLength: 8)
+                legend
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7), spacing: 5) {
+                ForEach(Array(calendar.weekdays.enumerated()), id: \.offset) { _, initial in
+                    Text(initial)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(PagePalette.text.opacity(0.35))
+                        .accessibilityHidden(true)
+                }
+                ForEach(0..<calendar.leadingBlanks, id: \.self) { _ in
+                    Color.clear.frame(height: 1)
+                }
+                ForEach(calendar.days) { day in
+                    InsightsDayTile(day: day, isSquare: calendar.weeks <= Self.squareWeeks)
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(InsightsPalette.cardFill, in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(InsightsPalette.cardEdge, lineWidth: 1)
+        }
+    }
+
+    /// "less", four steps of teal, "more".
+    private var legend: some View {
+        HStack(spacing: 6) {
+            Text("less")
+            ForEach(InsightsCalendar.legend, id: \.self) { shade in
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(InsightsPalette.heat.opacity(shade))
+                    .frame(width: 12, height: 12)
+            }
+            Text("more")
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(PagePalette.text.opacity(0.5))
+        .accessibilityHidden(true)
+    }
+}
+
+/// One day: bare when nothing was said, otherwise teal as deep as the day was busy.
+struct InsightsDayTile: View {
+    let day: InsightsCalendarDay
+    var isSquare = true
+
+    var body: some View {
+        shaped(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(day.isSilent ? InsightsPalette.bareTile : InsightsPalette.heat.opacity(day.shade))
+        )
+        .overlay {
+            Text(day.number)
+                .font(.system(size: 10, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(day.usesDeepInk ? InsightsPalette.deepInk : PagePalette.text.opacity(0.5))
+        }
+        .help(day.detail)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(day.detail)
+    }
+
+    /// Square, or the column's full width at a fixed height when there are too many weeks for squares.
+    @ViewBuilder private func shaped(_ tile: some View) -> some View {
+        if isSquare {
+            tile.aspectRatio(1, contentMode: .fit)
+        } else {
+            tile.frame(maxWidth: .infinity).frame(height: 26)
+        }
+    }
+}
+
+/// One figure: the number in the display face, what it counts beneath.
+struct InsightsFigureTile: View {
+    let figure: MainStatistic
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(figure.value)
+                .font(BrandFont.display(size: 28, weight: .semibold))
+                .tracking(-0.84)
+                .monospacedDigit()
+                .foregroundStyle(PagePalette.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(figure.caption)
+                .font(.system(size: 12))
+                .foregroundStyle(PagePalette.quiet)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(InsightsPalette.cardFill, in: .rect(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(InsightsPalette.cardEdge, lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(figure.value) \(figure.caption)")
     }
 }
