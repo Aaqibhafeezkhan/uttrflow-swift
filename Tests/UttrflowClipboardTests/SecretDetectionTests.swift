@@ -112,6 +112,18 @@ struct SecretDetectionTests {
         #expect(ClipKindDetector.kind(of: text) == .secret)
     }
 
+    @Test(
+        "masks a passphrase, as SSH, GPG and Wi-Fi files call it",
+        arguments: [
+            "passphrase: Zx9kLmQ2rT7p",
+            "PASSPHRASE=Zx9kLmQ2rT7p",
+            "wpa_passphrase=correcthorsebattery",
+            "GPG_PASSPHRASES = \"Zx9kLmQ2rT7p\"",
+        ])
+    func passphrases(_ text: String) {
+        #expect(ClipKindDetector.kind(of: text) == .secret)
+    }
+
     @Test("masks quoted named secrets whose value contains an escaped quote")
     func escapedQuotesInNamedSecrets() {
         let dotenv = #"password="abc123\"def456""#

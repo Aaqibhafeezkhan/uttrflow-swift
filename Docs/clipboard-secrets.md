@@ -24,7 +24,7 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
 4. Vendor prefixes with a minimum length each (OpenAI, Anthropic, Stripe, GitHub, GitLab,
    Slack, AWS, Google, npm, DigitalOcean, Shopify, SendGrid), so prose about `sk-` keys is not
    itself one.
-5. A named secret per line (`API_KEY=…`, `password: …`, `client_secret = …`) whose value is
+5. A named secret per line (`API_KEY=…`, `password: …`, `passphrase: …`, `client_secret = …`) whose value is
    quoted, or has a digit, or is at least 12 characters, so `var password: String` does not
    count. The name may carry a prefix: a keyword starts at a word boundary, after `_`, or at a
    lowercase-to-uppercase step, so `DB_PASSWORD`, `GITHUB_TOKEN`, `STRIPE_API_KEY` and

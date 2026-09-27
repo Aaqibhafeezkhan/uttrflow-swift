@@ -14,7 +14,7 @@ struct SecretShapesOracleTests {
         "eyJhbGciOiJIUzI1NiJ9", "://", "http", "https://", "postgres", ":", "/", "@", "=", ";", ",",
         "\"", "'", " ", "\t", "\n", "\r\n", "\r", "\u{2028}", "\u{85}", "\u{A0}", "\u{0B}", ".", "-",
         "_", "+", "()", "request.token", "password", "PASSWORD", "Password", "pwd", "passwd",
-        "token", "tokens", "api_key",
+        "token", "tokens", "passphrase", "PASSPHRASES", "api_key",
         "API-KEY", "apikey", "api_keys", "secret", "Secrets", "credential", "credentials",
         "private_key", "access-key", "secret_key", "SECRET-KEYS", "auth_token", "client_secret",
         "clientsecret", "\u{212A}",
@@ -241,8 +241,8 @@ enum BacktrackingPatterns {
         #/
         (?i)
         (?: \b | _ | (?-i:[a-z])(?=(?-i:[A-Z])) )
-        (?: api[_\-]?keys? | secret[_\-]?keys? | secrets? | tokens? | passwords? | passwd | pwd | pass
-            | credentials? | private[_\-]?key | access[_\-]?key | auth[_\-]?token
+        (?: api[_\-]?keys? | secret[_\-]?keys? | secrets? | tokens? | passwords? | passphrases? | passwd | pwd
+            | pass | credentials? | private[_\-]?key | access[_\-]?key | auth[_\-]?token
             | client[_\-]?secret )
         \b["']? \s* [:=] \s*
         (?<value> "(?:[^"\\\n]|\\.)+" | '(?:[^'\\\n]|\\.)+' | [^\s"'\n]+ )

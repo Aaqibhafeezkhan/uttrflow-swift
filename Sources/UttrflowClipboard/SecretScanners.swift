@@ -204,7 +204,8 @@ struct NamedSecretScan {
             ["", "_", "-"].map { first + $0 + second }
         }
         let plurals =
-            (joined("api", "key") + joined("secret", "key") + ["secret", "token", "password", "credential"])
+            (joined("api", "key") + joined("secret", "key")
+            + ["secret", "token", "password", "passphrase", "credential"])
             .flatMap {
                 [$0, $0 + "s"]
             }
