@@ -197,10 +197,20 @@ public struct Register: Sendable, Equatable {
         let label = line[..<colon].trimmingCharacters(in: .whitespaces)
         guard let first = label.first, first.isLetter, label.count <= speakerLength,
             label.split(separator: " ").count <= speakerWords,
-            label.allSatisfy({ $0.isLetter || $0.isNumber || " ()._-'".contains($0) })
+            label.allSatisfy({ $0.isLetter || $0.isNumber || " ()._-'".contains($0) }),
+            !fieldLabels.contains(label.lowercased())
         else { return nil }
         return label
     }
+
+    /// Labels a record, a form, a mail header or a report repeats for each entry, which name a field and never a person.
+    static let fieldLabels: Set<String> = [
+        "actual", "address", "amount", "assignee", "attendees", "bcc", "category", "cc", "date", "deadline",
+        "description", "due", "due date", "email", "end", "end date", "expected", "from", "id", "location",
+        "name", "note", "notes", "owner", "phone", "priority", "reporter", "result", "sent", "start",
+        "start date", "status", "steps", "subject", "summary", "tags", "time", "title", "to", "total", "type",
+        "when", "where",
+    ]
 
     /// The longest a speaker's name may run, in characters, before the text before a colon reads as a sentence.
     static let speakerLength = 32
