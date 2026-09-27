@@ -443,8 +443,11 @@ public actor ClipboardStore {
 
     /// Carries what the user chose about a clip onto the copy that has just replaced it.
     private func inheriting(_ previous: Clip, from arrival: Clip) -> Clip {
-        Clip(
-            id: previous.id, text: arrival.text, kind: arrival.kind, copiedAt: arrival.copiedAt,
+        // A kept clip the user chose to keep on disk is never made a memory-only secret by a repeat of the same text.
+        let staysKept = previous.isKept && Self.isPersistable(previous) && !Self.isPersistable(arrival)
+        let classified = staysKept ? previous : arrival
+        return Clip(
+            id: previous.id, text: arrival.text, kind: classified.kind, copiedAt: arrival.copiedAt,
             source: arrival.source,
             // Named rather than defaulted, so a repeat cannot quietly become a ⌘C.
             origin: previous.origin,
@@ -456,8 +459,10 @@ public actor ClipboardStore {
             dictatedText: previous.dictatedText,
             // Copying something again is reaching for it, so the eviction clock moves too.
             lastUsedAt: arrival.copiedAt,
-            // The arrival's, detected from the text recorded now and from this pasteboard.
-            language: arrival.language, richText: arrival.richText,
+            // Detected from the text recorded now and from this pasteboard, unless the kind stayed the kept clip's.
+            language: classified.language,
+            // A plain repeat keeps the clip's rich text, which may be a note the user wrote in the panel.
+            richText: arrival.richText ?? previous.richText,
             // The file already on disk, not the one just written; the arrival's would strand it.
             image: previous.image ?? arrival.image,
             // Everything the user decided stays with the clip they decided it about.

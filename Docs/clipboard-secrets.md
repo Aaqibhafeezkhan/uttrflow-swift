@@ -25,7 +25,11 @@ the manual checks in `Docs/ui-tests.md` record what each release actually hides.
    URL whose query or fragment carries `sig`, `signature`, `X-Amz-Signature`,
    `X-Goog-Signature`, `access_token`, `id_token`, `refresh_token` or `token` with a value of
    at least eight characters, which is what a signed (SAS, pre-signed) URL or a magic link is.
-   `?token=` with nothing, or with a short placeholder, stays a link.
+   `?token=` with nothing, or with a short placeholder, stays a link. Parameter names are
+   percent-decoded first (`access%5Ftoken`), a host's closing dot is ignored
+   (`hooks.slack.com.`), and a URL nested after a later `://` in another one's path or query
+   (`?next=https://hooks.slack.com/…`) is judged as its own address. Each nested address is read
+   only up to the next `://`, so the reading stays linear in the clip.
 5. Vendor prefixes with a minimum length each (OpenAI, Anthropic, Stripe, GitHub, GitLab,
    Slack, AWS, Google, npm, DigitalOcean, Shopify, SendGrid), so prose about `sk-` keys is not
    itself one.
