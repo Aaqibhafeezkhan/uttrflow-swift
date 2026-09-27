@@ -244,10 +244,10 @@ struct SidebarRow: View {
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: 44, height: 40)
                 .overlay(alignment: .topTrailing) {
-                    // The count, as a dot, for the width that has no room for a number.
+                    // The count, as an amber dot, for the width that has no room for a number.
                     if item.badge != nil {
                         Circle()
-                            .fill(IslandPalette.accent)
+                            .fill(PagePalette.clipboard)
                             .frame(width: 6, height: 6)
                             .padding(.top, 8)
                             .padding(.trailing, 9)
@@ -319,7 +319,7 @@ struct SidebarAccountCard: View {
                     }
                     .padding(12)
                 } else {
-                    avatar(size: 32)
+                    avatar(size: 30)
                         .padding(7)
                         .frame(maxWidth: .infinity)
                 }
@@ -329,6 +329,9 @@ struct SidebarAccountCard: View {
                 // Lit exactly as a selected row is, so Profile reads as the current page.
                 if isSelected {
                     SidebarSelection(isSelected: true, cornerRadius: 14)
+                } else if !isExpanded {
+                    // The rail shows the disc alone, with a faint wash under the pointer.
+                    SidebarSelection(isSelected: false, isHovered: isHovered, cornerRadius: 14)
                 } else {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(IslandPalette.ink.opacity(isHovered ? 0.1 : 0.06))
