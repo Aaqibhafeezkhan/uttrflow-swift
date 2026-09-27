@@ -69,7 +69,7 @@ struct CleaningScopeTests {
             "", seeing: .fixture(applicationName: "TextEdit", bundleIdentifier: "com.apple.TextEdit"),
             scope: .message)
 
-        #expect(await router.finishMessage("git status", for: terminal) == "Git status")
+        #expect(await router.finishMessage("git status", for: terminal) == "git status")
         #expect(await router.finishMessage("the build failed", for: document) == "The build failed.")
     }
 

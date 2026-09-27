@@ -1,4 +1,4 @@
-// The Diagnostics page: its rows, the latency figures, reliability, and the plain-text report.
+// The Diagnostics tab: the model cards, this Mac, the latency figures, reliability, and the plain-text report.
 public import Foundation
 public import UttrflowCore
 
@@ -109,36 +109,91 @@ public struct DiagnosticsModelPresence: Sendable, Equatable {
     }
 }
 
+/// One model Uttrflow runs, as a card: what it is for, what it is, and whether it is ready.
+public struct DiagnosticsModelCard: Sendable, Equatable, Identifiable {
+    /// What the model is for, which is unique on the page.
+    public let title: String
+    /// The SF Symbol on the card's tile.
+    public let symbolName: String
+    /// The accent the tile is washed in.
+    public let tint: SettingsTint
+    /// The model in plain words, never a product name.
+    public let name: String
+    /// Short facts under the name: its size, where it runs.
+    public let chips: [String]
+    /// Whether it is ready, in a word or two.
+    public let status: String
+    /// How the status is coloured.
+    public let state: DiagnosticsState
+
+    /// The title.
+    public var id: String { title }
+
+    /// Builds a card.
+    public init(
+        title: String, symbolName: String, tint: SettingsTint, name: String, chips: [String],
+        status: String, state: DiagnosticsState
+    ) {
+        self.title = title
+        self.symbolName = symbolName
+        self.tint = tint
+        self.name = name
+        self.chips = chips
+        self.status = status
+        self.state = state
+    }
+}
+
 /// Everything the diagnostics page is drawn from.
 public struct DiagnosticsSnapshot: Sendable, Equatable {
     /// Which engines are configured, in preference order.
     public let engines: EngineConfiguration
+    /// The recogniser the pipeline transcribes with, which trails the setting until a switch has been taken up.
+    public let speechInUse: SpeechEngineKind?
     /// What each clean-up engine answered when last asked whether it can run here; absent means never asked.
     public let transformerAvailability: [TransformerKind: Bool]
     /// Absent until the store has been consulted.
     public let speechModel: DiagnosticsModelPresence?
+    /// Whether the speech model can dictate, from the same state Home, the menu bar and the floating button read.
+    public let speechReadiness: SpeechModelReadiness?
     /// What macOS has granted, for every permission asked about.
     public let permissions: [PermissionKind: PermissionStatus]
     /// Every stage timing recorded since the app started.
     public let measurements: [StageMeasurement]
     /// What the clean-up steps did to the last dictation, absent until one has been tidied.
     public let cleaning: CleaningRecord?
+    /// How far along the model AI suggestions need is.
+    public let suggestionModel: SuggestionModelReadiness
+    /// Which build is running.
+    public let version: AppVersion
+    /// This Mac in one line: macOS version, chip and memory; absent when it could not be read.
+    public let machine: String?
 
     /// Builds a snapshot; everything defaults to not yet checked.
     public init(
         engines: EngineConfiguration = .default,
+        speechInUse: SpeechEngineKind? = nil,
         transformerAvailability: [TransformerKind: Bool] = [:],
         speechModel: DiagnosticsModelPresence? = nil,
+        speechReadiness: SpeechModelReadiness? = nil,
         permissions: [PermissionKind: PermissionStatus] = [:],
         measurements: [StageMeasurement] = [],
-        cleaning: CleaningRecord? = nil
+        cleaning: CleaningRecord? = nil,
+        suggestionModel: SuggestionModelReadiness = .notAsked,
+        version: AppVersion = .unknown,
+        machine: String? = nil
     ) {
         self.engines = engines
+        self.speechInUse = speechInUse
         self.transformerAvailability = transformerAvailability
         self.speechModel = speechModel
+        self.speechReadiness = speechReadiness
         self.permissions = permissions
         self.measurements = measurements
         self.cleaning = cleaning
+        self.suggestionModel = suggestionModel
+        self.version = version
+        self.machine = machine
     }
 }
 
@@ -163,6 +218,10 @@ public struct DiagnosticsSummary: Sendable, Equatable {
 public struct DiagnosticsPresentation: Sendable, Equatable {
     /// The verdict, above everything else on the page.
     public let summary: DiagnosticsSummary
+    /// One card per model Uttrflow runs.
+    public let models: [DiagnosticsModelCard]
+    /// The build and this Mac, before the permissions.
+    public let system: [DiagnosticsRow]
     /// Absent until something has been timed, in which case ``latencyEmptyState`` says so.
     public let latency: DiagnosticsLatency?
     /// Shown instead of ``latency`` until something has been timed.
@@ -185,6 +244,8 @@ public struct DiagnosticsPresentation: Sendable, Equatable {
     /// Builds the page from its parts.
     public init(
         summary: DiagnosticsSummary,
+        models: [DiagnosticsModelCard] = [],
+        system: [DiagnosticsRow] = [],
         latency: DiagnosticsLatency?,
         latencyEmptyState: MainEmptyState?,
         reliability: [MainStatistic],
@@ -196,6 +257,8 @@ public struct DiagnosticsPresentation: Sendable, Equatable {
         copyAction: MainAction
     ) {
         self.summary = summary
+        self.models = models
+        self.system = system
         self.latency = latency
         self.latencyEmptyState = latencyEmptyState
         self.reliability = reliability
@@ -229,6 +292,8 @@ public enum DiagnosticsPresenter {
 
         return DiagnosticsPresentation(
             summary: summary(engines: engines, permissions: permissions, storage: storage),
+            models: models(for: snapshot, locale: locale),
+            system: systemRows(for: snapshot),
             latency: summaries.isEmpty ? nil : latency(for: summaries, missing: missing),
             latencyEmptyState: summaries.isEmpty ? noTimingsYet : nil,
             reliability: reliability(for: snapshot.measurements, locale: locale),
@@ -241,14 +306,152 @@ public enum DiagnosticsPresenter {
                 title: "Copy Diagnostics", intent: .copy(report(for: snapshot, locale: locale))))
     }
 
+    // MARK: - Models
+
+    /// The two recognisers, the clean-up engine in use, and the model AI suggestions need.
+    static func models(for snapshot: DiagnosticsSnapshot, locale: Locale) -> [DiagnosticsModelCard] {
+        let speech = snapshot.speechInUse ?? snapshot.engines.speech
+        return [
+            downloadedSpeechCard(snapshot, inUse: speech == .whisperKit, locale: locale),
+            DiagnosticsModelCard(
+                title: "Speech (Faster)", symbolName: "mic", tint: .info,
+                name: name(for: SpeechEngineKind.appleSpeech), chips: ["Built in", onDevice],
+                status: speech == .appleSpeech ? "In use" : "Ready", state: .good),
+            cleanUpCard(snapshot),
+            suggestionsCard(snapshot.suggestionModel),
+        ]
+    }
+
+    /// Where every model on the page runs.
+    static let onDevice = "On-device"
+
+    /// The downloaded recogniser: whether it is on the disk, how big, and for which languages.
+    static func downloadedSpeechCard(
+        _ snapshot: DiagnosticsSnapshot, inUse: Bool, locale: Locale
+    ) -> DiagnosticsModelCard {
+        let card = { (name: String, chips: [String], status: String, state: DiagnosticsState) in
+            DiagnosticsModelCard(
+                title: "Speech", symbolName: "waveform", tint: .dictation,
+                name: name, chips: chips + [onDevice], status: status, state: state)
+        }
+        let downloaded = name(for: SpeechEngineKind.whisperKit)
+        let missing: DiagnosticsState = inUse ? .attention : .unknown
+        switch speechModelCondition(snapshot, inUse: inUse) {
+        case .unchecked:
+            return card(downloaded, [], "Not checked yet", .unknown)
+        case .notInstalled:
+            return card(notYetDownloaded, [], "Not downloaded", missing)
+        case .incomplete:
+            return card(notYetDownloaded, [], "Incomplete", missing)
+        case .downloading:
+            return card(notYetDownloaded, [], "Downloading", .unknown)
+        case .loading:
+            return card(downloaded, facts(snapshot.speechModel, locale: locale), "Loading", .unknown)
+        case .failed:
+            return card(downloaded, facts(snapshot.speechModel, locale: locale), "Failed to load", .attention)
+        case .ready:
+            return card(
+                downloaded, facts(snapshot.speechModel, locale: locale), inUse ? "In use" : "Ready", .good)
+        }
+    }
+
+    /// The model's size and languages as card chips, empty until the store has been read.
+    private static func facts(_ model: DiagnosticsModelPresence?, locale: Locale) -> [String] {
+        guard let model else { return [] }
+        let size = model.bytesOnDisk.map { [MainFormatting.bytes($0, locale: locale)] } ?? []
+        return size + [model.isMultilingual ? "Every language" : "English"]
+    }
+
+    /// Where the downloaded recogniser stands, as Diagnostics tells it.
+    enum SpeechModelCondition: Equatable {
+        case unchecked, notInstalled, incomplete, downloading, loading, ready
+        /// It failed to load, with the fix every other surface offers for it.
+        case failed(RecoveryAction)
+    }
+
+    /// Reads the shared readiness first and the files on disk second, so Diagnostics never contradicts Home.
+    static func speechModelCondition(_ snapshot: DiagnosticsSnapshot, inUse: Bool) -> SpeechModelCondition {
+        switch snapshot.speechReadiness {
+        case .incomplete: return .incomplete
+        case .notInstalled: return .notInstalled
+        case .downloading: return .downloading
+        // A load, and how it went, is about the recogniser in use, which may not be this one.
+        case .loading where inUse: return .loading
+        case .loadFailed where inUse: return .failed(.retry)
+        case .loadFailedAgain where inUse: return .failed(.downloadSpeechModel)
+        case .ready, .loading, .loadFailed, .loadFailedAgain, nil: break
+        }
+        guard let model = snapshot.speechModel else { return .unchecked }
+        return model.isInstalled ? .ready : .notInstalled
+    }
+
+    /// The downloadable recogniser's name while its files are missing, so it never claims to be downloaded.
+    static let notYetDownloaded = "Speech model to download"
+
+    /// The clean-up engine that tidies now, or what is still being asked.
+    static func cleanUpCard(_ snapshot: DiagnosticsSnapshot) -> DiagnosticsModelCard {
+        let ordered = snapshot.engines.resolvedTransformerPreference
+        let card = { (name: String, chips: [String], status: String, state: DiagnosticsState) in
+            DiagnosticsModelCard(
+                title: "Clean-up", symbolName: "wand.and.stars", tint: .suggestion, name: name,
+                chips: chips, status: status, state: state)
+        }
+        guard let inUse = ordered.first(where: { snapshot.transformerAvailability[$0] == true }) else {
+            return card("Not checked yet", [], "Checking", .unknown)
+        }
+        let origin = inUse == .localModel ? "Downloaded" : "Built in"
+        return card(name(for: inUse), inUse == .cloud ? [origin] : [origin, onDevice], "In use", .good)
+    }
+
+    /// The model AI suggestions need, and how far along it is.
+    static func suggestionsCard(_ readiness: SuggestionModelReadiness) -> DiagnosticsModelCard {
+        let (status, state): (String, DiagnosticsState) =
+            switch readiness {
+            case .notAsked: ("Off", .unknown)
+            case .downloading(let fraction):
+                (
+                    fraction.map { "Downloading \(MenuBarPresenter.percentage(of: $0))%" } ?? "Downloading",
+                    .unknown
+                )
+            case .loading: ("Loading", .unknown)
+            case .ready: ("Loaded", .good)
+            case .releasedForMemory: ("Set aside for memory", .unknown)
+            case .failed: ("Could not be fetched", .attention)
+            }
+        return DiagnosticsModelCard(
+            title: "AI suggestions", symbolName: "sparkles", tint: .amber,
+            name: name(for: TransformerKind.localModel), chips: ["About 3 GB", onDevice],
+            status: status, state: state)
+    }
+
+    // MARK: - This Mac
+
+    /// The build and the machine, as facts with nothing to press.
+    static func systemRows(for snapshot: DiagnosticsSnapshot) -> [DiagnosticsRow] {
+        var rows: [DiagnosticsRow] = []
+        if snapshot.version.isKnown {
+            rows.append(DiagnosticsRow(title: "Uttrflow", detail: snapshot.version.tag, state: .good))
+        }
+        if let machine = snapshot.machine {
+            rows.append(DiagnosticsRow(title: "macOS", detail: machine, state: .good))
+        }
+        return rows
+    }
+
     // MARK: - The verdict
 
-    /// What to say above the table: the first thing wrong, in the order permissions, engines, storage.
+    /// What to say above the table: the first thing wrong, in the order permissions, storage, engines.
     static func summary(
         engines: [DiagnosticsRow], permissions: [DiagnosticsRow], storage: [DiagnosticsRow]
     ) -> DiagnosticsSummary {
-        let ordered = permissions + engines + storage
+        // Storage before engines, so a missing model is named by the row that offers the download.
+        let ordered = permissions + storage + engines
         guard let problem = ordered.first(where: { $0.state == .attention }) else {
+            // An unanswered check is not an all-clear, so the line names it without raising a warning.
+            if let pending = ordered.first(where: { $0.state == .unknown }) {
+                return DiagnosticsSummary(
+                    text: "Still checking: \(pending.title).", needsAttention: false, action: nil)
+            }
             return DiagnosticsSummary(
                 text: "Everything Uttrflow needs is in place.", needsAttention: false,
                 action: nil)
@@ -353,8 +556,15 @@ public enum DiagnosticsPresenter {
         let ordered = snapshot.engines.resolvedTransformerPreference
         let inUse = ordered.first { snapshot.transformerAvailability[$0] == true }
 
+        let recogniser = snapshot.speechInUse ?? snapshot.engines.speech
+        // The downloaded recogniser cannot run without its files, so it is not green while they are missing.
+        let condition = speechModelCondition(snapshot, inUse: recogniser == .whisperKit)
+        let lacksModel =
+            recogniser == .whisperKit && (condition == .notInstalled || condition == .incomplete)
         let speech = DiagnosticsRow(
-            title: "Speech", detail: name(for: snapshot.engines.speech), state: .good)
+            title: "Speech",
+            detail: lacksModel ? notYetDownloaded : name(for: recogniser),
+            state: lacksModel ? .attention : .good)
 
         return [speech]
             + ordered.map { kind in
@@ -515,25 +725,37 @@ public enum DiagnosticsPresenter {
 
     // MARK: - What is on the disk
 
-    /// The speech model row: not checked, not downloaded, or its size and languages.
+    /// The speech model row: not checked, not downloaded, incomplete, loading, failed to load, or its size and languages.
     static func storageRows(for snapshot: DiagnosticsSnapshot, locale: Locale) -> [DiagnosticsRow] {
-        guard let model = snapshot.speechModel else {
-            return [DiagnosticsRow(title: "Speech model", detail: "Not checked yet", state: .unknown)]
-        }
-        guard model.isInstalled else {
-            return [
+        // Only the downloaded recogniser needs these files, so their absence is a problem only for it.
+        let needed = (snapshot.speechInUse ?? snapshot.engines.speech) == .whisperKit
+        let row = { (detail: String, state: DiagnosticsState, fix: RecoveryAction?) in
+            [
                 DiagnosticsRow(
-                    title: "Speech model", detail: "Not downloaded", state: .attention,
-                    action: action(.downloadSpeechModel))
+                    title: "Speech model", detail: detail, state: state, action: fix.map { Self.action($0) })
             ]
         }
-
-        let languages = model.isMultilingual ? "every language" : "English"
-        let size = model.bytesOnDisk.map { "\(MainFormatting.bytes($0, locale: locale)), " } ?? ""
-        return [
-            DiagnosticsRow(
-                title: "Speech model", detail: "\(size)on this Mac, \(languages)", state: .good)
-        ]
+        let onDisk = snapshot.speechModel.map { model in
+            let languages = model.isMultilingual ? "every language" : "English"
+            let size = model.bytesOnDisk.map { "\(MainFormatting.bytes($0, locale: locale)), " } ?? ""
+            return "\(size)on this Mac, \(languages)"
+        }
+        switch speechModelCondition(snapshot, inUse: needed) {
+        case .unchecked:
+            return row("Not checked yet", .unknown, nil)
+        case .notInstalled:
+            return row("Not downloaded", needed ? .attention : .good, .downloadSpeechModel)
+        case .incomplete:
+            return row("Incomplete, download it again", needed ? .attention : .good, .downloadSpeechModel)
+        case .downloading:
+            return row("Downloading", .unknown, nil)
+        case .loading:
+            return row([onDisk, "loading"].compactMap(\.self).joined(separator: ", "), .unknown, nil)
+        case .failed(let fix):
+            return row("On this Mac, but it failed to load", .attention, fix)
+        case .ready:
+            return row(onDisk ?? "On this Mac", .good, nil)
+        }
     }
 
     // MARK: - Copying it out
@@ -544,6 +766,10 @@ public enum DiagnosticsPresenter {
     ) -> String {
         let stages = stageRows(for: StageLatency.summarise(snapshot.measurements))
         var lines = ["Uttrflow diagnostics", footnote, ""]
+        let system = systemRows(for: snapshot)
+        if !system.isEmpty {
+            lines += system.map { "\($0.title): \($0.detail)" } + [""]
+        }
 
         if stages.isEmpty {
             lines.append("Timings: none recorded yet")
@@ -562,7 +788,11 @@ public enum DiagnosticsPresenter {
             lines += ["", "Clean-up steps, last dictation"] + counted
         }
 
+        let models = models(for: snapshot, locale: locale).map {
+            DiagnosticsRow(title: $0.title, detail: $0.status, state: $0.state)
+        }
         let sections: [(String, [DiagnosticsRow])] = [
+            ("Models", models),
             ("Engines", engineRows(for: snapshot)),
             ("Permissions", permissionRows(for: snapshot)),
             ("On disk", storageRows(for: snapshot, locale: locale)),

@@ -22,13 +22,15 @@ final class LaunchSmokeTests: XCTestCase {
         app.menuBars.menuBarItems["Uttrflow"].click()
         app.menuItems["Settings…"].click()
 
-        let settings = app.windows["Uttrflow Settings"]
+        // Settings is a page of the main window, next to its sidebar.
+        let settings = app.windows["Uttrflow"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings never opened")
 
-        for pane in ["General", "Languages", "Dictation", "AI suggestions", "Privacy"] {
-            settings.buttons[pane].click()
-            XCTAssertTrue(
-                settings.staticTexts[pane].waitForExistence(timeout: 5), "\(pane) drew nothing")
+        for pane in ["General", "Languages", "Dictation", "AI suggestions", "Privacy", "Diagnostics"] {
+            let tab = settings.buttons[pane]
+            XCTAssertTrue(tab.waitForExistence(timeout: 5), "there is no \(pane) tab")
+            tab.click()
+            XCTAssertTrue(tab.isSelected, "\(pane) did not open")
         }
         app.terminate()
     }

@@ -99,6 +99,21 @@ struct SettingsSessionTests {
         #expect(!session.recorder.isRecording)
     }
 
+    @Test("keeps the field listening when the shortcut already belongs to another action")
+    func clashingShortcutKeepsRecording() throws {
+        var session = SettingsSession(settings: .default)
+        let taken = try #require(session.settings.shortcuts.first(for: .pasteLastTranscript))
+        let before = session.settings.shortcuts.first(for: .copyLastTranscript)
+        session.beginRecordingShortcut(.copyLastTranscript)
+
+        #expect(session.record(keyCode: taken.keyCode, modifiers: taken.modifiers) == nil)
+        #expect(session.recorder.isRecording)
+        #expect(session.recorder.binding == before)
+        #expect(session.recorder.rejection != nil)
+        #expect(session.rejection == session.recorder.rejection)
+        #expect(session.settings.shortcuts.first(for: .copyLastTranscript) == before)
+    }
+
     @Test("saves nothing when the recorded shortcut could not be delivered")
     func refusedShortcutSavesNothing() {
         var session = SettingsSession(settings: .default)
@@ -150,7 +165,7 @@ struct SettingsSessionTests {
         // 0x80 is past the 7-bit virtual key range, so no modifier combination can rescue it.
         stored.hotkey = HotkeyBinding(keyCode: 0x80, modifiers: [.option])
         let session = SettingsSession(settings: stored)
-        #expect(session.recorder.binding == .optionSpace)
+        #expect(session.recorder.binding == Settings.default.hotkey)
     }
 
     @Test("shows whichever tab it is switched to, without losing the settings")

@@ -34,6 +34,16 @@ public struct UserDefaultsSettingsStore: SettingsStore {
         return settings
     }
 
+    /// Pins the install's first settings over a missing or unreadable blob, so a later default moves nobody.
+    public func pinDefaults(onboarded: Bool) {
+        if let data = store.data(forKey: key),
+            (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
+        {
+            return
+        }
+        save(onboarded ? .earlierInstall : .default)
+    }
+
     /// Writes the blob; encoding settings made of strings, numbers, booleans and arrays cannot fail.
     public func save(_ settings: Settings) {
         store.set(try? JSONEncoder().encode(settings), forKey: key)

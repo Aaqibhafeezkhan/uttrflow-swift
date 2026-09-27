@@ -169,6 +169,42 @@ struct MarkerWordListTests {
         #expect(draft.text == "the crash is in payment sheet")
     }
 
+    /// An empty word list reports nothing, so the segment keeps its own text as an absent one does.
+    @Test("keeps a segment's text when its word list is empty")
+    func emptyWordsKeepTheSegmentText() {
+        let raw = RawTranscript(
+            text: "hello there",
+            segments: [RawSegment(text: "hello there", start: 0, end: 1, words: [])])
+
+        let segment = raw.transcription(audioDuration: .seconds(1)).segments.first
+
+        #expect(segment?.text == "hello there")
+        #expect(segment?.words.isEmpty == true)
+    }
+
+    /// A segment that reports no words beside timed ones leaves the timed confidences in use.
+    @Test("keeps real confidences when a marker segment reports an empty word list")
+    func emptyMarkerSegmentKeepsConfidences() {
+        let raw = RawTranscript(
+            text: "hello there [BLANK_AUDIO]",
+            segments: [
+                RawSegment(
+                    text: "hello there", start: 0, end: 1,
+                    words: [
+                        RawWord(text: " hello", start: 0, end: 0.5, probability: 0.9),
+                        RawWord(text: " there", start: 0.5, end: 1, probability: 0.4),
+                    ]),
+                RawSegment(text: "[BLANK_AUDIO]", start: 1, end: 2, words: []),
+            ])
+
+        let transcription = raw.transcription(audioDuration: .seconds(2))
+        let draft = Draft(transcription: transcription)
+
+        #expect(transcription.segments.map(\.text) == ["hello there", ""])
+        #expect(draft.confidencesAreReal)
+        #expect(draft.text == "hello there")
+    }
+
     /// The other half of the rule: a bracket the speaker dictated has to survive in both representations.
     @Test("keeps a dictated aside in the words as well as the text")
     func keepsADictatedAside() {

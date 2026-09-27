@@ -48,9 +48,11 @@ extension SettingsPane {
                 ].compactMap(\.self)
             case .action(let title, _):
                 strings += [title]
-            case .text(let value):
+            case .text(let value), .placeholder(let value), .status(let value):
                 strings += [value]
-            case .toggle, .anchorPicker, .tick, .applicationSwitch:
+            case .languages(let chips, let add):
+                strings += chips.map(\.title) + add.map(\.title)
+            case .toggle, .tick, .applicationSwitch:
                 break
             }
         }
@@ -83,9 +85,9 @@ struct SettingsWindowTests {
         }
     }
 
-    @Test("draws something on every tab")
+    @Test("draws something on every tab but Diagnostics, whose content is the diagnostics page")
     func noTabIsEmpty() {
-        for pane in everyPane() {
+        for pane in everyPane() where pane.tab != .diagnostics {
             #expect(!pane.title.isEmpty, "\(pane.tab) has no title")
             #expect(!pane.groups.isEmpty, "\(pane.tab) has no cards")
             #expect(!pane.everyRow.isEmpty, "\(pane.tab) has no rows")
@@ -113,7 +115,7 @@ struct SettingsWindowTests {
                         options.map(\.id).contains(selected),
                         "\(row.id) has selected something it does not offer")
                     #expect(Set(options.map(\.id)).count == options.count)
-                case .toggle, .anchorPicker, .shortcut, .tick, .removal, .action, .text,
+                case .toggle, .shortcut, .tick, .removal, .action, .text, .placeholder, .status, .languages,
                     .applicationSwitch:
                     break
                 }
@@ -187,11 +189,17 @@ struct SettingsGeneralPaneTests {
         #expect(selected == HotkeyActivation.pressToToggle.rawValue)
     }
 
-    @Test("shows the corner the floating button is parked in")
+    @Test("offers every place the floating button can park, with the stored one selected")
     func showsTheAnchor() {
         var settings = Settings.default
         settings.floatingButtonAnchor = .bottomLeft
-        #expect(general(settings).row("anchor")?.control == .anchorPicker(selected: .bottomLeft))
+        guard case .menu(let options, let selected) = general(settings).row("anchor")?.control else {
+            Issue.record("the position is not a pop-up")
+            return
+        }
+        #expect(selected == DockAnchor.bottomLeft.rawValue)
+        #expect(options.map(\.title) == ["Bottom left", "Bottom centre", "Bottom right", "Right edge"])
+        #expect(options.map(\.change) == DockAnchor.allCases.map { .anchor($0) })
     }
 
     @Test("turns off what depends on the floating button, and says why")
@@ -263,35 +271,56 @@ struct SettingsLanguagesPaneTests {
         SettingsPresenter.pane(for: .languages, settings: settings, capabilities: .everything)
     }
 
-    @Test("ticks the languages the user speaks and leaves the rest to be chosen")
-    func ticksWhatIsSpoken() {
+    @Test("shows the languages the user speaks as chips and offers the rest to add")
+    func chipsWhatIsSpoken() {
         var settings = Settings.default
+        settings.profile.preferredLanguages = [.english, .hindi]
+
+        #expect(
+            languages(settings).row("spokenLanguages")?.control
+                == .languages(
+                    chips: [
+                        SettingsChip(
+                            id: "en", title: "English", removal: .spokenLanguage(.english, isSpoken: false)),
+                        SettingsChip(
+                            id: "hi", title: "Hindi", removal: .spokenLanguage(.hindi, isSpoken: false)),
+                    ],
+                    add: []))
+
         settings.profile.preferredLanguages = [.hindi]
-        let pane = languages(settings)
-
+        guard case .languages(_, let add) = languages(settings).row("spokenLanguages")?.control else {
+            Issue.record("the languages are not chips")
+            return
+        }
         #expect(
-            pane.row("hi")?.control
-                == .tick(
-                    isTicked: true, change: .spokenLanguage(.hindi, isSpoken: false)))
-        #expect(
-            pane.row("en")?.control
-                == .tick(
-                    isTicked: false, change: .spokenLanguage(.english, isSpoken: true)))
+            add == [
+                SettingsOption(id: "en", title: "English", change: .spokenLanguage(.english, isSpoken: true))
+            ])
     }
 
-    @Test("locks the only language the user has, rather than refusing it afterwards")
+    @Test("offers no way to remove the only language the user has, rather than refusing it afterwards")
     func theLastLanguageCannotBeUntangled() {
-        #expect(languages().row("en")?.isEnabled == false)
-        #expect(languages().row("hi")?.isEnabled == true)
-
-        var both = Settings.default
-        both.profile.preferredLanguages = [.english, .hindi]
-        #expect(languages(both).row("en")?.isEnabled == true)
+        guard case .languages(let chips, _) = languages().row("spokenLanguages")?.control else {
+            Issue.record("the languages are not chips")
+            return
+        }
+        #expect(chips.map(\.title) == ["English"])
+        #expect(chips.allSatisfy { $0.removal == nil })
     }
 
-    @Test("names each language in itself as well as in English")
+    @Test("shows the tidying example as the level in force writes it, under the tidying card")
+    func showsTheExample() {
+        let example = languages().example
+        #expect(example?.groupID == "tidying")
+        #expect(example?.spoken == "um so i think we should uh ship it on friday")
+        #expect(example?.writtenLabel == "Uttrflow writes · Standard")
+        #expect(example?.written == "I think we should ship it on Friday.")
+        #expect(SettingsPresenter.tidied(at: .light) == "Um, so I think we should, uh, ship it on Friday.")
+    }
+
+    @Test("keeps each language's own name in its offer")
     func namesLanguagesInThemselves() {
-        #expect(languages().row("hi")?.explanation == "हिन्दी")
+        #expect(SettingsLanguage.offered.first { $0.code == .hindi }?.endonym == "हिन्दी")
         for language in SettingsLanguage.offered {
             #expect(language.id == language.code.value)
         }
@@ -385,6 +414,16 @@ struct SettingsDictationPaneTests {
     func carriesTheOfflineNote() {
         #expect(dictation().callout?.message.contains("internet") == true)
     }
+
+    @Test("opens Corrections, the one page with neither a sidebar row nor a tab here")
+    func opensThePagesWithoutASidebarRow() {
+        let row = dictation().row("page.corrections")
+        #expect(row?.label == SidebarPresenter.title(for: .corrections))
+        #expect(row?.control == .action(title: "Open", change: .openPage(.corrections)))
+        #expect(row?.isEnabled == true)
+        #expect(dictation().row("page.style") == nil && dictation().row("page.diagnostics") == nil)
+        #expect(SettingsChange.openPage(.corrections).isRequestToAct)
+    }
 }
 
 // MARK: - Privacy
@@ -397,12 +436,12 @@ struct SettingsPrivacyPaneTests {
 
     @Test("opens with the promise, before anything that can be changed")
     func opensWithThePromise() {
-        let banner = privacy().banner
-        #expect(banner?.title.isEmpty == false)
-        #expect(banner?.message.isEmpty == false)
-        #expect(banner?.symbolName.isEmpty == false)
-        // No other tab claims one, so a banner always means this promise.
-        #expect(Set(everyPane().filter { $0.banner != nil }.map(\.tab)) == [.privacy])
+        let first = privacy().everyRow.first
+        #expect(first?.id == "onDevice")
+        #expect(first?.control == .status("On-device"))
+        #expect(privacy().callout?.message.contains(SettingsPresenter.privacyPromise) == true)
+        // A banner is only ever the suggestion model's news, which the capable Mac here has none of.
+        #expect(everyPane().allSatisfy { $0.banner == nil })
     }
 
     @Test("offers only periods the store will keep, and selects the stored one")
@@ -430,9 +469,39 @@ struct SettingsPrivacyPaneTests {
         #expect(periods.map(\.id) == ["transcripts"])
     }
 
-    @Test("every row on this tab can be operated")
+    @Test("offers the usage statistics switch, on by default, saying what is sent")
+    func offersTheUsageStatisticsSwitch() throws {
+        let row = try #require(privacy().row(SettingsToggleField.sharesUsageStatistics.rawValue))
+        #expect(row.control == .toggle(field: .sharesUsageStatistics, isOn: true))
+        #expect(row.isEnabled)
+        #expect(row.explanation?.contains("never what you dictate") == true)
+
+        let updated = try SettingsEditor.apply(.toggle(.sharesUsageStatistics, isOn: false), to: .default)
+        #expect(!updated.sharesUsageStatistics)
+    }
+
+    @Test("every row on this tab can be operated, but forgetting before anything was learned")
     func privacyRowsAreAlwaysOperable() {
-        #expect(privacy().everyRow.allSatisfy { $0.isEnabled })
+        #expect(privacy().everyRow.filter { $0.id != "forgetLearned" }.allSatisfy { $0.isEnabled })
+    }
+
+    @Test("offers crash reports off by default, and shows the stored choice")
+    func crashReportsAreOptIn() {
+        #expect(
+            privacy().row("sendsCrashReports")?.control == .toggle(field: .sendsCrashReports, isOn: false))
+        var settings = Settings.default
+        settings.sendsCrashReports = true
+        #expect(
+            privacy(settings).row("sendsCrashReports")?.control
+                == .toggle(field: .sendsCrashReports, isOn: true))
+    }
+
+    @Test("the crash report switch is written through both ways")
+    func crashReportSwitchApplies() throws {
+        let on = try SettingsEditor.apply(.toggle(.sendsCrashReports, isOn: true), to: .default)
+        #expect(on.sendsCrashReports)
+        let off = try SettingsEditor.apply(.toggle(.sendsCrashReports, isOn: false), to: on)
+        #expect(!off.sendsCrashReports)
     }
 }
 
@@ -479,14 +548,14 @@ struct SettingsAppearanceTests {
         #expect(explanation.contains("drawn \(Settings.default.appearance.title.lowercased())"))
     }
 
-    @Test("all three are offered, and the current one is shown as chosen")
+    @Test("all three are offered side by side, and the current one is shown as chosen")
     func offersAllThree() throws {
         let row = SettingsPresenter.appearanceRow(Settings(appearance: .dark))
-        guard case .menu(let options, let selected) = row.control else {
-            Issue.record("appearance should be a menu")
+        guard case .segmented(let options, let selected) = row.control else {
+            Issue.record("appearance should be segmented")
             return
         }
-        #expect(options.map(\.title) == ["Light", "Dark", "Match my Mac"])
+        #expect(options.map(\.title) == ["System", "Light", "Dark"])
         #expect(selected == "dark")
     }
 
@@ -494,7 +563,10 @@ struct SettingsAppearanceTests {
     @Test("following the Mac is still on offer")
     func systemIsStillOffered() {
         let row = SettingsPresenter.appearanceRow(Settings())
-        guard case .menu(let options, _) = row.control else { return }
+        guard case .segmented(let options, _) = row.control else {
+            Issue.record("appearance should be segmented")
+            return
+        }
         #expect(options.contains { $0.change == .appearance(.system) })
     }
 

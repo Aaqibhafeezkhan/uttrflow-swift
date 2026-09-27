@@ -65,6 +65,7 @@ struct ProfileContractTests {
         let fixture = try loadFixture()
 
         #expect(fixture.profile.fetchedAt == Date(timeIntervalSince1970: 1_787_822_441))
+        #expect(fixture.profile.account.createdAt == Date(timeIntervalSince1970: 1_785_571_200))
         #expect(
             fixture.profile.subscription.currentPeriodEnd
                 == Date(timeIntervalSince1970: 1_803_902_400))

@@ -5,6 +5,7 @@ import UttrflowAudio
 import UttrflowCore
 import UttrflowHistory
 import UttrflowPipeline
+import UttrflowSettings
 import Testing
 
 @testable import Uttrflow
@@ -56,6 +57,7 @@ struct RetentionSweepTests {
     func sweepDropsExpiredTranscripts() async throws {
         let sandbox = Sandbox()
         let app = AppDelegate(container: sandbox.root)
+        app.settingsChanged(to: Settings(transcriptRetentionDays: 30))
         let file = DictationHistoryStore.defaultFile(in: sandbox.root)
         let writer = DictationHistoryStore(file: file)
         let old = DictationRecord(text: "Sample words", when: Date().addingTimeInterval(-60 * 86_400))
@@ -68,5 +70,21 @@ struct RetentionSweepTests {
 
         let onDisk = try JSONDecoder().decode([DictationRecord].self, from: Data(contentsOf: file))
         #expect(onDisk.map(\.id) == [recent.id])
+    }
+
+    @Test("a sweep under the default keeps every transcript")
+    func defaultKeepsTranscripts() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let file = DictationHistoryStore.defaultFile(in: sandbox.root)
+        let writer = DictationHistoryStore(file: file)
+        let old = DictationRecord(text: "Sample words", when: Date().addingTimeInterval(-60 * 86_400))
+        try await writer.append(old, keeping: Retention(days: 365, now: Date()))
+
+        app.sweepExpired()
+        await app.sweeping?.value
+
+        let onDisk = try JSONDecoder().decode([DictationRecord].self, from: Data(contentsOf: file))
+        #expect(onDisk.map(\.id) == [old.id])
     }
 }

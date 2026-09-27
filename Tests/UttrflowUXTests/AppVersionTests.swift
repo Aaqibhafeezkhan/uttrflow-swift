@@ -33,6 +33,12 @@ struct AppVersionTests {
         #expect(AppVersion(short: "", build: "9").full.isEmpty)
     }
 
+    @Test("the tag is the version as a release names it, and empty when unknown")
+    func tag() {
+        #expect(AppVersion(short: "26.0926.0", build: "12").tag == "v26.0926.0")
+        #expect(AppVersion.unknown.tag.isEmpty)
+    }
+
     @Test("a version with a build is known")
     func knownWhenThereIsAShortVersion() {
         #expect(AppVersion(short: "0.2.0", build: "3").isKnown)

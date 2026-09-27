@@ -112,6 +112,25 @@ struct MetricsTests {
     }
 }
 
+@Suite("Fanning measurements out", .timeLimit(.minutes(1)))
+struct MetricsFanOutTests {
+    @Test("every recorder hears every measurement and every decode effort")
+    func everyRecorderHearsEverything() async {
+        let first = RecordingMetricsRecorder()
+        let second = RecordingMetricsRecorder()
+        let fanOut = MetricsFanOut([first, second])
+        let measurement = StageMeasurement(stage: .insertion, duration: .milliseconds(40), succeeded: true)
+
+        await fanOut.record(measurement)
+        await fanOut.recordDecoding(.none)
+
+        for recorder in [first, second] {
+            #expect(await recorder.measurements == [measurement])
+            #expect(await recorder.decoding == [.none])
+        }
+    }
+}
+
 @Suite("ManualClock", .timeLimit(.minutes(1)))
 struct ManualClockTests {
     @Test("starts at zero and only moves when advanced")

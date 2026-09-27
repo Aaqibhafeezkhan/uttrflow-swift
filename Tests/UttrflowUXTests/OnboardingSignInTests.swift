@@ -17,114 +17,74 @@ struct OnboardingSignInTests {
 
     // MARK: The first thing anybody sees
 
-    /// Welcome comes first, then the sign-in page, whose only other control is the way past it.
-    @Test("opens on welcome, then asks who you are, offering one way past it")
-    func signInComesAfterTheWelcome() async {
+    /// The pitch and the providers share the first page, and the providers are its only controls.
+    @Test("opens on sign-in, which says what Uttrflow is for and offers only the providers")
+    func signInComesFirst() async {
         let harness = Harness(signedIn: false)
         await harness.flow.start()
-        #expect(harness.step == .welcome, "the pitch comes before the price")
-        await harness.flow.perform(.advance)
 
         #expect(harness.step == .signIn)
+        #expect(harness.page.position == 1)
         #expect(harness.detail == .signIn(.offering))
         #expect(harness.page.providers.map(\.provider) == SignInProvider.offered)
         #expect(harness.liveProviders == SignInProvider.offered)
-        #expect(harness.buttonTitles == ["Continue on this Mac"])
-        #expect(harness.page.hasSomethingToPress)
+        #expect(harness.buttonTitles.isEmpty)
+        #expect(harness.page.explanation == OnboardingPresenter.pitch)
     }
 
     @Test("offers nothing that reads as a way to carry on without an account")
     func thereIsNoWayRoundIt() async {
         let harness = Harness(signedIn: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         let escapes = ["skip", "not now", "later", "without an account", "continue without"]
         let wording =
-            (harness.buttonTitles + [harness.page.title, harness.page.subtitle])
+            (harness.buttonTitles + [harness.page.title, harness.page.explanation ?? ""])
             .joined(separator: " ")
             .lowercased()
         for escape in escapes {
             #expect(!wording.contains(escape), "the sign-in page hints at \(escape)")
         }
         #expect(!harness.page.buttons.contains { $0.intent == .advance })
+        await harness.flow.perform(.advance)
+        #expect(harness.step == .signIn, "a stray advance walked past sign-in")
     }
 
-    // MARK: The way past it
+    // MARK: Nobody past it without a session
 
-    /// The one page that needs a network must not be a wall; nothing is invented or fetched.
-    @Test("continuing on this Mac records who is here and moves the flow on")
-    func continuingOnThisMac() async {
-        let harness = Harness(signedIn: false, systemName: "Naveen Bhatt")
-        await harness.startPastWelcome()
+    /// An upgrade from a build that allowed working without an account has finished setup and holds no session.
+    @Test("a Mac that finished setup but holds no session opens on sign-in")
+    func finishedButSignedOutOpensOnSignIn() async {
+        let harness = Harness(
+            microphone: .granted, accessibility: .granted, hasFinished: true, signedIn: false)
+        await harness.flow.start()
         #expect(harness.step == .signIn)
-
-        await harness.flow.perform(.continueOnThisMac)
-
-        #expect(harness.local.load()?.name == "Naveen Bhatt")
-        #expect(harness.step != .signIn, "the page it exists to get past is still on screen")
-        #expect(harness.profiles.load() == nil, "no session was invented to get past it")
+        await harness.flow.perform(.advance)
+        #expect(harness.step == .signIn, "an advance walked a signed-out Mac past sign-in")
     }
 
-    /// A Mac that will not say who owns it is recorded with no name rather than a made-up one.
-    @Test("works on a Mac that will not say whose it is")
-    func continuingWithNoName() async {
-        let harness = Harness(signedIn: false, systemName: nil)
-        await harness.startPastWelcome()
-
-        await harness.flow.perform(.continueOnThisMac)
-
-        #expect(harness.local.load() != nil)
-        #expect(harness.local.load()?.name == nil)
-    }
-
-    /// Offline is the situation this exists for, so it is asserted end to end.
-    @Test("offline, the Mac account is a way out rather than a wall")
-    func continuingWhileOffline() async {
-        let harness = Harness(signedIn: false, reachable: false)
-        await harness.startPastWelcome()
-        #expect(harness.detail == .signIn(.unreachable))
-
-        await harness.flow.perform(.continueOnThisMac)
-        #expect(harness.local.load() != nil)
-        #expect(harness.step != .signIn)
-    }
-
-    /// An instruction that could only have come from a page the user has left must not act.
-    @Test("cannot be chosen from a page that is not asking who you are")
-    func ignoredAwayFromTheSignInPage() async {
-        let harness = Harness(microphone: .notDetermined, signedIn: true)
-        await harness.startPastWelcome()
-        #expect(harness.step != .signIn)
-
-        await harness.flow.perform(.continueOnThisMac)
-        #expect(harness.local.load() == nil)
-    }
-
-    /// A real account supersedes the Mac one, or every page drawing one would have to pick.
-    @Test("signing in for real forgets the Mac account")
-    func signingInReplacesTheMacAccount() async {
+    /// The rest of the app waits on the session, so it is told the moment one is kept.
+    @Test("tells the app as soon as a sign-in's profile is kept, and not before")
+    func signInIsAnnounced() async {
         let harness = Harness(signedIn: false)
-        await harness.startPastWelcome()
-        await harness.flow.perform(.continueOnThisMac)
-        #expect(harness.local.load() != nil)
-
-        // Back to the sign-in page, the way the Account page's Sign In button gets there.
-        await harness.flow.resume(askingToSignIn: true)
-        #expect(harness.step == .signIn, "the button that asks to sign in must land on it")
+        var announced = 0
+        harness.flow.onSignIn = { announced += 1 }
+        await harness.flow.start()
         #expect(await harness.choose(.google))
+        #expect(announced == 0, "announced before the browser came back")
+
         await harness.returnFromBrowser()
 
         #expect(harness.profiles.load() != nil)
-        #expect(harness.local.load() == nil)
+        #expect(announced == 1)
     }
 
     @Test("says on the page itself what a person is agreeing to")
     func theTermsAreOnThePage() async {
         let harness = Harness(signedIn: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
-        #expect(harness.page.fineprint?.contains("Terms of Use") == true)
-        #expect(harness.page.fineprint?.contains("Privacy Policy") == true)
+        #expect(harness.page.showsTerms)
     }
 
     // MARK: Signing in
@@ -132,35 +92,51 @@ struct OnboardingSignInTests {
     @Test("opens the provider's page in the browser and waits there")
     func choosingAProviderOpensTheBrowser() async {
         let harness = Harness(signedIn: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         #expect(await harness.choose(.google))
         #expect(harness.authentication.startedProviders == [.google])
         #expect(harness.browser.urls.count == 1)
         #expect(harness.detail == .signIn(.signingIn(.google)))
         // Waiting on a window somewhere else, so there has to be a way out of waiting.
-        #expect(harness.buttonTitles == ["Cancel"])
+        #expect(harness.buttonTitles == ["Reopen", "Cancel"])
         #expect(harness.liveProviders.isEmpty)
+    }
+
+    @Test("Reopen sends the browser back to the provider's page, and only while a sign-in waits")
+    func reopenOpensTheSamePageAgain() async {
+        let harness = Harness(signedIn: false)
+        await harness.flow.perform(.reopenBrowser)
+        #expect(harness.browser.urls.isEmpty, "nothing was waiting, yet the browser opened")
+
+        await harness.flow.start()
+        #expect(await harness.choose(.google))
+        #expect(await harness.press("Reopen"))
+        #expect(harness.browser.urls.count == 2)
+        #expect(harness.browser.urls.first == harness.browser.urls.last)
+
+        #expect(await harness.press("Cancel"))
+        await harness.flow.perform(.reopenBrowser)
+        #expect(harness.browser.urls.count == 2, "a cancelled sign-in reopened its page")
     }
 
     @Test("the backend answering signs the user in and moves on")
     func aFinishedSignInMovesOn() async {
         let harness = Harness(microphone: .granted, accessibility: .granted, signedIn: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         await harness.returnFromBrowser()
         #expect(harness.profiles.load() != nil)
-        // Onwards, not back: welcome is behind us and sign-in is just answered.
+        // Onwards: sign-in is just answered.
         #expect(harness.step != .signIn)
-        #expect(harness.step != .welcome)
     }
 
     /// Nothing is waiting, so an answer nobody asked for changes nothing.
     @Test("does nothing at all when no sign-in is in flight")
     func nothingHappensWithoutAnAttempt() async {
         let harness = Harness(signedIn: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
         let before = harness.flow.state
 
         await harness.returnFromBrowser()
@@ -174,12 +150,12 @@ struct OnboardingSignInTests {
         let harness = Harness(
             signedIn: false,
             authentication: FakeAuthenticationService(completeFailure: refusal))
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         await harness.returnFromBrowser()
         #expect(harness.detail == .signIn(.refused(refusal.userMessage)))
-        #expect(harness.page.subtitle == refusal.userMessage)
+        #expect(harness.page.hint == refusal.userMessage)
         #expect(harness.page.hasSomethingToPress)
     }
 
@@ -187,7 +163,7 @@ struct OnboardingSignInTests {
     func anUnbelievableSessionIsRefused() async {
         let harness = Harness(
             signedIn: false, profiles: InMemoryProfileCache(refusesToSave: true))
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         await harness.returnFromBrowser()
@@ -200,34 +176,31 @@ struct OnboardingSignInTests {
         let harness = Harness(
             signedIn: false,
             authentication: FakeAuthenticationService(beginFailure: .serverUnreachable))
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         #expect(await harness.choose(.google))
         #expect(harness.detail == .signIn(.unreachable))
-        #expect(harness.buttonTitles == ["Try Again", "Continue on this Mac"])
+        #expect(harness.buttonTitles == ["Try again"])
     }
 
     // MARK: Offline
 
-    @Test("offline, the buttons stay in view and inert and the banner says which step needs a network")
+    @Test("offline, the page blocks on trying again and says which step needs a network")
     func offlineIsDrawnRatherThanFailed() async {
         let harness = Harness(signedIn: false, reachable: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         #expect(harness.detail == .signIn(.unreachable))
-        #expect(harness.page.providers.count == SignInProvider.offered.count)
-        #expect(harness.liveProviders.isEmpty)
-        #expect(harness.page.note?.tone == .warning)
-        #expect(harness.page.note?.text.contains("cannot do") == true)
-        // Trying again is prominent; the Mac account is for a portal that never comes back.
-        #expect(harness.buttonTitles == ["Try Again", "Continue on this Mac"])
+        #expect(harness.page.providers.isEmpty)
+        #expect(harness.page.explanation?.contains("needs the internet") == true)
+        #expect(harness.buttonTitles == ["Try again"])
         #expect(harness.page.hasSomethingToPress)
     }
 
     @Test("an inert button cannot be pressed into starting a sign-in")
     func inertMeansInert() async {
         let harness = Harness(signedIn: false, reachable: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         #expect(await harness.choose(.google) == false)
         // Not even a direct instruction gets past it, since the guard is in the flow, not the view.
@@ -239,13 +212,13 @@ struct OnboardingSignInTests {
     @Test("Try Again picks up a connection that has come back")
     func tryAgainNoticesTheConnection() async {
         let harness = Harness(signedIn: false, reachable: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
-        #expect(await harness.press("Try Again"))
+        #expect(await harness.press("Try again"))
         #expect(harness.detail == .signIn(.unreachable))
 
         harness.network.set(true)
-        #expect(await harness.press("Try Again"))
+        #expect(await harness.press("Try again"))
         #expect(harness.detail == .signIn(.offering))
         #expect(harness.liveProviders == SignInProvider.offered)
     }
@@ -253,7 +226,7 @@ struct OnboardingSignInTests {
     @Test("coming back to the window notices the connection too, but never disturbs an attempt")
     func returningToTheWindowRereadsTheConnection() async {
         let harness = Harness(signedIn: false, reachable: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         harness.network.set(true)
         await harness.flow.refresh()
@@ -270,7 +243,7 @@ struct OnboardingSignInTests {
     @Test("a sign-in the user gave up on cannot finish behind their back")
     func cancellingASignInIsFinal() async {
         let harness = Harness(signedIn: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         #expect(await harness.press("Cancel"))
@@ -287,7 +260,7 @@ struct OnboardingSignInTests {
         let gate = Gate()
         let harness = Harness(
             signedIn: false, authentication: FakeAuthenticationService(beginGate: gate))
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         let starting = Task { await harness.flow.perform(.signIn(.google)) }
         await settle(until: { gate.arrivals == 1 })
@@ -307,7 +280,7 @@ struct OnboardingSignInTests {
             authentication: FakeAuthenticationService(
                 beginFailure: .providerRefused(description: "too late"), beginGate: gate),
             reachable: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
         harness.network.set(true)
         await harness.flow.refresh()
 
@@ -327,7 +300,7 @@ struct OnboardingSignInTests {
             signedIn: false,
             authentication: FakeAuthenticationService(
                 completeFailure: .providerRefused(description: "too late"), completeGate: gate))
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         let finishing = Task { await harness.returnFromBrowser() }
@@ -346,7 +319,7 @@ struct OnboardingSignInTests {
             microphone: .granted, accessibility: .granted, signedIn: false,
             authentication: FakeAuthenticationService(
                 completeGate: gate, respectsCancellation: false))
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         let finishing = Task { await harness.returnFromBrowser() }
@@ -368,8 +341,6 @@ struct OnboardingSignInTests {
     func aSignedInMacIsNotAskedTwice() async {
         let harness = Harness(signedIn: true)
         await harness.flow.start()
-        #expect(harness.step == .welcome, "welcome is the first page for everybody")
-        await harness.flow.perform(.advance)
 
         // Straight past sign-in to the first thing actually outstanding.
         #expect(harness.step != .signIn)
@@ -382,7 +353,7 @@ struct OnboardingSignInTests {
         for reachable in [true, false] {
             let harness = Harness(
                 signedIn: true, entitlementExpiring: past, reachable: reachable)
-            await harness.startPastWelcome()
+            await harness.flow.start()
             #expect(
                 harness.step != .signIn,
                 "reachable: \(reachable) was sent back to sign-in by an expired entitlement")
@@ -395,10 +366,9 @@ struct OnboardingSignInTests {
             microphone: .granted, accessibility: .granted, signedIn: true, reachable: false)
         await harness.flow.start()
 
-        // Welcome's own button, then straight to Ready: nothing between them needs a network.
-        #expect(await harness.press("Continue"))
+        // Straight to Ready: nothing after sign-in needs a network.
         #expect(harness.detail == .finishing(.ready))
-        #expect(await harness.press("Start Using Uttrflow"))
+        await harness.flow.perform(.finish)
         #expect(harness.finishedWith == .ready)
     }
 }
@@ -414,19 +384,17 @@ extension OnboardingSignInTests {
             authentication: FakeAuthenticationService(
                 completeGate: Gate(),
                 method: .code(userCode: "BCDF-GHJK", verificationURL: safeSignInURL(.google))))
-        await harness.startPastWelcome()
+        await harness.flow.start()
 
         #expect(await harness.choose(.google))
         #expect(harness.detail == .signIn(.enterCode(.google, code: "BCDF-GHJK")))
-        #expect(harness.page.code == "BCDF-GHJK")
+        #expect(harness.page.picture == .code("BCDF-GHJK"))
         // The sentence says what to do with the code, and that the browser is already open.
-        #expect(harness.page.subtitle.contains("Type this code"))
-        #expect(harness.page.subtitle.contains("browser is open"))
-        #expect(harness.page.subtitle.contains("BCDF-GHJK") == false)
+        #expect(harness.page.explanation?.contains("Type this code") == true)
+        #expect(harness.page.explanation?.contains("browser is open") == true)
+        #expect(harness.page.explanation?.contains("BCDF-GHJK") == false)
         // The browser is still opened — at the page the code is typed into.
         #expect(harness.browser.urls.count == 1)
-        // The page says why it is asking for a code rather than handing the user back.
-        #expect(harness.page.note?.text.contains("hands you straight back") == true)
     }
 
     @Test("waiting on a code is still somewhere a person can leave")
@@ -436,10 +404,10 @@ extension OnboardingSignInTests {
             authentication: FakeAuthenticationService(
                 completeGate: Gate(),
                 method: .code(userCode: "BCDF-GHJK", verificationURL: safeSignInURL(.google))))
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
-        #expect(harness.buttonTitles == ["Cancel"])
+        #expect(harness.buttonTitles == ["Reopen", "Cancel"])
         #expect(harness.liveProviders.isEmpty, "a provider could be pressed while a code was waiting")
 
         #expect(await harness.press("Cancel"))
@@ -449,12 +417,12 @@ extension OnboardingSignInTests {
     @Test("the ordinary path still promises a browser rather than a code")
     func theBrowserPathIsUnchanged() async {
         let harness = Harness(signedIn: false)
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         #expect(harness.detail == .signIn(.signingIn(.google)))
-        #expect(harness.page.code == nil)
-        #expect(harness.page.subtitle.contains("in your browser"))
+        #expect(harness.page.picture == .waveform(.idle, badge: .waitingOn(.google)))
+        #expect(harness.page.explanation?.contains("in your browser") == true)
     }
 
     @Test("a code sign-in finishes exactly as a browser one does")
@@ -464,7 +432,7 @@ extension OnboardingSignInTests {
             authentication: FakeAuthenticationService(
                 completeGate: Gate(),
                 method: .code(userCode: "BCDF-GHJK", verificationURL: safeSignInURL(.google))))
-        await harness.startPastWelcome()
+        await harness.flow.start()
         #expect(await harness.choose(.google))
 
         await harness.returnFromBrowser()

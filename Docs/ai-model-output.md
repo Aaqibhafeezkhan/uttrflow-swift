@@ -127,7 +127,7 @@ measure against, and it should not be closed by refusing what cannot be read.
 
 Every refusal carries a `reason` and a `RefusalKind`. The reason is written for a person looking
 at the screen and quotes what was said — "the rewrite lost or replaced 'Zorvane'" — because the
-Diagnostics page stays on the Mac. The kind is a closed enum with a word-free `summary`, and that
+Diagnostics tab stays on the Mac. The kind is a closed enum with a word-free `summary`, and that
 is what Copy Diagnostics puts on the clipboard: "a word was lost or replaced".
 
 The two were one string until #645, and the copied report appended the reason verbatim while

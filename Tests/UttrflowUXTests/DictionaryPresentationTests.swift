@@ -24,10 +24,13 @@ extension HistoryFixture {
 
     /// The Dictionary page over these inputs.
     static func dictionary(
-        entries: [DictionaryEntry] = [], draft: DictionaryDraft? = nil, query: String = ""
+        entries: [DictionaryEntry] = [], draft: DictionaryDraft? = nil, query: String = "",
+        filter: String = "", corrections: [Correction] = []
     ) -> DictionaryPresentation {
         DictionaryPresenter.page(
-            for: DictionarySnapshot(entries: entries, draft: draft, query: query, now: now),
+            for: DictionarySnapshot(
+                entries: entries, draft: draft, query: query, filter: filter,
+                corrections: corrections, now: now),
             calendar: calendar, locale: locale)
     }
 }
@@ -40,7 +43,7 @@ struct DictionaryPageTests {
             HistoryFixture.word("Uttrflow"), HistoryFixture.word("pgvector"),
         ])
         #expect(page.rows.map(\.word) == ["Uttrflow", "pgvector"])
-        #expect(page.caption == "2 words Uttrflow knows and a general model does not")
+        #expect(page.chrome.caption == "Names and terms Uttrflow would otherwise get wrong. · 2 words")
         #expect(page.chrome.title == "Dictionary")
     }
 
@@ -52,6 +55,8 @@ struct DictionaryPageTests {
         let row = page.rows[0]
         #expect(row.pronunciation == "val-key")
         #expect(row.origin == "Learned")
+        #expect(row.source == .learned)
+        #expect(row.hasBeenUndone)
         #expect(row.timesUsed == "22")
         #expect(row.timesUndone == "2")
         #expect(!row.added.isEmpty)
@@ -147,8 +152,8 @@ struct DictionaryRetirementTests {
         ]).rows[0]
 
         #expect(row.isRetired)
-        #expect(row.badge?.text == "Retired")
-        #expect(row.badge?.tone == .warning)
+        #expect(row.source == .retired)
+        #expect(row.source.title == "Retired")
     }
 
     @Test("a word that has not earned its retirement is not drawn as retired")
@@ -157,7 +162,7 @@ struct DictionaryRetirementTests {
             HistoryFixture.word("Kestrel", used: 15, reverted: 7)
         ]).rows[0]
         #expect(!row.isRetired)
-        #expect(row.badge == nil)
+        #expect(row.source == .added)
     }
 
     /// A way out that is harder to find than the problem is not a way out.
@@ -234,7 +239,9 @@ struct DictionaryEmptyTests {
         let page = HistoryFixture.dictionary()
         #expect(page.emptyState?.title == "No words of your own yet")
         #expect(page.emptyState?.action?.intent == .addWord)
-        #expect(page.emptyState?.footnote?.contains("Nothing is pre-loaded") == true)
+        #expect(page.emptyState?.action?.title == "Add Word")
+        #expect(page.emptyState?.message == "Add names and terms Uttrflow would otherwise get wrong.")
+        #expect(page.emptyState?.footnote == nil)
         #expect(page.footnote == nil)
     }
 
@@ -332,5 +339,101 @@ struct DictionaryEditorTests {
                 draft: DictionaryDraft(word: "  Uttrflow ")
             ).editor)
         #expect(!editor.canSave)
+    }
+}
+
+@Suite("The dictionary's filter chips")
+struct DictionaryFilterTests {
+    static let words = [
+        HistoryFixture.word("Uttrflow", origin: .added),
+        HistoryFixture.word("Valkey", origin: .learned),
+        HistoryFixture.word("Kestrel", origin: .observed),
+        HistoryFixture.word("Spindle", origin: .shipped),
+        HistoryFixture.word("Anand", origin: .learned, used: 10, reverted: 7),
+    ]
+
+    @Test("every source a chip names lists only its own words")
+    func filters() {
+        let chosen = { (id: String) in
+            HistoryFixture.dictionary(entries: Self.words, filter: id).rows.map(\.word)
+        }
+        #expect(chosen("added") == ["Uttrflow"])
+        #expect(chosen("learned") == ["Valkey"])
+        #expect(chosen("seen") == ["Kestrel"])
+        #expect(chosen("retired") == ["Anand"])
+    }
+
+    @Test("All, an empty choice and an unknown one list every word")
+    func all() {
+        for id in ["", "all", "shipped", "nonsense"] {
+            #expect(HistoryFixture.dictionary(entries: Self.words, filter: id).rows.count == 5)
+        }
+    }
+
+    @Test("the chips run All then the four sources, with the chosen one selected")
+    func chips() {
+        let chips = HistoryFixture.dictionary(entries: Self.words, filter: "learned").filters
+        #expect(chips.map(\.title) == ["All", "Added by you", "Learned", "Seen on screen", "Retired"])
+        #expect(chips.filter(\.isSelected).map(\.id) == ["learned"])
+        #expect(HistoryFixture.dictionary(entries: Self.words).filters.first?.isSelected == true)
+    }
+
+    @Test("there are no chips while there are no words")
+    func noChips() {
+        #expect(HistoryFixture.dictionary().filters.isEmpty)
+        #expect(
+            HistoryFixture.dictionary().chrome.caption
+                == "Names and terms Uttrflow would otherwise get wrong.")
+    }
+
+    @Test("a chip with nothing under it says so and keeps the page")
+    func emptyChip() {
+        let page = HistoryFixture.dictionary(entries: [HistoryFixture.word()], filter: "retired")
+        #expect(page.rows.isEmpty)
+        #expect(page.emptyState?.title == "Nothing in this view")
+        #expect(page.emptyState?.message.contains("retired") == true)
+        #expect(page.filters.count == 5)
+    }
+
+    @Test("each source has a name, and an entry takes the one its origin gives")
+    func sources() {
+        for source in DictionarySource.allCases { #expect(!source.title.isEmpty) }
+        #expect(Self.words.map { DictionarySource($0) } == [.added, .learned, .seen, .shipped, .retired])
+    }
+}
+
+@Suite("Today's fixes on the dictionary page")
+struct DictionaryFixesTests {
+    @Test("today's standing corrections are cards, newest first, three at most")
+    func cards() {
+        let corrections = [
+            HistoryFixture.correction(heard: "a", wrote: "A", minutesAgo: 40),
+            HistoryFixture.correction(heard: "b", wrote: "B", minutesAgo: 10),
+            HistoryFixture.correction(heard: "c", wrote: "C", minutesAgo: 30),
+            HistoryFixture.correction(heard: "d", wrote: "D", minutesAgo: 20),
+        ]
+        let page = HistoryFixture.dictionary(entries: [HistoryFixture.word()], corrections: corrections)
+        #expect(page.fixes.map(\.wrote) == ["B", "D", "C"])
+        #expect(page.fixesLabel == "Fixed today · 4 corrections")
+        #expect(page.fixes[0].undo?.intent == .undoCorrection(corrections[1].id))
+    }
+
+    @Test("an undone correction and one from another day are not today's fixes")
+    func onlyToday() {
+        let page = HistoryFixture.dictionary(
+            entries: [HistoryFixture.word()],
+            corrections: [
+                HistoryFixture.correction(isUndone: true),
+                HistoryFixture.correction(daysAgo: 2),
+            ])
+        #expect(page.fixes.isEmpty)
+        #expect(page.fixesLabel == nil)
+    }
+
+    @Test("one fix is counted in the singular")
+    func singular() {
+        let page = HistoryFixture.dictionary(
+            entries: [HistoryFixture.word()], corrections: [HistoryFixture.correction()])
+        #expect(page.fixesLabel == "Fixed today · 1 correction")
     }
 }

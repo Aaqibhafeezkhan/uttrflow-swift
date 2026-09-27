@@ -58,7 +58,7 @@ struct SettingsTests {
         #expect(settings.minimisesWhileDictating)
         #expect(settings.playsSoundWhenRecordingStarts)
         #expect(settings.opensAtLogin)
-        #expect(settings.transcriptRetentionDays == 7)
+        #expect(settings.transcriptRetentionDays == Settings.defaultTranscriptRetentionDays)
         #expect(settings.cleaning == .default)
         #expect(settings.destinations == .none)
     }
@@ -127,6 +127,29 @@ struct SettingsTests {
         #expect(!restored.installsUpdatesAutomatically)
     }
 
+    /// Usage statistics are shared unless the user says otherwise, and saying so is kept.
+    @Test("shares usage statistics by default, and keeps the opt-out across a save and a load")
+    func usageStatisticsOptOutSticks() throws {
+        #expect(Settings.default.sharesUsageStatistics)
+        let older = try JSONDecoder().decode(Settings.self, from: Data(#"{"opensAtLogin":false}"#.utf8))
+        #expect(older.sharesUsageStatistics)
+
+        let restored = try JSONDecoder().decode(
+            Settings.self, from: JSONEncoder().encode(Settings(sharesUsageStatistics: false))
+        )
+        #expect(!restored.sharesUsageStatistics)
+    }
+
+    /// Crash reports stay off for anyone who never chose, and on for anyone who did.
+    @Test("crash reports are off by default and keep the user's choice")
+    func crashReportsAreOptIn() throws {
+        #expect(!Settings.default.sendsCrashReports)
+        #expect(!(try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))).sendsCrashReports)
+        let restored = try JSONDecoder().decode(
+            Settings.self, from: JSONEncoder().encode(Settings(sendsCrashReports: true)))
+        #expect(restored.sendsCrashReports)
+    }
+
     /// The upgrade case: a build that added settings must still find the ones the user chose.
     @Test("keeps what an older build wrote and defaults what it never knew")
     func olderPayload() throws {
@@ -139,14 +162,14 @@ struct SettingsTests {
         #expect(settings.hotkeyActivation == .pressToToggle)
         #expect(!settings.opensAtLogin)
         #expect(settings.floatingButtonAnchor == .bottomRight)
-        #expect(settings.transcriptRetentionDays == 7)
+        #expect(settings.transcriptRetentionDays == Settings.defaultTranscriptRetentionDays)
         #expect(settings.engines == .default)
         #expect(settings.profile == .default)
     }
 
-    @Test("defaults every field for an empty object")
+    @Test("defaults every field for an empty object, with the dictation shortcut an earlier install had")
     func emptyPayload() throws {
-        #expect(try decode("{}") == .default)
+        #expect(try decode("{}") == Settings(shortcuts: .earlierDefault))
     }
 
     /// One unreadable value must not cost the user the ten choices either side of it.
@@ -214,7 +237,7 @@ struct SettingsTests {
             """
         )
 
-        #expect(settings.transcriptRetentionDays == 7)
+        #expect(settings.transcriptRetentionDays == Settings.defaultTranscriptRetentionDays)
     }
 
     /// Keyed decoding never asks for a key this build has no case for. See `Docs/settings-decoding.md`.
@@ -241,12 +264,12 @@ struct SettingsTests {
             """
         )
 
-        #expect(settings == Settings(opensAtLogin: false))
+        #expect(settings == Settings(shortcuts: .earlierDefault, opensAtLogin: false))
     }
 
     @Test("keeps a retention the user actually chose", arguments: [1, 30, 365])
     func acceptedRetention(days: Int) {
-        #expect(Settings.retention(days) == days)
+        #expect(Settings.retention(days, default: Settings.defaultRetentionDays) == days)
     }
 
     /// Each of these decodes cleanly and could never fire, leaving nothing to press.
@@ -285,10 +308,21 @@ struct SettingsTests {
         #expect(try decode(#"{"hotkey": "option-space"}"#).hotkey == .optionSpace)
     }
 
-    @Test("ships Option+Space when nothing has been stored")
+    @Test("ships ⌃⌥ held to a new install, and ⌥Space to a saved file that names no dictation shortcut")
     func defaultHotkey() throws {
-        #expect(Settings.default.hotkey == .optionSpace)
+        #expect(Settings.default.hotkey == .controlOptionHold)
         #expect(try decode("{}").hotkey == .optionSpace)
+        #expect(try decode(#"{"shortcuts": {}}"#).hotkey == .optionSpace)
+    }
+
+    @Test("keeps the rest of the defaults for an earlier install, with only ⌥Space and a week apart")
+    func earlierInstallDiffersOnlyInDictationAndRetention() {
+        var earlier = Settings.earlierInstall
+        #expect(earlier.hotkey == .optionSpace)
+        #expect(earlier.transcriptRetentionDays == Settings.defaultRetentionDays)
+        earlier.hotkey = .controlOptionHold
+        earlier.transcriptRetentionDays = Settings.defaultTranscriptRetentionDays
+        #expect(earlier == .default)
     }
 
     /// One number for both would empty the panel on the user's behalf, having never asked.
@@ -297,6 +331,14 @@ struct SettingsTests {
         let settings = try decode(#"{"transcriptRetentionDays": 1}"#)
 
         #expect(settings.transcriptRetentionDays == 1)
+        #expect(settings.clipboardRetentionDays == Settings.defaultRetentionDays)
+    }
+
+    @Test("keeps transcripts until they are deleted, and unkept clips for a week, when nothing is stored")
+    func defaultRetentionPeriods() throws {
+        let settings = try decode("{}")
+
+        #expect(settings.transcriptRetentionDays == Settings.keepAlwaysDays)
         #expect(settings.clipboardRetentionDays == Settings.defaultRetentionDays)
     }
 
@@ -391,7 +433,7 @@ struct SettingsTests {
             #"{"shortcuts": {"dictate": [{"keyCode": 55, "modifiers": ["command"]}], "clipboard": [{"keyCode": 9, "modifiers": ["control"]}]}}"#
         )
 
-        #expect(settings.shortcuts.first(for: .dictate) == .optionSpace)
+        #expect(settings.shortcuts.first(for: .dictate) == .controlOptionHold)
         #expect(settings.shortcuts.first(for: .clipboard) == HotkeyBinding(keyCode: 9, modifiers: [.control]))
         #expect(settings.shortcutsReturnedToDefault == [.dictate])
     }
@@ -414,7 +456,7 @@ struct SettingsTests {
         let restored = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(read))
 
         #expect(restored.shortcutsReturnedToDefault == [.dictate])
-        #expect(restored.shortcuts.first(for: .dictate) == .optionSpace)
+        #expect(restored.shortcuts.first(for: .dictate) == .controlOptionHold)
     }
 
     @Test("returns nothing, and notes nothing, for shortcuts the user could press")
@@ -432,7 +474,7 @@ struct SettingsTests {
         let restored = try JSONDecoder().decode(
             Settings.self, from: JSONEncoder().encode(written))
 
-        #expect(restored.shortcuts.bindings(for: .dictate) == [.optionSpace, .functionHold])
+        #expect(restored.shortcuts.bindings(for: .dictate) == [.controlOptionHold, .functionHold])
     }
 
     /// These strings are on disk in every installation, so renaming a case resets it for everyone.
@@ -549,6 +591,102 @@ struct UserDefaultsSettingsStoreTests {
 
         #expect(defaults.keys.count == 1)
         #expect(store.load().transcriptRetentionDays == 90)
+    }
+
+    @Test("pins ⌃⌥ held for a new install, so finishing onboarding later does not move it")
+    func pinsTheNewDefaultForANewInstall() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+
+        store.pinDefaults(onboarded: false)
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().hotkey == .controlOptionHold)
+    }
+
+    @Test("pins ⌥Space for an install that finished onboarding before ⌃⌥ held was the default")
+    func keepsOptionSpaceForAnOnboardedInstall() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load() == .earlierInstall)
+    }
+
+    @Test("keeps ⌥Space and a week of transcripts for an onboarded install that never saved a setting")
+    func onboardedInstallWithNoBlobKeepsAWeek() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().hotkey == .optionSpace)
+        #expect(store.load().transcriptRetentionDays == 7)
+    }
+
+    @Test(
+        "gives an onboarded install whose blob cannot be read the earlier defaults",
+        arguments: ["not json", "[1, 2, 3]"])
+    func onboardedInstallWithCorruptBlobKeepsOptionSpace(blob: String) {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore(json: blob))
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load() == .earlierInstall)
+    }
+
+    @Test("gives a new install whose blob cannot be read the current defaults")
+    func newInstallWithCorruptBlobGetsTheDefault() {
+        let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore(json: "not json"))
+
+        store.pinDefaults(onboarded: false)
+
+        #expect(store.load() == .default)
+    }
+
+    @Test("leaves a saved shortcut alone, whether or not onboarding finished")
+    func keepsAStoredShortcut() {
+        for onboarded in [false, true] {
+            let store = UserDefaultsSettingsStore(store: InMemoryKeyValueStore())
+            var saved = Settings.default
+            saved.hotkey = .optionSpace
+            store.save(saved)
+
+            store.pinDefaults(onboarded: onboarded)
+
+            #expect(store.load() == saved, "onboarded: \(onboarded)")
+        }
+    }
+
+    @Test("keeps ⌥Space for a file an earlier build saved in the shape before shortcuts were a set")
+    func keepsALegacyStoredShortcut() {
+        let defaults = InMemoryKeyValueStore(json: #"{"hotkey": {"keyCode": 49, "modifiers": ["option"]}}"#)
+        let store = UserDefaultsSettingsStore(store: defaults)
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().hotkey == .optionSpace)
+    }
+
+    @Test("keeps a transcript retention an earlier build saved, week included", arguments: [7, 30])
+    func keepsAStoredTranscriptRetention(days: Int) {
+        for onboarded in [false, true] {
+            let defaults = InMemoryKeyValueStore(json: #"{"transcriptRetentionDays": \#(days)}"#)
+            let store = UserDefaultsSettingsStore(store: defaults)
+
+            store.pinDefaults(onboarded: onboarded)
+
+            #expect(store.load().transcriptRetentionDays == days, "onboarded: \(onboarded)")
+        }
+    }
+
+    @Test("gives a saved file with no transcript retention the keep-always default")
+    func unsetTranscriptRetentionKeepsAlways() {
+        let defaults = InMemoryKeyValueStore(json: #"{"opensAtLogin": false}"#)
+        let store = UserDefaultsSettingsStore(store: defaults)
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().transcriptRetentionDays == Settings.keepAlwaysDays)
+        #expect(!store.load().opensAtLogin)
     }
 }
 

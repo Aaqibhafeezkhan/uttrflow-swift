@@ -25,10 +25,14 @@ struct WindowAttention: Equatable {
     /// What Reduce Motion, Low Power Mode and thermal pressure allow.
     var motion = MotionBudget()
 
+    /// Whether the view is in sight in the window being used, whatever the motion budget says.
+    var isAttended: Bool {
+        isShown && isKey && isApplicationActive && !isApplicationHidden && isOnScreen && isViewVisible
+    }
+
     /// Moves only in the window being used, only while the view itself is in sight, and only while the budget allows.
     var animates: Bool {
-        isShown && isKey && isApplicationActive && !isApplicationHidden && isOnScreen
-            && isViewVisible && motion.demonstrationMoves
+        isAttended && motion.demonstrationMoves
     }
 
     /// The part of a view of `size` inside its scroll view's bounds, placed where the window puts the view; empty once scrolled away.

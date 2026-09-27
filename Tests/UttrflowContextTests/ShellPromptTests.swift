@@ -107,10 +107,26 @@ struct ShellPromptTests {
         #expect(ShellPrompt.input(in: "user@host:~/dir$ echo hi # note") == "echo hi # note")
     }
 
+    @Test("An at sign earlier in a command does not make its trailing comment a root prompt.")
+    func anEarlierAtSignLeavesACommentAlone() {
+        let quoted = #"git commit -m "fix bug reported by foo@example.com" # needs review"#
+        #expect(ShellPrompt.input(in: quoted) == quoted)
+        #expect(ShellPrompt.input(in: "ssh user@host # jump box") == "ssh user@host # jump box")
+        #expect(
+            ShellPrompt.input(in: "[root@host ~]# ssh user@host # jump box") == "ssh user@host # jump box")
+    }
+
     @Test("An escaped quote does not open one, so a later prompt character is still seen.")
     func anEscapedQuoteOpensNothing() {
         #expect(ShellPrompt.input(in: #"user\@host:~/dir$ ls"#) == "ls")
         #expect(ShellPrompt.input(in: #"echo \" 50% done"#) == #"echo \" 50% done"#)
+    }
+
+    @Test("An escaped quote inside a double-quoted argument keeps the argument quoted.")
+    func anEscapedQuoteInsideAQuoteStaysQuoted() {
+        let line = #"git commit -m "fixed \"a@b# now\" done" # note"#
+        #expect(ShellPrompt.input(in: line) == line)
+        #expect(ShellPrompt.input(in: #"$ echo 'a\' # note"#) == #"echo 'a\' # note"#)
     }
 
     @Test("A quote left open swallows the rest of the line rather than guessing at a prompt.")

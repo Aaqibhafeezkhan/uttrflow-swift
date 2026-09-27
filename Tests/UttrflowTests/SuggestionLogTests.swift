@@ -67,6 +67,14 @@ struct SuggestionLogTests {
         #expect(Self.lines.first { $0.0 == "attest" }?.1.contains("dropped=2") == true)
     }
 
+    @Test("a stall names the step it waited on and the application's bundle identifier")
+    func aStallNamesItsStepAndApplication() {
+        let line = SuggestionLog.stall(step: .generate, application: "com.example.notes", afterSeconds: 10)
+        #expect(line == "STALL step=generate app=com.example.notes after=10s left behind")
+        let unknown = SuggestionLog.stall(step: nil, application: nil, afterSeconds: 10)
+        #expect(unknown == "STALL step=unknown app=unknown after=10s left behind")
+    }
+
     @Test("an error is named by its type and case, and its payload is left out")
     func anErrorKeepsItsCaseAndDropsItsPayload() {
         let named = SuggestionLog.failure(InventedFailure.wrote(Self.offered))

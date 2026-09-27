@@ -26,6 +26,7 @@ public struct TypedTextInsertionEngine: TextInsertionEngine {
 
     /// Answers `.notReported`: a key event posted is not a character accepted, and nothing reads it back.
     public func insert(_ text: String) async throws(TextInsertionError) -> InsertionArrival {
+        try refuseIfSelfFrontmost()
         try typist.type(text)
         return .notReported
     }
@@ -39,12 +40,24 @@ extension TypedTextInsertionEngine: CompletionWriting {
         let count = replaced.count
         if count > 0 {
             // A blind backspace could eat a shell prompt, so what is there is checked when the field will say.
-            if let preceding = focus.precedingText(count), preceding != replaced {
+            let focus = focus
+            let preceding = await AccessibilityThread.run(orElse: nil) { focus.precedingText(count) }
+            if let preceding, preceding != replaced {
                 throw .insertionRejected(
                     description: "the text before the caret is not what would be replaced")
             }
+            try refuseIfSelfFrontmost()
             try typist.deleteBackwards(count)
+        } else {
+            try refuseIfSelfFrontmost()
         }
         try typist.type(text)
+    }
+}
+
+extension TypedTextInsertionEngine {
+    /// Re-checked at the write rather than trusted from `canInsert()`, whose answer can go stale by now.
+    private func refuseIfSelfFrontmost() throws(TextInsertionError) {
+        guard !focus.isSelfFrontmost() else { throw .noFocusedTextField }
     }
 }

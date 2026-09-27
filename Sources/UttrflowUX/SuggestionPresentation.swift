@@ -159,13 +159,16 @@ public struct SuggestionPresentation: Sendable, Equatable {
 
     /// What VoiceOver is told the surface is offering, and what taking it costs.
     public var accessibilityLabel: String {
-        guard let leader = inline else { return "" }
+        guard let leader = inline else { return style == .dot ? Self.dotLabel : "" }
         let alternatives = rows.filter { !$0.isSelected }.map(\.candidate)
         let take = "\(acceptKey.spokenName) to accept\(Self.cost(of: leader))."
         guard !alternatives.isEmpty else { return "AI suggestion: \(leader.candidate). \(take)" }
         return "AI suggestion: \(leader.candidate). \(take) Alternatives: "
             + alternatives.joined(separator: ", ") + "."
     }
+
+    /// What VoiceOver is told the dot left by Escape is, and what a second Escape does.
+    public static let dotLabel = "AI suggestion hidden. Escape again to turn suggestions off in this field."
 
     /// Says how much of the user's own typing a row takes back, and nothing when it only adds.
     private static func cost(of row: Row) -> String {

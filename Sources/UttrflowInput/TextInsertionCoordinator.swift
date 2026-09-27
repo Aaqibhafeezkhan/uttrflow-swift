@@ -28,7 +28,8 @@ public struct TextInsertionCoordinator: TextInserting {
         let usable =
             richText == nil ? strategies : strategies.filter { $0.method != .accessibility }
         // Asked before the write, since the field that takes the words is the one to judge.
-        let secure = focus?.focusedFieldIsSecure() ?? false
+        let focus = focus
+        let secure = await AccessibilityThread.run(orElse: true) { focus?.focusedFieldIsSecure() ?? false }
         let outcome = await FallbackRunner.firstSuccess(among: usable) { strategy in
             guard await strategy.canInsert() else { throw TextInsertionError.noFocusedTextField }
             // Passed through rather than dropped, so what the strategy found out survives the fallback.
@@ -41,7 +42,15 @@ public struct TextInsertionCoordinator: TextInserting {
 
         switch outcome {
         case .succeeded(let attempt, _):
-            return attempt
+            // Asked again once the words are written, so a switch into a secure field during the fallback counts.
+            guard !attempt.intoSecureField else { return attempt }
+            let nowSecure = await AccessibilityThread.run(orElse: true) {
+                focus?.focusedFieldIsSecure() == true
+            }
+            guard nowSecure else { return attempt }
+            return InsertionAttempt(
+                attempt.method, arrival: attempt.arrival, destination: attempt.destination,
+                intoSecureField: true)
         case .exhausted(let errors):
             // The last strategy's reason is the most specific; the earlier refusals are expected.
             throw errors.compactMap { $0 as? TextInsertionError }.last ?? .clipboardUnavailable

@@ -16,11 +16,13 @@ public struct SnippetRow: Sendable, Equatable, Identifiable {
     public let lastUsed: String
     /// Edit and Delete.
     public let actions: [MainAction]
+    /// Which of the page's pill tints the trigger wears, fixed by the snippet's place in the store.
+    public let tint: Int
 
     /// Builds a row from its parts.
     public init(
         id: UUID, trigger: MainPill, text: String, timesUsed: String, lastUsed: String,
-        actions: [MainAction]
+        actions: [MainAction], tint: Int = 0
     ) {
         self.id = id
         self.trigger = trigger
@@ -28,6 +30,7 @@ public struct SnippetRow: Sendable, Equatable, Identifiable {
         self.timesUsed = timesUsed
         self.lastUsed = lastUsed
         self.actions = actions
+        self.tint = tint
     }
 }
 
@@ -39,6 +42,8 @@ public struct SnippetEditor: Sendable, Equatable {
     public let trigger: String
     /// The text typed so far.
     public let text: String
+    /// "New snippet" or "Edit snippet", over the fields.
+    public let title: String
     /// The label on the trigger field.
     public let triggerLabel: String
     /// The label on the text field.
@@ -60,6 +65,7 @@ public struct SnippetEditor: Sendable, Equatable {
         editing: UUID?,
         trigger: String,
         text: String,
+        title: String,
         triggerLabel: String,
         textLabel: String,
         badge: MainPill,
@@ -70,6 +76,7 @@ public struct SnippetEditor: Sendable, Equatable {
         self.editing = editing
         self.trigger = trigger
         self.text = text
+        self.title = title
         self.triggerLabel = triggerLabel
         self.textLabel = textLabel
         self.badge = badge
@@ -129,53 +136,28 @@ public struct SnippetsSnapshot: Sendable, Equatable {
 public struct SnippetsPresentation: Sendable, Equatable {
     /// The title, caption, search field and New button across the top.
     public let chrome: MainPageChrome
-    /// "5 snippets".
-    public let caption: String
     /// The snippets that match the query.
     public let rows: [SnippetRow]
     /// The open editor, above the rows.
     public let editor: SnippetEditor?
     /// Set when there is nothing to list and nothing being written.
     public let emptyState: MainEmptyState?
-    /// The worked example on the empty page: a trigger and what it types.
-    public let example: SnippetExample?
     /// The line under the rows, absent when there are none.
     public let footnote: String?
 
     /// Builds the page from its parts.
     public init(
         chrome: MainPageChrome,
-        caption: String,
         rows: [SnippetRow],
         editor: SnippetEditor?,
         emptyState: MainEmptyState?,
-        example: SnippetExample?,
         footnote: String?
     ) {
         self.chrome = chrome
-        self.caption = caption
         self.rows = rows
         self.editor = editor
         self.emptyState = emptyState
-        self.example = example
         self.footnote = footnote
-    }
-}
-
-/// The one snippet shown to somebody who has none, so the idea lands before the form does.
-public struct SnippetExample: Sendable, Equatable {
-    /// "For example".
-    public let heading: String
-    /// The trigger, as a pill.
-    public let trigger: MainPill
-    /// What it types.
-    public let text: String
-
-    /// Builds the example.
-    public init(heading: String, trigger: MainPill, text: String) {
-        self.heading = heading
-        self.trigger = trigger
-        self.text = text
     }
 }
 
@@ -191,25 +173,27 @@ public enum SnippetsPresenter {
         locale: Locale = .autoupdatingCurrent
     ) -> SnippetsPresentation {
         let listed = matches(snapshot.snippets, query: snapshot.query, locale: locale)
+        let places = Dictionary(
+            snapshot.snippets.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
         let rows = listed.map {
-            row(for: $0, now: snapshot.now, calendar: calendar, locale: locale)
+            row(
+                for: $0, tint: (places[$0.id] ?? 0) % tints, now: snapshot.now, calendar: calendar,
+                locale: locale)
         }
         let editor = snapshot.draft.map { self.editor(for: $0, in: snapshot) }
 
         return SnippetsPresentation(
             chrome: MainPageChrome(
                 title: "Snippets",
-                caption: "Short triggers that expand into whatever you like.",
+                caption: caption(for: snapshot.snippets.count),
                 search: snapshot.snippets.isEmpty
                     ? nil
                     : MainSearchField(placeholder: searchPlaceholder, query: snapshot.query),
                 addAction: MainAction(
                     title: "New Snippet", symbolName: "plus", intent: .addSnippet)),
-            caption: MainFormatting.count(snapshot.snippets.count, "snippet", "snippets"),
             rows: rows,
             editor: editor,
             emptyState: rows.isEmpty && editor == nil ? emptyState(for: snapshot) : nil,
-            example: rows.isEmpty && editor == nil && snapshot.snippets.isEmpty ? example : nil,
             footnote: rows.isEmpty
                 ? nil
                 : """
@@ -219,11 +203,14 @@ public enum SnippetsPresenter {
                 """)
     }
 
-    /// The address snippet shown to somebody with none.
-    static let example = SnippetExample(
-        heading: "For example",
-        trigger: MainPill(text: "my address", tone: .accent),
-        text: "Flat 402, Example Residences, Bengaluru")
+    /// How many pill tints the page cycles through.
+    public static let tints = 4
+
+    /// "Say a short phrase; Uttrflow types the whole thing. · 6 snippets", the count once there is one.
+    static func caption(for count: Int) -> String {
+        let lede = "Say a short phrase; Uttrflow types the whole thing."
+        return count == 0 ? lede : "\(lede) · \(MainFormatting.count(count, "snippet", "snippets"))"
+    }
 
     // MARK: - Searching
 
@@ -236,7 +223,7 @@ public enum SnippetsPresenter {
 
     /// One snippet as a row with Edit and Delete.
     static func row(
-        for snippet: Snippet, now: Date, calendar: Calendar, locale: Locale
+        for snippet: Snippet, tint: Int = 0, now: Date, calendar: Calendar, locale: Locale
     ) -> SnippetRow {
         SnippetRow(
             id: snippet.id,
@@ -249,7 +236,8 @@ public enum SnippetsPresenter {
             actions: [
                 MainAction(title: "Edit", symbolName: "pencil", intent: .editSnippet(snippet.id)),
                 .delete(.forgetSnippet(snippet.id)),
-            ])
+            ],
+            tint: tint)
     }
 
     // MARK: - Writing one
@@ -260,6 +248,7 @@ public enum SnippetsPresenter {
             editing: draft.editing,
             trigger: draft.trigger,
             text: draft.text,
+            title: draft.editing == nil ? "New snippet" : "Edit snippet",
             triggerLabel: "When I say",
             textLabel: "Type this",
             badge: MainPill(text: draft.editing == nil ? "New" : "Editing"),
@@ -301,10 +290,7 @@ public enum SnippetsPresenter {
         return MainEmptyState(
             symbolName: "doc.on.doc",
             title: "No snippets yet",
-            message: """
-                A snippet turns something you say into a block of text you would rather not say \
-                out loud every time — an address, a standup format, a sign-off.
-                """,
+            message: "Say a short phrase, and Uttrflow types the whole thing.",
             action: MainAction(title: "New Snippet", symbolName: "plus", intent: .addSnippet))
     }
 }

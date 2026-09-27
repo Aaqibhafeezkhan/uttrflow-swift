@@ -41,6 +41,8 @@ public actor Verifier {
         let deadline = deadline()
         var kept: [Candidate] = []
         for candidate in candidates {
+            // A keystroke that cancelled this turn's task makes every candidate after this one moot.
+            guard !Task.isCancelled else { break }
             guard
                 let allowed = await allowed(
                     candidate, in: surface, typed: typed, now: now, before: deadline)
@@ -108,14 +110,14 @@ public actor Verifier {
             if forGood { await supersession?.recordSupersession(of: text, by: corrected, in: surface) }
             return .corrected(corrected)
         case .rejected:
-            await supersession?.recordRejection(of: text, in: surface)
+            if forGood { await supersession?.recordRejection(of: text, in: surface) }
             return .rejected
         case .attested, .plausible:
             return verdict
         }
     }
 
-    /// Forgets every verdict, which is what leaving a field and the reset in Settings both ask for.
+    /// Forgets every verdict, which forgetting learned suggestions in Settings asks for.
     public func forgetEverything() {
         cache.forgetEverything()
     }

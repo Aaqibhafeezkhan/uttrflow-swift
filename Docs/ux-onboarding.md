@@ -4,15 +4,22 @@
 window above it only draws. These are the decisions that shape it and that a reader
 changing it needs to keep.
 
-## Two rules
+## Five pages, each answered before it is left
+
+Sign in, Microphone, Accessibility, Speech model, Ready. What Uttrflow is for is said on
+the sign-in page itself; there is no separate welcome.
 
 - Nothing is remembered about the system. A permission is read from its gate at the
   moment it matters, never carried forward from the click that asked for it.
-- No page is a dead end. Whatever the user has refused, there is always a control that
-  moves them on, and what refusing cost them is said plainly on the last page. On the two
-  permission pages that control is "Continue Without It", quiet beside the prominent one
-  that grants, in every state but a policy block — where granting is not on offer at all,
-  so going on is the only answer left.
+- Every page but the last is mandatory. Sign-in has no way past it but an account; a
+  permission page offers Continue only once macOS reports it granted; the download page
+  offers Continue only once the model is on disk, and its Cancel stops the download and
+  offers Try again rather than moving on. `OnboardingFlow` refuses a stray `.advance` on
+  an unanswered page, so the rule holds even if a page offered one by mistake.
+- The one exception is a device policy (`.restricted`): granting is not on offer at all, so
+  Continue is the only answer left, and the last page says what it cost.
+- A granted permission and a finished download stay on screen to say so, and the user
+  presses Continue; nothing moves the page on by itself.
 - A page argues only with somebody who has refused it. `AXIsProcessTrusted` cannot say
   "not asked yet", so the Accessibility page opens at `.denied` with nobody having refused
   anything; `PermissionKind.reportsNotDetermined` is what tells the two apart, and it is
@@ -46,17 +53,26 @@ The provider's page opens in the user's own browser, never a web view: a passwor
 there, and the only window in which that is safe is one whose address bar the user can see
 and whose password manager they already trust.
 
-## Working without an account
+## No way past sign-in
 
-"Continue on this Mac" saves a `LocalAccount` named after the macOS user. It is offered on
-the same page as the providers rather than only after a failure, because a choice that
-appears only once something has gone wrong reads as a consolation prize. Any sign-in still
-waiting in a browser tab is abandoned first, so two answers to the same question cannot
-arrive minutes apart. A real sign-in clears the local account, and only after the profile
-has been saved.
+Sign-in is mandatory and nothing else in the app opens without a session; see
+`Docs/entitlements.md`. There is no way to work without an account. A Mac upgraded from a
+build that offered one has its old record removed at launch (`RetiredLocalAccount`) and
+opens on this page, even though its setup is finished.
 
-`resume(askingToSignIn: true)` makes a local account *not* count as signed in, because
-somebody who pressed Sign In on the Account page is asking for an Uttrflow account.
+Offline, the sign-in page offers only Try again.
+
+`OnboardingFlow.onSignIn` fires as soon as the profile is kept, so the rest of the app is
+switched on before the remaining setup pages, whose last one asks for a first dictation.
+
+## The first try
+
+The last page asks the user to hold their shortcut and talk. `OnboardingWindowController`
+maps each `DictationState` to an `OnboardingTrial`: recording is listening, and the words
+of an insertion — or of a failed one, since Uttrflow does not type into its own window —
+fill the page's field. `OnboardingFlow.tried(_:)` shows them for a moment and then closes
+onboarding, which opens the dashboard. Empty words go back to waiting. "Skip to dashboard"
+closes onboarding at any time.
 
 ## Finishing writes no preference
 

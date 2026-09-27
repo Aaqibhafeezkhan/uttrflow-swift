@@ -1,6 +1,7 @@
 // How much decorative motion the Mac allows now, from Reduce Motion, Low Power Mode and thermal pressure.
 
 import AppKit
+import SwiftUI
 import UttrflowCore
 
 /// What the system asks of the app's animations at one moment, and the frame rates that follow. See `Docs/performance.md`.
@@ -30,9 +31,14 @@ struct MotionBudget: Equatable {
         !reducesMotion && energy.allowsDiscretionaryWork
     }
 
-    /// Whether the working dots walk; Reduce Motion holds them still.
-    var workingDotsMove: Bool {
+    /// Whether the working bars rise and settle; Reduce Motion holds them still.
+    var workingBarsMove: Bool {
         !reducesMotion
+    }
+
+    /// `animation` for a one-off move, or none under Reduce Motion, so the change lands in place.
+    func allowing(_ animation: Animation) -> Animation? {
+        reducesMotion ? nil : animation
     }
 
     /// The dock timelines' shortest gap between frames, longer in Low Power Mode or under thermal pressure.

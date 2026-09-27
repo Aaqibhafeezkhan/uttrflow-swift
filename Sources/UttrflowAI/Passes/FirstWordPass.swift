@@ -40,7 +40,8 @@ public struct FirstWordPass: CleaningPass {
                 // The case is read from where this word stands, so a word a pass dropped cannot decide it.
                 let spokenBefore = draft.words[..<index].filter { !$0.heard.isEmpty }.count
                 cased = firstWord(
-                    cased, in: text, heard: Array(heardWords.dropFirst(spokenBefore)))
+                    undoingOpeningContraction(cased, heard: word.heard),
+                    in: text, heard: Array(heardWords.dropFirst(spokenBefore)))
             } else if startOfSentence {
                 cased = WordShape.capitalised(cased)
             }
@@ -64,6 +65,16 @@ public struct FirstWordPass: CleaningPass {
             else { return WordShape.capitalised(word) }
             return WordShape.lowercased(word)
         }
+    }
+
+    /// The heard "id" or "ill" back in place of "I'd" or "I'll" mid-sentence, where its capital only opened the piece.
+    func undoingOpeningContraction(_ word: String, heard: String) -> String {
+        guard policy == .fromInsertionPoint, state == .midSentence else { return word }
+        let heardShape = WordShape(heard)
+        guard let contraction = ContractionsPass.capitalisedOnly[heardShape.key],
+            WordShape(word).core == contraction
+        else { return word }
+        return WordShape(word).replacingCore(with: heardShape.core)
     }
 
     /// Whether the word closes a sentence; a dotted abbreviation such as "p.m." carries a stop of its own.

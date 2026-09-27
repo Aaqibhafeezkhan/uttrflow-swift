@@ -3,9 +3,7 @@ public import UttrflowCore
 
 /// One page of onboarding, in the order the designs number their dots; every page is always counted.
 public enum OnboardingStep: Sendable, Equatable, CaseIterable {
-    /// What Uttrflow is for, said before it asks for anything, including who you are.
-    case welcome
-    /// Who this is. Nothing is offered without it.
+    /// What Uttrflow is for and who this is, on one page; nothing is offered without it.
     case signIn
     /// Microphone access.
     case microphone
@@ -19,19 +17,17 @@ public enum OnboardingStep: Sendable, Equatable, CaseIterable {
     /// 1-based position in the row of dots, written out so reordering is a deliberate edit.
     public var position: Int {
         switch self {
-        case .welcome: 1
-        case .signIn: 2
-        case .microphone: 3
-        case .accessibility: 4
-        case .setup: 5
-        case .ready: 6
+        case .signIn: 1
+        case .microphone: 2
+        case .accessibility: 3
+        case .setup: 4
+        case .ready: 5
         }
     }
 
-    /// What the rail beside the page calls this step: a noun, so the rail can be scanned.
+    /// What VoiceOver calls this step beside its number: a noun, so the steps can be told apart.
     public var railTitle: String {
         switch self {
-        case .welcome: "Welcome"
         case .signIn: "Sign in"
         case .microphone: "Microphone"
         case .accessibility: "Accessibility"
@@ -66,18 +62,37 @@ public enum OnboardingDetail: Sendable, Equatable {
     /// The download, from `0` to `1`.
     case installing(Double)
 
-    /// The download stopped, with the sentence to put in front of the user.
-    case installFailed(String)
+    /// The download stopped, with the sentence to put in front of the user and how far it had come.
+    case installFailed(String, reached: Double = 0)
 
-    /// The last page, holding what the user will actually be able to do.
-    case finishing(OnboardingReadiness)
+    /// The model is on disk and the page waits for the user to go on.
+    case installed
+
+    /// The last page, holding what the user will be able to do and how their first try is going.
+    case finishing(OnboardingReadiness, trial: OnboardingTrial = .waiting)
+}
+
+/// The first dictation tried on the last page, which fills the page's own field.
+public enum OnboardingTrial: Sendable, Equatable {
+    /// Nothing said yet.
+    case waiting
+    /// The shortcut is down and the microphone is live.
+    case listening
+    /// The words that came back, shown before onboarding closes.
+    case heard(String)
 }
 
 extension OnboardingDetail {
     /// What was promised, on the one page that promises anything.
     var readiness: OnboardingReadiness? {
-        guard case .finishing(let readiness) = self else { return nil }
+        guard case .finishing(let readiness, _) = self else { return nil }
         return readiness
+    }
+
+    /// How the first try is going, on the last page; waiting everywhere else.
+    var trial: OnboardingTrial {
+        guard case .finishing(_, let trial) = self else { return .waiting }
+        return trial
     }
 
     /// What the sign-in page is doing; falls back to offering the providers rather than `nil`.

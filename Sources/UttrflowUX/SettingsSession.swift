@@ -2,7 +2,7 @@ public import struct Foundation.Date
 public import UttrflowCore
 public import UttrflowSettings
 
-/// The Settings window while it is open, as a value that decides everything and saves nothing.
+/// The Settings page while it is open, as a value that decides everything and saves nothing.
 public struct SettingsSession: Sendable, Equatable {
     /// What the user has now. Only ever a state ``SettingsEditor`` allowed.
     public private(set) var settings: Settings
@@ -15,6 +15,9 @@ public struct SettingsSession: Sendable, Equatable {
 
     /// Which tab is showing.
     public var tab: SettingsTab
+
+    /// What is typed in the search field; while it holds anything, the page lists matching rows.
+    public var query = ""
 
     /// The shortcut field's own state, which is not a setting until it is committed.
     public private(set) var recorder: SettingsShortcutRecorder
@@ -56,7 +59,7 @@ public struct SettingsSession: Sendable, Equatable {
     public func presentation(at moment: Date) -> SettingsWindowPresentation {
         SettingsPresenter.window(
             showing: tab, settings: settings, capabilities: capabilities,
-            personalisation: personalisation, at: moment)
+            personalisation: personalisation, at: moment, query: query)
     }
 
     /// Carries out a change and returns the settings to save, or records the refusal's reason.
@@ -86,24 +89,35 @@ public struct SettingsSession: Sendable, Equatable {
     /// Takes one keystroke and applies whatever it earned.
     @discardableResult
     public mutating func receive(_ stroke: KeyStroke) -> Settings? {
-        settle(recorder.receive(stroke))
+        settle { $0.receive(stroke) }
     }
 
     /// Takes a modifier going down; nothing is earned until it is known what it belongs to.
     @discardableResult
     public mutating func hold(keyCode: UInt16, modifiers: Set<HotkeyModifier>) -> Settings? {
-        settle(recorder.hold(keyCode: keyCode, modifiers: modifiers))
+        settle { $0.hold(keyCode: keyCode, modifiers: modifiers) }
     }
 
     /// Takes every modifier coming up, which settles a modifier that was held on its own.
     @discardableResult
     public mutating func release() -> Settings? {
-        settle(recorder.release())
+        settle { $0.release() }
     }
 
-    /// Applies whatever an outcome earned, which is the same for every way one is reached.
-    private mutating func settle(_ outcome: SettingsShortcutOutcome) -> Settings? {
-        switch outcome {
+    /// Applies whatever a keystroke earned, keeping the field listening when the shortcut clashes.
+    private mutating func settle(
+        _ attempt: (inout SettingsShortcutRecorder) -> SettingsShortcutOutcome
+    ) -> Settings? {
+        let listening = recorder
+        switch attempt(&recorder) {
+        case .recorded(.shortcut(let action, let binding)):
+            if let clash = SettingsEditor.clash(for: action, binding: binding, in: settings) {
+                recorder = listening
+                recorder.refuse(clash)
+                rejection = clash.reason
+                return nil
+            }
+            return apply(.shortcut(action, binding))
         case .recorded(let change):
             return apply(change)
         case .refused(let refusal):
@@ -120,7 +134,7 @@ public struct SettingsSession: Sendable, Equatable {
     public mutating func record(
         keyCode: UInt16, modifiers: Set<HotkeyModifier>
     ) -> Settings? {
-        settle(recorder.record(keyCode: keyCode, modifiers: modifiers))
+        settle { $0.record(keyCode: keyCode, modifiers: modifiers) }
     }
 
     // MARK: - Forgetting

@@ -75,31 +75,39 @@ instead, so there is never a question of which row it means.
 | --- | --- | --- |
 | Panel | 420 × 560 | The approved design; the view fills the window rather than pinning this |
 | Corner radius | 16 | |
-| Control height | 34 | Search field and microphone button |
+| Search field height | 42 | Taller than the microphone beside it, so the search leads the panel |
+| Control height | 34 | The microphone button |
 | Row height | 34 | Every row the same height, so arrow-key counting stays right |
-| Chip padding | 9 | Eight chips fit one row of a 420-point panel |
+| Chip padding | 9 | The filter segments and the collection chips share one row of a 420-point panel |
 | Thumbnail | 34 × 24 | |
 | Menu width | 200 | |
 | Sheet width | panel − 56 | A cap, so the sheet shrinks with a narrower panel |
 
 ## Palette contrast
 
-| Colour | Hex | Contrast on `panelSurface` |
-| --- | --- | --- |
-| `panelLabel` | `F4F4F6` | 17.8:1 |
-| `panelLabelSoft` | `8B90A0` | 6.1:1 |
-| `panelLabelDim` | `7A7F8E` | 4.9:1, and 4.6:1 on `panelCardHigh`, the panel's tightest ground |
-| `panelGhost` | `656E80` | 3.8:1, a mark's floor rather than a word's; never the only signal on a row |
-| `panelAccentBright` | `5FE0D3` | 12.2:1 as a foreground |
-| `panelAccentText` | `04332F` | ink on a teal fill, where white measures 2.1:1 |
+The panel is tinted glass that follows the appearance: `BrandPalette.Redesign.Panel.glass`
+over the system material, with the aurora's four stops swept, blurred and drawn at 0.22 across
+its top edge. Every colour is a `Panel` token resolved per appearance.
 
-Every ratio here is computed by `TextToneContrastTests`, against the panel's three grounds,
-so a palette edit that drops a label below 4.5:1 — or the ⋯ glyph below 3:1 — fails the build.
+| Colour | Dark | Light | Contrast on the glass, dark / light |
+| --- | --- | --- | --- |
+| `panelLabel` | `F4F4F6` | `101316` | 17.9 / 17.6:1 |
+| `panelLabelSoft` | `8B90A0` | `5C6866` | 6.2 / 5.5:1 |
+| `panelLabelDim` | `7A7F8E` | `6D6481` | 4.9 / 5.2:1, and 4.5:1 on the ⋯ menu's glass, the tightest ground for words |
+| `panelGhost` | `656E80` | `8A8F9C` | 3.8 / 3.1:1, a mark's floor rather than a word's; never the only signal on a row |
+| `panelAccentBright` | `5FE0D3` | `128077` | 12.2 / 4.5:1 as a foreground |
+| `panelAccentText` | `04332F` | `FFFFFF` | ink on the accent fill: 6.1 / 4.8:1 |
+
+The glass is measured over a mid-grey desktop in each appearance, as the floating button's is.
+`RedesignTokenTests` computes every ratio here, so a palette edit that drops a word below 4.5:1
+— or the ⋯ glyph below 3:1 — fails the build. The ⋯ menu's glass is `161424`, a step darker
+than the design's `181626`, because that is what keeps the dim tone at 4.5:1 on it.
 
 The selection ring is `panelAccent` at 0.38 over a 0.08 wash; at 1.5 points and full strength
-the ring was brighter than the clip it pointed at. The active chip is a 0.16 wash with a 0.35
-border for the same reason. The palette has four values; a fifth for Delete was tried and
-reverted, so Delete takes `dockWarning` only under the pointer.
+the ring was brighter than the clip it pointed at. An active collection chip is a 0.16 wash with
+a 0.35 border for the same reason. The kind filters are one segmented control whose chosen
+segment is a solid pill, white when dark and ink when light. Delete takes `panelDestructive`
+only under the pointer.
 
 ## The window: key, never main
 

@@ -3,7 +3,7 @@
 Every dictation's audio is written to disk **while the key is held**, beside the buffer the
 recogniser reads, and deleted the moment the words land. If the words are lost — the
 recogniser throws or never answers, the app crashes mid-dictation — the file stays, and
-the Dictation page lists it with a Retry.
+the History page lists it with a Retry.
 
 This reverses the earlier promise that recordings were never saved. The privacy stance is
 unchanged in substance: nothing leaves the Mac. The copy changed instead, in one place
@@ -23,6 +23,13 @@ file waits for that, by awaiting `RecordingStore.settle(_:)` — which `audio(of
 `waiting(now:)` and `discard(_:)` all do for their caller. The file is a side effect,
 never a source, for a live dictation.
 
+Starting a recording touches no disk either. `RecordingStore.begin` hands back a writer at
+once, and the writer's own task makes the folder, creates the file, marks it out of backups,
+writes the header and stamps the creation date before it writes the first block it was
+handed — so the microphone never waits on a file, and every block captured meanwhile still
+lands. A file that cannot be made keeps nothing and fails nothing: the dictation goes on from
+the buffer, and `current()` answers with nothing once the writer has settled.
+
 The file is a plain 16-bit mono WAV at the canonical 16 kHz, built from the same header
 and PCM bytes `WAVEncoder` produces, so a finished file is byte-for-byte what the encoder
 would have written. It opens with a header claiming zero frames, and the count is rewritten
@@ -37,7 +44,7 @@ is how a recording from before a crash becomes readable at the next launch.
 |---|---|---|
 | Recording | `RecordingStore.open` | Growing. Not listed: it is not a recording yet. |
 | Current | `RecordingStore.last` | The key was released. The pipeline reads its id once. |
-| Waiting | any `.wav` in the folder | Words were lost. Listed on the Dictation page. |
+| Waiting | any `.wav` in the folder | Words were lost. Listed on the History page. |
 | Gone | — | Words landed, silence, cancelled, retried, or a day old. |
 
 The folder is `Application Support/Uttrflow/recordings/`, one `<uuid>.wav` per take. The
@@ -55,7 +62,7 @@ exactly when the words were lost.** A failure with a transcript (insertion faile
 words are on the clipboard) discards it. An informational failure (silence) discards it.
 Everything else keeps it and, when the failure's own recovery was `retry` or nothing,
 offers `retryFromRecording` instead — the floating button's Retry then opens the
-Dictation page rather than starting a new dictation. A failure with a different fix, like
+History page rather than starting a new dictation. A failure with a different fix, like
 a missing speech model, keeps that fix and the recording both.
 
 `cancel()` after the key is released discards the recording. `retry(_:)` reads the file
@@ -83,9 +90,15 @@ so a recording dated ahead of the clock counts as due rather than as not yet mad
 that jumped a year stops listing recordings without deleting the audio a retry still wants.
 `Docs/retention-clock.md` is the reasoning.
 
+## Hearing it
+
+A waiting recording's row on History has a play button beside its duration.
+`RecordingPlayback` reads the file through `RecordingStore.audio(of:)`, encodes it back to a
+WAV in memory and plays it through the speakers, one recording at a time. Nothing is copied
+and nothing leaves the Mac; a retry or a delete stops the playback first.
+
 ## What is not here
 
-- No playback. The row shows a waveform glyph and the duration.
 - No re-transcribing a dictation that came out wrong: the audio behind a finished
   transcript is deleted, so History has nothing to replay.
 - No setting to turn it off. The write is what makes retry possible at all.

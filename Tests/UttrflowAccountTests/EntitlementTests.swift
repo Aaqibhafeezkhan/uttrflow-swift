@@ -41,3 +41,51 @@ struct EntitlementTests {
         #expect(decoded == original)
     }
 }
+
+/// The account's creation date, which the backend writes as an ISO string and the Account page shows.
+@Suite("When the account was created")
+struct AccountCreationDateTests {
+    /// The account as the backend writes it, with `createdAt` spelled as given.
+    private func document(createdAt: String?) -> Data {
+        let date = createdAt.map { #","createdAt":"\#($0)""# } ?? ""
+        return Data(
+            #"{"identifier":"u_2","displayName":"Ada Byron","emailAddress":"ada@example.com","provider":"google"\#(date)}"#
+                .utf8)
+    }
+
+    @Test("reads the backend's ISO timestamp")
+    func readsTheTimestamp() throws {
+        let account = try JSONDecoder().decode(
+            Account.self, from: document(createdAt: "2026-08-01T08:00:00.000Z"))
+        #expect(account.createdAt == Date(timeIntervalSince1970: 1_785_571_200))
+        #expect(account.emailAddress == "ada@example.com")
+    }
+
+    /// An older cache or an older server sends none, and that is still an account.
+    @Test("an account with no creation date has none")
+    func absent() throws {
+        let account = try JSONDecoder().decode(Account.self, from: document(createdAt: nil))
+        #expect(account.createdAt == nil)
+        #expect(account.displayName == "Ada Byron")
+    }
+
+    /// A date only displayed must never cost somebody their session.
+    @Test("an unreadable creation date reads as none, and the rest of the account survives")
+    func unreadable() throws {
+        let account = try JSONDecoder().decode(
+            Account.self, from: document(createdAt: "the first of August"))
+        #expect(account.createdAt == nil)
+        #expect(account.identifier == "u_2")
+    }
+
+    @Test("round-trips through Codable with the date as a string")
+    func roundTrip() throws {
+        let original = Account(
+            identifier: "u_2", displayName: nil, emailAddress: "ada@example.com",
+            provider: .gitHub, avatarPath: "/v1/me/avatar",
+            createdAt: Date(timeIntervalSince1970: 1_785_571_200))
+        let data = try JSONEncoder().encode(original)
+        #expect(try JSONDecoder().decode(Account.self, from: data) == original)
+        #expect(String(decoding: data, as: UTF8.self).contains("2026-08-01T08:00:00.000Z"))
+    }
+}

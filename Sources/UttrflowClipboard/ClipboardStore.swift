@@ -38,6 +38,9 @@ public actor ClipboardStore {
     /// What the saved file is known to hold, which the migration off one file makes differ from memory.
     private var savedOnDisk: [Clip]?
 
+    /// What the history file is known to hold, so an edit to a kept clip leaves it unwritten.
+    private var historyOnDisk: [Clip]?
+
     /// The history and the saved clips as one list, or `nil` before the files have been read.
     private var wholeList: [Clip]?
 
@@ -191,8 +194,15 @@ public actor ClipboardStore {
         ofDictation id: UUID, saying spoken: String?, keeping retention: ClipRetention
     ) throws(ClipboardStoreError) -> [Clip] {
         let stored = loaded()
-        let left = stored.filter { !$0.isCopy(ofDictation: id, saying: spoken) }
-        guard left.count != stored.count else { return retained(stored, keeping: retention) }
+        var changed = false
+        let left: [Clip] = stored.compactMap { clip in
+            guard clip.isCopy(ofDictation: id, saying: spoken) else { return clip }
+            changed = true
+            let others = clip.dictations.filter { $0 != id }
+            // A clip another dictation still copies loses only this dictation's link.
+            return others.isEmpty ? nil : Self.relinking(clip, to: others)
+        }
+        guard changed else { return retained(stored, keeping: retention) }
         return try settled(left, keeping: retention)
     }
 
@@ -405,8 +415,21 @@ public actor ClipboardStore {
         Clip(
             id: clip.id, text: text, kind: clip.kind, copiedAt: clip.copiedAt,
             source: clip.source, origin: clip.origin, dictations: clip.dictations,
+            // An unlinked dictation copy keeps its first words, the only thing deleting its dictation can match.
+            dictatedText: clip.dictatedText ?? (clip.isUnlinkedDictationCopy ? clip.text : nil),
             lastUsedAt: clip.lastUsedAt,
             language: clip.language, richText: richText, image: image,
+            alias: clip.alias, category: clip.category, isPinned: clip.isPinned,
+            timesCopied: clip.timesCopied)
+    }
+
+    /// The same clip, copying only `dictations`.
+    static func relinking(_ clip: Clip, to dictations: [UUID]) -> Clip {
+        Clip(
+            id: clip.id, text: clip.text, kind: clip.kind, copiedAt: clip.copiedAt,
+            source: clip.source, origin: clip.origin, dictations: dictations,
+            dictatedText: clip.dictatedText, lastUsedAt: clip.lastUsedAt,
+            language: clip.language, richText: clip.richText, image: clip.image,
             alias: clip.alias, category: clip.category, isPinned: clip.isPinned,
             timesCopied: clip.timesCopied)
     }
@@ -418,11 +441,12 @@ public actor ClipboardStore {
             source: arrival.source,
             // Named rather than defaulted, so a repeat cannot quietly become a ⌘C.
             origin: previous.origin,
-            // Both dictations, so deleting either one still takes this clip with it.
+            // Both dictations, so the clip goes only once neither of them is left.
             dictations: previous.dictations
                 + arrival.dictations.filter {
                     !previous.dictations.contains($0)
                 },
+            dictatedText: previous.dictatedText,
             // Copying something again is reaching for it, so the eviction clock moves too.
             lastUsedAt: arrival.copiedAt,
             // The arrival's, detected from the text recorded now and from this pasteboard.
@@ -565,9 +589,10 @@ public actor ClipboardStore {
         savedOnDisk = fromSavedFile
         // A move interrupted between the two writes leaves a clip in both files, and the saved copy wins.
         let savedIDs = Set(fromSavedFile.map(\.id))
-        let stored =
-            fromSavedFile
-            + read(file).filter { Self.isPersistable($0) && !savedIDs.contains($0.id) }
+        let fromHistoryFile = read(file).filter(Self.isPersistable)
+        // An unreplaceable file is unknown rather than empty, so every save still meets its refusal.
+        historyOnDisk = unreplaceable.contains(file) ? nil : fromHistoryFile
+        let stored = fromSavedFile + fromHistoryFile.filter { !savedIDs.contains($0.id) }
         let list = Self.interleaving(
             saved: stored.filter(\.isKept), history: stored.filter { !$0.isKept })
         wholeList = list
@@ -645,7 +670,10 @@ public actor ClipboardStore {
             try persist(bridge, to: savedFile)
             savedOnDisk = bridge
         }
-        try persist(nowHistory, to: file)
+        if nowHistory != historyOnDisk {
+            try persist(nowHistory, to: file)
+            historyOnDisk = nowHistory
+        }
         if nowSaved != bridge {
             try persist(nowSaved, to: savedFile)
             savedOnDisk = nowSaved

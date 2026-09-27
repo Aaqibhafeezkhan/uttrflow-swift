@@ -87,6 +87,9 @@ ALLOWED_NETWORK_MODULE='UttrflowAccount'
 #                        connection, and it happens before any dictation.
 #   the developer CLIs — `uttrflow-dev sign-in` and the evaluation harness. Neither is in
 #                        a shipped product; `Scripts/bundle.sh` is what proves that.
+#   the cue wiring     — `AVAudioEngine.connect(_:to:format:)`, which links two audio nodes
+#                        in-process and shares only its name with BSD `connect(2)`. The file
+#                        holds that one call and nothing else, so nothing rides in with it.
 CLOUD_ISLAND='Sources/UttrflowAI/HTTPCleanupModel.swift'
 DOWNLOAD_ISLAND='Sources/UttrflowSpeech/TokenizerDownload.swift'
 ALLOWED_NETWORK_FILES=(
@@ -98,6 +101,7 @@ ALLOWED_NETWORK_FILES=(
     'Sources/Uttrflow/Onboarding/OnboardingWindowController.swift'
     'Sources/uttrflow-dev/SignIn.swift'
     'Sources/uttrflow-eval/CorpusConnection.swift'
+    'Sources/UttrflowAudio/CueEngineWiring.swift'
 )
 
 # Files that may construct the model hub's client, which is a URLSession underneath. Two
@@ -221,8 +225,8 @@ URL_READERS=(
     'Sources/UttrflowEval/CorpusCache.swift'
     'Sources/UttrflowEval/CorpusUploadOutbox.swift'
     'Sources/UttrflowEval/JSONRecordStore.swift'
+    'Sources/UttrflowEval/SpokenPassages.swift'
     'Sources/uttrflow-bakeoff/Bakeoff.swift'
-    'Sources/uttrflow-bakeoff/SpokenPassages.swift'
 )
 
 reader_filter=(-v)
@@ -464,6 +468,35 @@ if [[ "$sparkle_targets" -ne 1 ]]; then
         "something on the dictation path, and the import check above stops meaning much."
 else
     pass "one target depends on the updater"
+fi
+
+# ---------------------------------------------------------------------------
+# 6b. The crash reporter is in one module, which only the app shell links.
+# ---------------------------------------------------------------------------
+#
+# Sentry sends opt-in crash reports: that is the feature. What is checked is that no module
+# on the dictation path can call it — see Docs/crash-reporting.md.
+printf '\nThe crash reporter\n'
+
+reporter_imports="$(grep -rlnE '^(public )?import Sentry' Sources --include='*.swift' \
+    | grep -v '^Sources/UttrflowDiagnostics/' || true)"
+if [[ -n "${reporter_imports//[[:space:]]/}" ]]; then
+    fail "the crash reporter is imported outside UttrflowDiagnostics" \
+        "Sentry opens a connection. Every file that can drive it is a file that can reach" \
+        "the network, so it stays in the one module the app shell alone depends on." \
+        "" $'\n'"$reporter_imports"
+else
+    pass "the crash reporter is imported only in UttrflowDiagnostics"
+fi
+
+reporter_targets="$(grep -c 'package: "sentry-cocoa"' Package.swift || true)"
+diagnostics_users="$(grep '"UttrflowDiagnostics"' Package.swift | grep -v 'name:' \
+    | grep -vc 'dependencies: \["UttrflowDiagnostics"\]' || true)"
+if [[ "$reporter_targets" -ne 1 || "$diagnostics_users" -ne 1 ]]; then
+    fail "$reporter_targets targets link the crash reporter and $diagnostics_users depend on UttrflowDiagnostics" \
+        "Only UttrflowDiagnostics may link Sentry, and only the app target may depend on it."
+else
+    pass "one target links the crash reporter, and only the app depends on it"
 fi
 
 # ---------------------------------------------------------------------------

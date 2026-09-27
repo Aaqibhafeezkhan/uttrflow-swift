@@ -64,3 +64,43 @@ struct EnvironmentCacheTests {
         #expect(await reader.reads == 1, "the second ask is inside the doubled lifetime")
     }
 }
+
+/// A monotonic clock that jumps a fixed step on every read.
+private final class SteppingSeconds: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0.0
+    private let step: Double
+
+    init(step: Double) { self.step = step }
+
+    func next() -> Double {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = value
+        value += step
+        return current
+    }
+}
+
+@Suite("When a slow read's answer starts being believed")
+struct EnvironmentSlowReadTests {
+    @Test("an answer that took longer than its lifetime to read is still believed for that lifetime (#1677)")
+    func aSlowReadIsNotExpiredOnArrival() async {
+        let reader = StubEnvironment([.directory: ["src"]])
+        let slowness = EnvironmentIndex.lifetimeInSeconds + 1
+        let clock = SteppingSeconds(step: slowness)
+        let index = EnvironmentIndex(reader: reader, seconds: { clock.next() })
+        let asked = EnvironmentCacheTests.now
+
+        _ = await index.values(of: .directory, in: "/slow", now: asked)
+        await index.settle()
+        let landed = asked.addingTimeInterval(slowness)
+        let justBeforeExpiry = landed.addingTimeInterval(EnvironmentIndex.lifetimeInSeconds - 0.1)
+        let justAfterLanding = landed.addingTimeInterval(0.1)
+        #expect(await index.values(of: .directory, in: "/slow", now: justAfterLanding) == ["src"])
+        #expect(await index.values(of: .directory, in: "/slow", now: justBeforeExpiry) == ["src"])
+        await index.settle()
+
+        #expect(await reader.reads == 1, "the answer is believed for its full lifetime from when it landed")
+    }
+}

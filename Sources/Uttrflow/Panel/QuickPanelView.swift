@@ -15,6 +15,8 @@ struct QuickPanelView: View {
     var openCount: Int = 0
 
     @State private var query: String = ""
+    /// True while `query` is being set from `presentation.query` rather than typed, so that set is never relayed as a search.
+    @State private var isSyncingQuery = false
     @State private var hovered: UUID?
     /// Which row's ⋯ menu is open, if any; every action in it also has a key of its own.
     @State private var openMenu: UUID?
@@ -38,11 +40,11 @@ struct QuickPanelView: View {
         }
         // Fills the window so a dragged border never leaves the panel's corners empty.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.panelSurface)
+        .background(QuickPanelBackdrop())
         .clipShape(.rect(cornerRadius: QuickPanelMetrics.corner))
         .overlay(
             RoundedRectangle(cornerRadius: QuickPanelMetrics.corner)
-                .strokeBorder(Color.white.opacity(0.055), lineWidth: 1)
+                .strokeBorder(Color.panelEdge, lineWidth: 1)
         )
         // Over the list, so the row a sheet asks about stays visible behind it.
         .overlay { if let sheet = presentation.sheet { sheetOverlay(sheet) } }
@@ -53,10 +55,14 @@ struct QuickPanelView: View {
             isSheetFocused = false
             isSearchFocused = true
         }
-        // Closes a menu left open from the last showing; the panel is built once and shown many times.
-        .onChange(of: openCount) { openMenu = nil }
-        .task(id: openCount) {
+        // Closes a leftover menu and resets the field before the panel shows, so no stale text ever flashes.
+        .onChange(of: openCount) {
+            openMenu = nil
+            isSyncingQuery = true
             query = presentation.query
+            isSyncingQuery = false
+        }
+        .task(id: openCount) {
             hovered = nil
             // A resumed sheet with a field keeps the caret; its `onAppear` does not run again (#920).
             guard presentation.sheet?.takesTyping == true else {
@@ -81,16 +87,9 @@ struct QuickPanelView: View {
                     .accessibilityHidden(true)
                 field
             }
-            .padding(.horizontal, 11)
-            .frame(height: QuickPanelMetrics.controlHeight)
-            .background(Color.panelCard, in: .rect(cornerRadius: 9))
-            .overlay(
-                RoundedRectangle(cornerRadius: 9)
-                    // A soft ring, so the empty search field does not outshine the row Return would paste.
-                    .strokeBorder(
-                        isSearchFocused ? Color.panelAccent.opacity(0.30) : Color.panelLine,
-                        lineWidth: 1)
-            )
+            .padding(.horizontal, 14)
+            .frame(height: QuickPanelMetrics.searchHeight)
+            .background(searchGround)
 
             // Starts a dictation into the search field.
             Button {
@@ -121,6 +120,14 @@ struct QuickPanelView: View {
         .padding(.bottom, 10)
     }
 
+    /// The search field's film, accent ring and glow; the glow goes with the caret.
+    private var searchGround: some View {
+        let shape = RoundedRectangle(cornerRadius: 12)
+        return shape.fill(Color.panelCard)
+            .overlay(shape.strokeBorder(Color.panelAccent.opacity(0.45), lineWidth: 1))
+            .shadow(color: Color.panelAccent.opacity(isSearchFocused ? 0.45 : 0), radius: 10)
+    }
+
     /// Draws the placeholder itself, because `TextField` cannot give it the panel's measured grey.
     private var field: some View {
         ZStack(alignment: .leading) {
@@ -138,6 +145,8 @@ struct QuickPanelView: View {
                 .accessibilityLabel(presentation.searchPlaceholder)
                 // Reports the whole contents: the field owns its own selection, deletion and dictation.
                 .onChange(of: query) { _, text in
+                    // A programmatic reset from `presentation.query`, not a keystroke; nothing to relay (#861).
+                    guard !isSyncingQuery else { return }
                     // Under a sheet with no field, typing would filter away the row being asked about (#946).
                     if let sheet = presentation.sheet, !sheet.takesTyping {
                         if text != presentation.query { query = presentation.query }
@@ -171,57 +180,39 @@ struct QuickPanelView: View {
         }
     }
 
-    /// One scrolling row of kind filters and collection chips, divided because the two axes combine.
+    /// One scrolling row: the kind filters as a segmented control, then the collection chips.
     private var chipRow: some View {
-        HStack(spacing: 8) {
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal) {
-                    HStack(spacing: 5) {
-                        ForEach(presentation.filters) { chip in
-                            pill(chip.title, isActive: chip.isActive, shortcut: nil) {
-                                relayKey(.filter(chip.filter))
-                            }
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    QuickPanelSegments(filters: presentation.filters) { relayKey(.filter($0)) }
+                    ForEach(presentation.categories) { chip in
+                        pill(chip.title, isActive: chip.isActive, shortcut: chip.shortcut) {
+                            // `chosen`, not `shortcut`: a chip past the ninth has no number.
+                            relayKey(.category(number: chip.chosen))
                         }
-                        if !presentation.categories.isEmpty {
-                            Rectangle()
-                                .fill(Color.panelLine)
-                                .frame(width: 1, height: 15)
-                                .padding(.horizontal, 3)
-                                .accessibilityHidden(true)
-                        }
-                        ForEach(presentation.categories) { chip in
-                            pill(
-                                chip.title, isActive: chip.isActive, shortcut: chip.shortcut,
-                                tint: .panelAccentBright
-                            ) {
-                                // `chosen`, not `shortcut`: a chip past the ninth has no number.
-                                relayKey(.category(number: chip.chosen))
-                            }
-                            .id(chip.id)
-                            // On the chip, which is the thing renamed or deleted; All has no menu.
-                            .contextMenu {
-                                if let category = chip.category {
-                                    Button("Rename…") { onIntent(.renameCategory(category)) }
-                                    Button("Delete…") { onIntent(.deleteCategory(category)) }
-                                }
+                        .id(chip.id)
+                        // On the chip, which is the thing renamed or deleted; All has no menu.
+                        .contextMenu {
+                            if let category = chip.category {
+                                Button("Rename…") { onIntent(.renameCategory(category)) }
+                                Button("Delete…") { onIntent(.deleteCategory(category)) }
                             }
                         }
                     }
-                    .padding(.leading, 12)
-                    .padding(.trailing, 4)
                 }
-                .scrollIndicators(.never)
-                // Scrolls a collection chosen by ⌘-digit into view, so the chip agrees with the list.
-                .onChange(of: activeCategory) { _, active in
-                    guard let active else { return }
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
-                        proxy.scrollTo(active, anchor: .trailing)
-                    }
+                .padding(.horizontal, 12)
+            }
+            .scrollIndicators(.never)
+            // Scrolls a collection chosen by ⌘-digit into view, so the chip agrees with the list.
+            .onChange(of: activeCategory) { _, active in
+                guard let active else { return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) {
+                    proxy.scrollTo(active, anchor: .trailing)
                 }
             }
-            .padding(.trailing, 12)
         }
-        .frame(height: 26)
+        .frame(height: QuickPanelMetrics.chipRowHeight)
         .padding(.bottom, 10)
     }
 
@@ -230,10 +221,9 @@ struct QuickPanelView: View {
         presentation.categories.first { $0.isActive }?.id
     }
 
-    /// One chip; `tint` tells a kind filter (where you are) from a collection (something you made).
+    /// One collection chip, tinted when it is the one on.
     private func pill(
-        _ title: String, isActive: Bool, shortcut: Int?, tint: Color = .panelAccent,
-        action: @escaping () -> Void
+        _ title: String, isActive: Bool, shortcut: Int?, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
@@ -245,15 +235,16 @@ struct QuickPanelView: View {
                         .opacity(0.65)
                 }
             }
-            .foregroundStyle(isActive ? tint : Color.panelLabelSoft)
+            .foregroundStyle(isActive ? Color.panelAccentBright : Color.panelLabelSoft)
             // Nine points either side keeps eight chips within a 420-point panel.
             .padding(.horizontal, 9)
             .frame(height: 26)
             // A wash, not a fill, so the active chip stays quieter than the clip about to be pasted.
-            .background(isActive ? tint.opacity(0.16) : .clear, in: .capsule)
+            .background(isActive ? Color.panelAccentBright.opacity(0.16) : .clear, in: .capsule)
             .overlay(
                 Capsule().strokeBorder(
-                    isActive ? tint.opacity(0.35) : Color.panelLine, lineWidth: 1)
+                    isActive ? Color.panelAccentBright.opacity(0.35) : Color.panelLine,
+                    lineWidth: 1)
             )
             .fixedSize()
         }
@@ -380,7 +371,7 @@ struct QuickPanelView: View {
 
     private func groupHeading(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 9.5, weight: .semibold))
+            .font(.system(size: 10, weight: .semibold))
             .kerning(0.6)
             .foregroundStyle(Color.panelLabelDim)
             .padding(.horizontal, 10)
@@ -447,7 +438,7 @@ struct QuickPanelView: View {
                 look.isSelected
                     // A wash of the accent under the ring; together they mark the row without shouting.
                     ? AnyShapeStyle(Color.panelAccent.opacity(0.08))
-                    : AnyShapeStyle(look.isFilled ? Color.panelCardHigh : .clear),
+                    : AnyShapeStyle(look.isFilled ? Color.panelLift : .clear),
                 in: .rect(cornerRadius: 8)
             )
             // A faint ring, not a brighter fill, because hover fills too and only one row answers Return.
@@ -556,7 +547,7 @@ struct QuickPanelView: View {
             // Only state that belongs to this clip: a pin. Time and actions live in the ⋯ menu.
             if row.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10))
                     .foregroundStyle(Color.panelAccentBright)
             }
             Button {
@@ -622,11 +613,7 @@ struct QuickPanelView: View {
             }
         }
         .frame(width: 200)
-        .background(Color.panelCardHigh, in: .rect(cornerRadius: 11))
-        .overlay(
-            RoundedRectangle(cornerRadius: 11).strokeBorder(Color.panelLine, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.55), radius: 22, y: 10)
+        .panelPopover(cornerRadius: 11, shadowOpacity: 0.55, radius: 22, y: 10)
     }
 
     private func menuItem(_ action: PanelAction) -> some View {
@@ -641,7 +628,7 @@ struct QuickPanelView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(
                         hoveredItem == action.id
-                            ? (isDestructive ? Color.dockWarning : Color.panelAccentBright)
+                            ? (isDestructive ? Color.panelDestructive : Color.panelAccentBright)
                             : Color.panelLabelSoft
                     )
                     .frame(width: 15)
@@ -650,7 +637,7 @@ struct QuickPanelView: View {
                     // Delete reads at full weight until hovered; a greyed item looks unavailable.
                     .foregroundStyle(
                         isDestructive && hoveredItem == action.id
-                            ? Color.dockWarning : Color.panelLabel)
+                            ? Color.panelDestructive : Color.panelLabel)
                 Spacer(minLength: 0)
                 // The chord is how the action is found without the pointer, so it is drawn beside it.
                 if let shortcut = action.shortcut {
@@ -664,7 +651,7 @@ struct QuickPanelView: View {
             .background(
                 hoveredItem == action.id
                     ? (isDestructive
-                        ? Color.dockWarning.opacity(0.13) : Color.panelAccent.opacity(0.13))
+                        ? Color.panelDestructive.opacity(0.13) : Color.panelAccent.opacity(0.13))
                     : Color.clear
             )
             .contentShape(.rect)
@@ -749,6 +736,7 @@ struct QuickPanelView: View {
         ZStack {
             // Catches the click that would otherwise land on a row, and means what esc means.
             Color.black.opacity(0.45)
+                .clipShape(.rect(cornerRadius: QuickPanelMetrics.corner))
                 .contentShape(.rect)
                 .onTapGesture { relayKey(.escape) }
 
@@ -793,13 +781,8 @@ struct QuickPanelView: View {
             .padding(16)
             // A cap, not a width, so the sheet shrinks with a panel narrower than the design.
             .frame(maxWidth: QuickPanelMetrics.width - 56, alignment: .leading)
+            .panelPopover(cornerRadius: 12, shadowOpacity: 0.4, radius: 24, y: 8)
             .padding(.horizontal, 28)
-            .background(Color.panelCard)
-            .clipShape(.rect(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12).strokeBorder(Color.panelLine, lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.4), radius: 24, y: 8)
         }
     }
 
@@ -822,7 +805,7 @@ struct QuickPanelView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(Color.panelSurface)
+        .background(Color.panelWell)
         .clipShape(.rect(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8).strokeBorder(Color.panelAccent, lineWidth: 1)
@@ -851,7 +834,7 @@ struct QuickPanelView: View {
             }
         }
         .frame(maxHeight: 150)
-        .background(Color.panelSurface, in: .rect(cornerRadius: 6))
+        .background(Color.panelWell, in: .rect(cornerRadius: 6))
     }
 
     private func sign(for kind: TextDiff.Kind) -> String {
@@ -906,7 +889,7 @@ struct QuickPanelView: View {
                 .buttonStyle(.plain)
                 .background(
                     option.name == sheet.draft
-                        ? Color.panelCardHigh : Color.clear,
+                        ? Color.panelLift : Color.clear,
                     in: .rect(cornerRadius: 6))
             }
         }
@@ -1103,11 +1086,19 @@ enum QuickPanelMetrics {
     static let height: CGFloat = 560
     static let corner: CGFloat = 16
     static let controlHeight: CGFloat = 34
+    /// The search field, taller than the microphone beside it so it leads the panel.
+    static let searchHeight: CGFloat = 42
+    /// The kind filters' segments and the collection chips beside them.
+    static let segmentHeight: CGFloat = 22
+    static let chipRowHeight: CGFloat = 28
+    /// How far the aurora's band reaches and how much of it sits above the panel's top edge.
+    static let auroraHeight: CGFloat = 260
+    static let auroraRise: CGFloat = 150
     /// Every row the same height, so arrow-key counting stays right.
     static let rowHeight: CGFloat = 34
 }
 
-// MARK: - Colours
+// MARK: - Styles
 
 /// Darkens the row while the mouse is down; the click's only other feedback is the panel vanishing.
 private struct PressableRow: ButtonStyle {
@@ -1116,28 +1107,4 @@ private struct PressableRow: ButtonStyle {
             .brightness(configuration.isPressed ? -0.06 : 0)
             .animation(.easeOut(duration: 0.06), value: configuration.isPressed)
     }
-}
-
-extension Color {
-    /// The window's own greys; contrast ratios are in Docs/app-quick-panel.md.
-    static let panelSurface = Color(rgb: BrandPalette.Surface.ground.dark)
-    static let panelCard = Color(rgb: BrandPalette.Surface.card.dark)
-    static let panelCardHigh = Color(rgb: BrandPalette.Surface.raised)
-    static let panelLine = Color(rgb: BrandPalette.Line.separator.dark)
-    static let panelLabel = Color(rgb: BrandPalette.Text.primary.dark)
-    /// 6.1:1 on the panel.
-    static let panelLabelSoft = Color(rgb: BrandPalette.Text.muted.dark)
-    /// The dimmest grey words are allowed, for what the eye reaches only when it goes looking.
-    static let panelLabelDim = Color(rgb: BrandPalette.Text.dim.dark)
-    /// Below the dimmest grey, for the row glyph and the ⋯; both lift to ordinary grey when looked at.
-    static let panelGhost = Color(rgb: BrandPalette.Text.ghost)
-    /// Where you are: the focused field, the chosen row, the filter that is on, the current tab.
-    static let panelAccent = Color(rgb: BrandPalette.Teal.primary)
-    /// The accent as a foreground, 12.2:1 on the panel; `panelAccent` is mixed to sit under white text.
-    static let panelAccentBright = Color(rgb: BrandPalette.Teal.bright)
-    /// Ink on a teal fill, where white measures 2.1:1.
-    static let panelAccentText = Color(rgb: BrandPalette.Teal.inkOnFill)
-    static let panelLink = Color(rgb: BrandPalette.Semantic.link)
-    static let panelCode = Color(rgb: BrandPalette.Purple.light)
-    static let panelKey = Color(rgb: BrandPalette.Semantic.key)
 }

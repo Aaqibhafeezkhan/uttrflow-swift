@@ -1,9 +1,9 @@
-// Tests for the steps as the rail beside the page draws them.
+// Tests for the steps as the dots under the card name them.
 import Testing
 
 @testable import UttrflowUX
 
-/// The rail is SwiftUI and uncovered, so its order, names and `steps[position - 1]` are tested here.
+/// The dots are SwiftUI and uncovered, so their order, names and `steps[position - 1]` are tested here.
 struct OnboardingStepTests {
     @Test("names every step as a noun the rail can be scanned for")
     func everyStepHasARailTitle() {

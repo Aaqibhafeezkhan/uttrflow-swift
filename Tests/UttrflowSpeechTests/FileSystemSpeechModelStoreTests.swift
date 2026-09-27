@@ -13,12 +13,8 @@ private func writeTokenizer(into destination: URL) throws {
     }
 }
 
-/// The compiled bundles a WhisperKit model directory holds, written as the files the store checks for.
-private let weightFiles = [
-    "MelSpectrogram.mlmodelc/coremldata.bin", "MelSpectrogram.mlmodelc/weights/weight.bin",
-    "AudioEncoder.mlmodelc/coremldata.bin", "AudioEncoder.mlmodelc/weights/weight.bin",
-    "TextDecoder.mlmodelc/coremldata.bin", "TextDecoder.mlmodelc/weights/weight.bin",
-]
+/// Every file the base model's folder holds, written as the files the store checks for.
+private let weightFiles = WeightsAssets.fileNames(of: .base)
 
 /// Writes the listed weight files under `destination`, `bytesEach` bytes apiece.
 private func writeWeights(
@@ -56,11 +52,12 @@ struct FileSystemSpeechModelStoreTests {
     private func writingDownloader(
         bytesEach: Int = 16, progressSteps: [Double] = [0.5]
     ) -> FileSystemSpeechModelStore.Downloader {
-        { _, component, destination, onProgress in
+        { model, component, destination, onProgress in
             switch component {
             case .weights:
                 for step in progressSteps { onProgress(step) }
-                try writeWeights(into: destination, bytesEach: bytesEach)
+                try writeWeights(
+                    into: destination, files: WeightsAssets.fileNames(of: model), bytesEach: bytesEach)
             case .tokenizer:
                 try writeTokenizer(into: destination)
             }
@@ -231,6 +228,20 @@ struct FileSystemSpeechModelStoreTests {
         try Data().write(to: folder.appending(path: weightFiles[3]))
         try writeTokenizer(into: folder)
 
+        #expect(!store.isInstalled(.base))
+    }
+
+    /// A tokenizer file that exists but holds nothing cannot be parsed, so it is not installed.
+    @Test("does not call a model installed when a tokenizer file is empty")
+    func emptyTokenizerFileIsNotInstalled() throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+        let folder = store.location(of: .base)
+        try writeWeights(into: folder)
+        try writeTokenizer(into: folder)
+        try Data().write(to: folder.appending(path: TokenizerAssets.fileNames[0]))
+
+        #expect(!TokenizerAssets.arePresent(in: folder))
         #expect(!store.isInstalled(.base))
     }
 
@@ -505,9 +516,66 @@ struct FileSystemSpeechModelStoreTests {
         #expect(!FileManager.default.fileExists(atPath: store.stagingLocation(of: .base).path))
     }
 
-    @Test("names the weight files of all three bundles a load reads")
+    @Test("names every file of every bundle a load reads, not only the weights")
     func namesTheWeightFiles() {
-        #expect(WeightsAssets.fileNames == weightFiles)
+        for bundle in ["MelSpectrogram", "AudioEncoder", "TextDecoder"] {
+            #expect(weightFiles.contains("\(bundle).mlmodelc/model.mil"))
+            #expect(weightFiles.contains("\(bundle).mlmodelc/coremldata.bin"))
+            #expect(weightFiles.contains("\(bundle).mlmodelc/weights/weight.bin"))
+        }
+        #expect(weightFiles.contains("config.json"))
+        #expect(weightFiles.contains("generation_config.json"))
+    }
+
+    /// The live failure: bundles with weights and no `model.mil`, a missing prefill bundle, no config.
+    @Test("calls a folder holding only each bundle's weights incomplete, not installed")
+    func weightsOnlyFolderIsIncomplete() throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+        let folder = store.location(of: .largeV3Turbo)
+        let weightsOnly = ["MelSpectrogram", "AudioEncoder", "TextDecoder"].flatMap {
+            ["\($0).mlmodelc/coremldata.bin", "\($0).mlmodelc/weights/weight.bin"]
+        }
+        try writeWeights(into: folder, files: weightsOnly)
+        try writeTokenizer(into: folder)
+
+        #expect(!store.isInstalled(.largeV3Turbo))
+        #expect(store.isIncomplete(.largeV3Turbo))
+        #expect(WeightsAssets.missing(for: .largeV3Turbo, in: folder).contains("config.json"))
+    }
+
+    @Test("does not call a model that was never downloaded incomplete")
+    func absentFolderIsNotIncomplete() {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+
+        #expect(!store.isIncomplete(.base))
+    }
+
+    @Test("does not call an installed model incomplete")
+    func installedModelIsNotIncomplete() async throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+        try await store.install(.base) { _ in }
+
+        #expect(!store.isIncomplete(.base))
+    }
+
+    /// An interrupted download must never leave a folder that reads as installed.
+    @Test("an interrupted download never counts as installed", arguments: [1, 5, 12])
+    func interruptedDownloadIsNeverInstalled(filesBeforeDrop: Int) async {
+        struct Dropped: Error {}
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root) { _, component, destination, _ in
+            guard component == .weights else { return try writeTokenizer(into: destination) }
+            try writeWeights(into: destination, files: Array(weightFiles.prefix(filesBeforeDrop)))
+            throw Dropped()
+        }
+
+        await #expect(throws: SpeechEngineError.self) { try await store.install(.base) { _ in } }
+
+        #expect(!store.isInstalled(.base))
+        #expect(!FileManager.default.fileExists(atPath: store.location(of: .base).path))
     }
 
     @Test("still reports complete when asked to install what is already installed")

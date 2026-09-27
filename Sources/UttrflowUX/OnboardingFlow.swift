@@ -29,6 +29,9 @@ public final class OnboardingFlow {
     /// Called once, when the user closes onboarding, with what they ended up able to do.
     public var onFinish: ((OnboardingReadiness) -> Void)?
 
+    /// Called as soon as a sign-in's profile is kept, so the app opens before the rest of setup.
+    public var onSignIn: (() -> Void)?
+
     private let microphone: any PermissionGate
     private let accessibility: any PermissionGate
     private let installer: any OnboardingModelInstaller
@@ -39,13 +42,8 @@ public final class OnboardingFlow {
 
     private let authentication: any AuthenticationService
     private let profiles: any ProfileCache
-    /// Where the choice to work without an account is kept; cleared the moment a real sign-in succeeds.
-    private let local: any LocalAccountStore
     private let entitlements: EntitlementGate
     private let network: any NetworkReachability
-
-    /// What macOS calls the person at this Mac; injected so a test controls the value.
-    private let systemName: @Sendable () -> String?
 
     /// Opens the provider's page in the user's browser, never a web view, since a password is typed there.
     private let openBrowser: @Sendable (URL) -> Void
@@ -66,8 +64,14 @@ public final class OnboardingFlow {
     /// The sign-in waiting on a browser; cancelling it is what makes the Cancel button real.
     private var signInTask: Task<Void, Never>?
 
-    /// Set by ``resume(askingToSignIn:)`` and lives as long as this flow.
-    private var wasAskedToSignIn = false
+    /// The provider's page the browser was sent to, so Reopen can send it there again.
+    private var authorisationURL: URL?
+
+    /// How far the download in flight has come, so a stopped one is drawn where it stopped.
+    private var downloaded = 0.0
+
+    /// Waits before closing on a first try that worked; injected so a test need not wait.
+    private let pause: @Sendable (Duration) async -> Void
 
     /// Wires every gate, store and system hook in; the flow starts on the sign-in page.
     public init(
@@ -78,12 +82,11 @@ public final class OnboardingFlow {
         record: any OnboardingRecordStore,
         authentication: any AuthenticationService,
         profiles: any ProfileCache,
-        local: any LocalAccountStore,
         network: any NetworkReachability,
-        systemName: @escaping @Sendable () -> String?,
         openBrowser: @escaping @Sendable (URL) -> Void,
         openSystemSettings: @escaping @Sendable (SystemSettingsPane) -> Void,
-        now: @escaping @Sendable () -> Date
+        now: @escaping @Sendable () -> Date,
+        pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) {
         self.microphone = microphone
         self.accessibility = accessibility
@@ -92,13 +95,12 @@ public final class OnboardingFlow {
         self.record = record
         self.authentication = authentication
         self.profiles = profiles
-        self.local = local
-        self.entitlements = EntitlementGate(profiles: profiles, local: local)
+        self.entitlements = EntitlementGate(profiles: profiles)
         self.network = network
-        self.systemName = systemName
         self.openBrowser = openBrowser
         self.openSystemSettings = openSystemSettings
         self.now = now
+        self.pause = pause
         self.state = OnboardingState(step: .signIn, detail: .signIn(.offering))
     }
 
@@ -107,7 +109,9 @@ public final class OnboardingFlow {
 
     /// What the window draws right now; settings are read at draw time so a changed shortcut shows.
     public var page: OnboardingPage {
-        OnboardingPresenter.page(for: state, hotkey: settingsStore.load().hotkey)
+        let settings = settingsStore.load()
+        return OnboardingPresenter.page(
+            for: state, hotkey: settings.hotkey, activation: settings.hotkeyActivation)
     }
 
     // MARK: Driving
@@ -117,34 +121,31 @@ public final class OnboardingFlow {
         await moveOn(past: 0)
     }
 
-    /// Opens after the pitch; with `askingToSignIn` a local account does not count as signed in.
-    public func resume(askingToSignIn: Bool = false) async {
-        wasAskedToSignIn = askingToSignIn
-        await moveOn(past: OnboardingStep.welcome.position)
-    }
-
     /// Carries out one thing the user did on the page.
     public func perform(_ intent: OnboardingIntent) async {
         switch intent {
         case .advance:
+            // Every page but the last is answered before it is left; a stray advance is ignored.
+            guard await isAnswered else { return }
             await moveOn(after: state.step)
         case .requestPermission(let kind):
             await ask(kind)
         case .recover(let action):
             await recover(action)
         case .cancelInstall:
+            guard state.step == .setup else { return }
             abandonInstall()
-            await moveOn(after: .setup)
+            set(detail: .installFailed("You stopped it before it finished.", reached: downloaded))
         case .signIn(let provider):
             await beginSignIn(with: provider)
+        case .reopenBrowser:
+            guard state.step == .signIn, let authorisationURL else { return }
+            openBrowser(authorisationURL)
         // Both are guarded on the page offering them: a stale instruction must not drag the user back.
         case .cancelSignIn:
             guard state.step == .signIn else { return }
             abandonSignIn()
             await enter(.signIn)
-        case .continueOnThisMac:
-            guard state.step == .signIn else { return }
-            await continueOnThisMac()
         case .finish:
             // Only the last page offers this, so an instruction to close from anywhere else is ignored.
             guard let readiness = state.detail.readiness else { return }
@@ -157,14 +158,53 @@ public final class OnboardingFlow {
         switch state.step {
         case .microphone: await recheck(.microphone)
         case .accessibility: await recheck(.accessibility)
-        case .ready: set(detail: .finishing(await readiness()))
+        case .ready: set(detail: .finishing(await readiness(), trial: state.detail.trial))
         // The connection can come back while the page shows; a sign-in under way is left alone.
         case .signIn:
             guard state.detail == .signIn(.unreachable) || state.detail == .signIn(.offering)
             else { return }
             await enter(.signIn)
-        // Neither page is waiting on anything the user could have changed elsewhere.
-        case .welcome, .setup: break
+        // The download page is waiting on nothing the user could have changed elsewhere.
+        case .setup: break
+        }
+    }
+
+    /// Shows how the first try on the last page is going; words that arrive close onboarding after a moment.
+    public func tried(_ trial: OnboardingTrial) async {
+        guard case .finishing(let readiness, let current) = state.detail,
+            readiness == .ready || readiness == .pastesManually
+        else { return }
+        // Once words have arrived the page is closing, so a later dictation does not redraw it.
+        if case .heard = current { return }
+        if case .heard(let words) = trial, words.allSatisfy(\.isWhitespace) {
+            set(detail: .finishing(readiness, trial: .waiting))
+            return
+        }
+        set(detail: .finishing(readiness, trial: trial))
+        guard case .heard = trial else { return }
+        await pause(Self.linger)
+        guard !isFinished, state.detail == .finishing(readiness, trial: trial) else { return }
+        finish(with: readiness)
+    }
+
+    /// How long the words that arrived stay on screen before onboarding closes.
+    static let linger = Duration.milliseconds(1600)
+
+    /// Whether the page showing has had its question answered, which is what lets the user leave it.
+    private var isAnswered: Bool {
+        get async {
+            switch (state.step, state.detail) {
+            case (.signIn, _):
+                return !(await isOutstanding(.signIn))
+            case (.microphone, .permission(let status)), (.accessibility, .permission(let status)):
+                return status == .granted || status == .restricted
+            case (.microphone, _), (.accessibility, _):
+                return false
+            case (.setup, _):
+                return installer.isInstalled
+            case (.ready, _):
+                return true
+            }
         }
     }
 
@@ -187,13 +227,12 @@ public final class OnboardingFlow {
     /// Whether a page still has a question the system has not already answered.
     private func isOutstanding(_ step: OnboardingStep) async -> Bool {
         switch step {
-        // Somebody who pressed Sign In wants an Uttrflow account; a local one satisfies every other way in.
-        case .signIn: wasAskedToSignIn ? profiles.load() == nil : !isSignedIn
+        case .signIn: !isSignedIn
         case .microphone: await microphone.status() != .granted
         case .accessibility: await accessibility.status() != .granted
         case .setup: !installer.isInstalled
-        // Neither can already be done by the system, so neither is ever passed over.
-        case .welcome, .ready: true
+        // Nothing the system does can finish the last page, so it is never passed over.
+        case .ready: true
         }
     }
 
@@ -202,8 +241,6 @@ public final class OnboardingFlow {
         switch step {
         case .signIn:
             set(step: .signIn, detail: .signIn(network.isReachable ? .offering : .unreachable))
-        case .welcome:
-            set(step: .welcome, detail: .reading)
         case .microphone:
             set(step: step, detail: .permission(await microphone.status()))
         case .accessibility:
@@ -217,11 +254,11 @@ public final class OnboardingFlow {
 
     // MARK: Permissions
 
-    /// Asks macOS for a permission and moves on if it is granted.
+    /// Asks macOS for a permission; a yes stays on the page to say so, and Continue moves on.
     private func ask(_ kind: PermissionKind) async {
         let status = await gate(for: kind).request()
         if status.isGranted {
-            await moveOn(after: state.step)
+            set(detail: .permission(.granted))
         } else if status == .denied, !kind.reportsNotDetermined {
             // macOS's own Accessibility prompt is the one that opens Settings, so the user is already on the way.
             set(detail: .awaitingSystemSettings)
@@ -234,7 +271,7 @@ public final class OnboardingFlow {
     private func recheck(_ kind: PermissionKind) async {
         switch (await gate(for: kind).status(), state.detail) {
         case (.granted, _):
-            await moveOn(after: state.step)
+            set(detail: .permission(.granted))
         case (.denied, .awaitingSystemSettings):
             // Still refused after the settings pane: the page keeps offering look again or go on without it.
             break
@@ -275,6 +312,7 @@ public final class OnboardingFlow {
     private func beginInstall() async {
         installGeneration += 1
         let generation = installGeneration
+        downloaded = 0
         set(step: .setup, detail: .installing(0))
 
         let progress = AsyncStream<Double>.makeStream()
@@ -291,15 +329,16 @@ public final class OnboardingFlow {
 
         // Progress from a run the user has walked away from is dropped, since its page is off screen.
         for await fraction in progress.stream where generation == installGeneration {
+            downloaded = fraction
             set(step: .setup, detail: .installing(fraction))
         }
 
         let failure = await work.value
         guard generation == installGeneration else { return }
         if let failure {
-            set(step: .setup, detail: .installFailed(failure.userMessage))
+            set(step: .setup, detail: .installFailed(failure.userMessage, reached: downloaded))
         } else {
-            await moveOn(after: .setup)
+            set(step: .setup, detail: .installed)
         }
     }
 
@@ -334,12 +373,12 @@ public final class OnboardingFlow {
                 if case .code(let userCode, _) = challenge.method {
                     set(detail: .signIn(.enterCode(provider, code: userCode)))
                 }
+                authorisationURL = challenge.authorisationURL
                 openBrowser(challenge.authorisationURL)
 
                 let profile = try await authentication.completeSignIn(challenge)
                 try profiles.save(profile)
-                // A real account supersedes the Mac one, and only after the profile is safely kept.
-                local.clear()
+                onSignIn?()
                 // Not guarded on the generation: a cancelled exchange that finished is still a sign-in.
                 await moveOn(after: .signIn)
             } catch {
@@ -350,18 +389,12 @@ public final class OnboardingFlow {
         }
     }
 
-    /// Carries on without an account as the person at this Mac, abandoning any sign-in still in a browser.
-    private func continueOnThisMac() async {
-        abandonSignIn()
-        local.save(LocalAccount(name: systemName(), since: now()))
-        await moveOn(after: .signIn)
-    }
-
     /// Stops waiting for a sign-in in a browser tab; the backend forgets the attempt within ten minutes.
     private func abandonSignIn() {
         signInGeneration += 1
         signInTask?.cancel()
         signInTask = nil
+        authorisationURL = nil
     }
 
     /// Puts a sign-in failure on the page; a missing connection becomes the offline page, not an error.

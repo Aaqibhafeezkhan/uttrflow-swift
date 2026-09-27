@@ -862,6 +862,63 @@ struct DictationControllerControlTests {
         #expect(await harness.pipeline.currentState.isListening, "the next double tap opens it again")
         await harness.controller.stop()
     }
+
+    /// A press that arrives during a click-started dictation did not open the microphone, so it cannot replay the start cue, restart the cap, or set the flag whose truth would let a slip or cancellation cancel the recording.
+    @Test("a press during a click-started dictation leaves the recording alone")
+    func pressDuringControlStartedIsANoOp() async {
+        let harness = makeHarness(activation: .holdToTalk)
+
+        await harness.controller.toggleFromControl()
+        #expect(await harness.pipeline.currentState == .recording)
+        #expect(harness.cue.plays == [.start])
+
+        await harness.controller.handle(.pressed)
+
+        #expect(harness.cue.plays == [.start], "the press does not replay the start cue")
+        #expect(
+            await harness.pipeline.currentState == .recording,
+            "the click-started dictation survives")
+
+        await harness.controller.handle(.released)
+    }
+
+    /// A slip release used to call `pipeline.cancel()` on the click-started dictation and discard every word.
+    @Test("a slip during a click-started dictation keeps the words and finishes the recording")
+    func slipDuringControlStartedFinishesTheRecording() async {
+        let harness = makeHarness(activation: .holdToTalk)
+
+        await harness.controller.toggleFromControl()
+        #expect(await harness.pipeline.currentState == .recording)
+
+        await harness.controller.handle(.pressed)
+        harness.clock.advance(by: justUnderTheMinimum)
+        await harness.controller.handle(.released)
+
+        #expect(harness.inserter.received == [controllerTidied], "finished, not cancelled")
+        #expect(
+            await harness.pipeline.currentState == .inserted(controllerOutcome),
+            "the words landed in the user's app")
+        #expect(await harness.capture.calls.events == [.start, .stop])
+    }
+
+    /// A `.cancelled` event used to discard the click-started dictation because the press had falsely claimed to have opened it.
+    @Test("a cancelled press during a click-started dictation leaves the recording alone")
+    func cancelledPressDuringControlStartedLeavesTheRecording() async {
+        let harness = makeHarness(activation: .holdToTalk)
+
+        await harness.controller.toggleFromControl()
+        #expect(await harness.pipeline.currentState == .recording)
+
+        await harness.controller.handle(.pressed)
+        await harness.controller.handle(.cancelled)
+
+        #expect(
+            await harness.pipeline.currentState == .recording,
+            "the click-started dictation survives a withdrawn press")
+
+        await harness.controller.toggleFromControl()
+        #expect(harness.inserter.received == [controllerTidied])
+    }
 }
 
 // MARK: - Being let go of

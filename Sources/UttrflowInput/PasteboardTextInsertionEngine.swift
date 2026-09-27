@@ -44,13 +44,18 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
             throw .noFocusedTextField
         }
         // Concealed for a field that hides what is typed, so no clipboard history keeps the words.
-        if focus.focusedFieldIsSecure() {
+        let focus = focus
+        if await AccessibilityThread.run(orElse: true, { focus.focusedFieldIsSecure() }) {
             pasteboard.setConcealedText(text)
         } else {
             pasteboard.setText(text, richText: richText)
         }
+        // A write that did not stick would paste whatever the clipboard held before, so the next route takes over.
+        guard pasteboard.text() == text else { throw .clipboardUnavailable }
         // Read before the paste is posted, so an unchanged caret cannot be read back as a fresh landing.
-        let before = focus.tail(upTo: PasteConfirmation.readLength)
+        let before = await AccessibilityThread.run(orElse: .unreadable) {
+            focus.tail(upTo: PasteConfirmation.readLength)
+        }
         // Thrown onwards with the words left on the clipboard: the floor below would only put them back.
         try keystrokes.sendPaste()
         // Posting a paste proves nothing, so this waits for the words the way the write above is read back.

@@ -93,11 +93,12 @@ dictionary a word. Only the store's answer is current.
 ## Removing, and the three resets
 
 **One word.** Removing an identifier that is not there is not an error: the caller asked for it to
-be gone, and it is. Removing a word Uttrflow inferred also refuses it in the sighting ledger. It is
-still in the window title and still being said, so clearing the tally alone would count it back up
-to the threshold — three dictations later the deleted word reappears, which is the app arguing with
-the person using it. Only inferred words are refused: a word the user typed in and then deleted is
-theirs to change their mind about, and nothing would re-learn it anyway.
+be gone, and it is. Removing any word also refuses it in the sighting ledger. It is still in the
+window title and still being said, so clearing the tally alone would count it back up to the
+threshold — three dictations later the deleted word reappears, which is the app arguing with the
+person using it. That holds for a word the user typed in as much as one Uttrflow inferred: the
+sighting path does not care how a word first arrived, only whether it is on disk and refused. The
+refusal binds only inference — typing the word in again adds it as before.
 
 **Everything.** `removeEverything()` is the blunt instrument and takes the user's own words too.
 `removeLearned()` is almost always the one they wanted.
@@ -135,9 +136,11 @@ something else is not reached by it, and the fix for those is a different mechan
 list.
 
 The seeding is recorded in `<dictionary name>.seeded.json` beside the dictionary, holding the
-version of the list that has been applied. Two things follow, and both are deliberate: a word the
-user deletes does not reappear on the next launch, and a later build that adds a word bumps
-`ShippedWords.version` to seed the new one without re-seeding what has already been thrown away.
+version of the list last applied and every shipped spelling ever offered. Two things follow, and
+both are deliberate: a word the user deletes does not reappear on the next launch, and a later build
+that adds a word seeds only that word, because each earlier spelling is already listed as offered
+and stays deleted if the user deleted it. A record that names only a version, from before spellings
+were listed, counts as having offered the version 1 list.
 The record is named after the dictionary file, so two dictionaries in one directory never share it.
 If the record is present but unreadable, seeding stops without changing the dictionary or replacing
 the record. Launch logs the failure so the damaged marker can be diagnosed; only an absent record

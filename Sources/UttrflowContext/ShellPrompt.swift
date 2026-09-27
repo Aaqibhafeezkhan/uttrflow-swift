@@ -37,15 +37,15 @@ public enum ShellPrompt {
         var isBlank = true
         /// Whether everything so far is whitespace or a chevron.
         var isChevrons = true
-        /// Whether an at sign has been seen.
+        /// Whether an at sign has been seen outside every quote.
         var hasAt = false
 
-        /// Takes one more character into what has been read.
-        mutating func append(_ character: Character) {
+        /// Takes one more character into what has been read, noting whether a quote holds it.
+        mutating func append(_ character: Character, quoted: Bool) {
             last = character
             isBlank = isBlank && character.isWhitespace
             isChevrons = isChevrons && (character == ">" || character.isWhitespace)
-            hasAt = hasAt || character == "@"
+            hasAt = hasAt || (!quoted && character == "@")
         }
     }
 
@@ -64,7 +64,11 @@ public enum ShellPrompt {
             if escaped {
                 escaped = false
             } else if let open = quote {
-                if character == open { quote = nil }
+                if character == open {
+                    quote = nil
+                } else if open == "\"", character == "\\" {
+                    escaped = true
+                }
             } else if character == "'" || character == "\"" {
                 quote = character
             } else if character == "\\" {
@@ -75,7 +79,7 @@ public enum ShellPrompt {
             {
                 return index
             }
-            prefix.append(character)
+            prefix.append(character, quoted: quote != nil)
             index = next
         }
         return nil
@@ -88,8 +92,9 @@ public enum ShellPrompt {
         case "%": prefix.last?.isWhitespace ?? true
         // A shell expands a bare `$` before a name, so one before a space is a prompt rather than a sigil.
         case "$": !(prefix.last?.isWhitespace ?? false)
-        // A root prompt names a host or a database, which is what tells it from a trailing comment.
-        case "#": prefix.isBlank || prefix.last == "=" || prefix.hasAt
+        // A root prompt names a host or a database and touches its hash, which is what tells it from a trailing comment.
+        case "#":
+            prefix.isBlank || prefix.last == "=" || (prefix.hasAt && !(prefix.last?.isWhitespace ?? true))
         // A `>` is a redirection unless it is a run of them, or the tail of a `=>` prompt.
         case ">": prefix.isChevrons || prefix.last == "="
         // A tick, a cross and a chevron are drawn by prompt themes and typed by nobody.

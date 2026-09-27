@@ -29,8 +29,24 @@ public struct HomePresentation: Sendable, Equatable {
     public let status: HomeStatus
     /// Who is signed in, and the way to the page about them; always present.
     public let account: HomeAccount
-    /// The speech model loading, or failed to; absent once it can transcribe.
-    public let speechModel: HomeSpeechModelNotice?
+    /// The part of the day, which picks the greeting and the picture beside the hero.
+    public let mood: HomeMood
+    /// Today's date over the greeting: "Sunday 15 June".
+    public let dateLine: String
+    /// The card across the top.
+    public let hero: HomeHero
+    /// The four stat tiles; empty while a permission is missing.
+    public let tiles: [HomeStatTile]
+    /// The last few dictations on the rail, newest first; empty while a permission is missing.
+    public let activity: [HomeActivityRow]
+    /// The way to History, offered once there is anything to see there.
+    public let viewAll: MainAction?
+    /// The search field in the top bar, which opens History's search.
+    public let search: MainAction
+    /// Whether there is anything to search, the same test History uses to show its field.
+    public let canSearch: Bool
+    /// The whole page below the greeting before the first dictation, when nothing stops one starting.
+    public let emptyState: MainEmptyState?
 
     /// Builds a page from its parts.
     public init(
@@ -45,7 +61,15 @@ public struct HomePresentation: Sendable, Equatable {
         demonstration: HomeDemonstration?,
         status: HomeStatus,
         account: HomeAccount,
-        speechModel: HomeSpeechModelNotice? = nil
+        mood: HomeMood,
+        dateLine: String,
+        hero: HomeHero,
+        tiles: [HomeStatTile],
+        activity: [HomeActivityRow],
+        viewAll: MainAction?,
+        search: MainAction,
+        canSearch: Bool,
+        emptyState: MainEmptyState? = nil
     ) {
         self.greeting = greeting
         self.subtitle = subtitle
@@ -58,32 +82,15 @@ public struct HomePresentation: Sendable, Equatable {
         self.demonstration = demonstration
         self.status = status
         self.account = account
-        self.speechModel = speechModel
-    }
-}
-
-/// The card saying the speech model is loading or did not, drawn from the one load every surface reads.
-public struct HomeSpeechModelNotice: Sendable, Equatable {
-    /// The heading.
-    public let title: String
-    /// The sentence under it, with the estimate only once the load has run long enough to need one.
-    public let message: String
-    /// Whether the load is still going, so a spinner is drawn rather than a warning.
-    public let isLoading: Bool
-    /// Another attempt, offered only when the load failed.
-    public let action: MainAction?
-    /// What VoiceOver reads for the card as a whole.
-    public let accessibilityLabel: String
-
-    /// Builds the notice for a load.
-    public init(_ load: SpeechModelLoad) {
-        title = load.title
-        message = load.message
-        isLoading = load.isLoading
-        action = load.recovery.map {
-            MainAction(title: MainPresenter.title(for: $0), intent: .recover($0))
-        }
-        accessibilityLabel = load.accessibilityLabel
+        self.mood = mood
+        self.dateLine = dateLine
+        self.hero = hero
+        self.tiles = tiles
+        self.activity = activity
+        self.viewAll = viewAll
+        self.search = search
+        self.canSearch = canSearch
+        self.emptyState = emptyState
     }
 }
 
@@ -131,13 +138,10 @@ public enum HomeAccount: Sendable, Equatable {
     /// Nobody is signed in, so the corner offers the way in rather than a monogram.
     case signedOut(open: MainAction)
 
-    /// Nobody needs to sign in: this person chose this Mac, so the monogram is drawn unfilled.
-    case onThisMac(initials: String, name: String, open: MainAction)
-
     /// Where the chip goes, whichever state it is in.
     public var open: MainAction {
         switch self {
-        case .signedIn(_, _, let open), .onThisMac(_, _, let open), .signedOut(let open): open
+        case .signedIn(_, _, let open), .signedOut(let open): open
         }
     }
 }
@@ -238,8 +242,6 @@ public struct HomeSnapshot: Sendable, Equatable {
     public let entries: [HistoryEntry]
     /// The session on this Mac; absent when nobody has signed in.
     public let account: Account?
-    /// The choice to work without an Uttrflow account; read only when ``account`` is absent.
-    public let local: LocalAccount?
     /// The name macOS knows this person by; passed in so a test controls it.
     public let systemName: String?
     /// The dictation shortcut, already written out.
@@ -248,30 +250,43 @@ public struct HomeSnapshot: Sendable, Equatable {
     public let settings: Settings
     /// The clock the page is drawn against.
     public let now: Date
-    /// The speech model's load, or `nil` when it can transcribe or was never on disk.
+    /// The speech model's load, or `nil` when it can transcribe or is downloading.
     public let speechModel: SpeechModelLoad?
+    /// How far the speech model's download has got, from 0 to 1; `nil` when nothing is downloading.
+    public let speechDownload: Double?
+    /// The speech model's download size, said beside a missing model; `nil` when it is not known.
+    public let speechModelBytes: Int64?
 
     /// Builds a snapshot; everything but the shortcut and the clock defaults to empty.
     public init(
         permissions: [PermissionKind: PermissionStatus] = [:],
         entries: [HistoryEntry] = [],
         account: Account? = nil,
-        local: LocalAccount? = nil,
         systemName: String? = nil,
         shortcut: String,
         settings: Settings = .default,
         now: Date,
-        speechModel: SpeechModelLoad? = nil
+        speechModel: SpeechModelLoad? = nil,
+        speechDownload: Double? = nil,
+        speechModelBytes: Int64? = nil
     ) {
         self.permissions = permissions
         self.entries = entries
         self.account = account
-        self.local = local
         self.systemName = systemName
         self.shortcut = shortcut
         self.settings = settings
         self.now = now
         self.speechModel = speechModel
+        self.speechDownload = speechDownload
+        self.speechModelBytes = speechModelBytes
+    }
+
+    /// What the hero says about the speech model, the download first; `nil` once it can transcribe.
+    var modelStatus: HomeModelStatus? {
+        if let speechDownload { return .downloading(speechDownload, bytes: speechModelBytes) }
+        if speechModel == .missing { return .missing(bytes: speechModelBytes) }
+        return speechModel.map(HomeModelStatus.load)
     }
 }
 
@@ -292,19 +307,23 @@ public enum HomePresenter {
             in: kept, now: snapshot.now, calendar: calendar)
         let blocked = MainPresenter.obstruction(in: snapshot.permissions)
         let listed = Array(kept.prefix(shown))
+        let hour = calendar.component(.hour, from: snapshot.now)
+        let modelStatus = snapshot.modelStatus
 
         return HomePresentation(
             greeting: greeting(for: snapshot, calendar: calendar),
             // A model that is not ready blocks dictation as surely as a permission, so neither invites talking.
             subtitle: subtitle(
-                today: today, kept: kept, blocked: blocked != nil || snapshot.speechModel != nil,
+                today: today, kept: kept, blocked: blocked != nil || modelStatus != nil,
                 locale: locale),
             // No figures while a permission is missing; numbers above "cannot listen" argue with themselves.
             figures: blocked == nil
                 ? DictationPresenter.figures(
                     today: today, earlier: earlier,
-                    retentionDays: snapshot.settings.transcriptRetentionDays, calendar: calendar,
-                    locale: locale)
+                    dropped: HistoryPresenter.dropped(
+                        snapshot.entries, days: snapshot.settings.transcriptRetentionDays,
+                        now: snapshot.now),
+                    calendar: calendar, locale: locale)
                 : [],
             recent: blocked == nil ? listed.map { row(for: $0, locale: locale) } : [],
             recentTitle: title(for: listed, calendar: calendar, now: snapshot.now),
@@ -313,9 +332,28 @@ public enum HomePresenter {
             nextStep: blocked,
             hint: hint(shortcut: snapshot.shortcut, settings: snapshot.settings),
             demonstration: blocked == nil ? demonstration(for: snapshot.settings) : nil,
-            status: status(blocked: blocked != nil, speechModel: snapshot.speechModel),
+            status: status(
+                blocked: blocked != nil, speechModel: snapshot.speechModel,
+                download: snapshot.speechDownload),
             account: account(for: snapshot),
-            speechModel: blocked == nil ? snapshot.speechModel.map(HomeSpeechModelNotice.init) : nil)
+            mood: .at(hour: hour),
+            dateLine: HomeDashboard.dateLine(snapshot.now, calendar: calendar, locale: locale),
+            hero: HomeDashboard.hero(
+                canStart: blocked == nil && modelStatus == nil, modelStatus: modelStatus),
+            // No figures while a permission is missing, for the same reason as the figures above.
+            tiles: blocked == nil
+                ? HomeDashboard.tiles(
+                    kept: kept, today: today, now: snapshot.now, calendar: calendar, locale: locale)
+                : [],
+            activity: blocked == nil
+                ? kept.prefix(HomeDashboard.activityShown).map {
+                    HomeDashboard.activity(for: $0, calendar: calendar, locale: locale)
+                } : [],
+            viewAll: kept.isEmpty ? nil : MainAction(title: "View all", intent: .show(.history)),
+            search: HomeDashboard.search,
+            canSearch: !kept.isEmpty,
+            emptyState: kept.isEmpty && blocked == nil && modelStatus == nil
+                ? HomeDashboard.emptyState(activation: snapshot.settings.hotkeyActivation) : nil)
     }
 
     // MARK: - Showing the clipboard rather than mentioning it
@@ -360,7 +398,7 @@ public enum HomePresenter {
 
     // MARK: - What to hold
 
-    /// "Say it once — hold ⌥ Space anywhere on your Mac."; the verb follows how the shortcut is set up.
+    /// "Say it once — hold ⌃ ⌥ anywhere on your Mac."; the verb follows how the shortcut is set up.
     static func hint(shortcut: String, settings: Settings) -> HomeHint {
         HomeHint(
             lead: settings.hotkeyActivation == .holdToTalk
@@ -380,26 +418,24 @@ public enum HomePresenter {
     // MARK: - Whether it can hear you
 
     /// Ready or not, with the model named when it is the reason; never "Listening", which means the microphone is open.
-    static func status(blocked: Bool, speechModel: SpeechModelLoad? = nil) -> HomeStatus {
+    static func status(
+        blocked: Bool, speechModel: SpeechModelLoad? = nil, download: Double? = nil
+    ) -> HomeStatus {
         if blocked { return HomeStatus(text: "Not ready", isReady: false) }
+        if let download {
+            return HomeStatus(text: HomeModelStatus.downloading(download).title, isReady: false)
+        }
         if let speechModel { return HomeStatus(text: speechModel.status, isReady: false) }
         return HomeStatus(text: "Ready", isReady: true)
     }
 
     // MARK: - Who is here
 
-    /// The initials in the corner, from the account's name, then the Mac's, never invented.
+    /// The initials in the corner, from the account's name, never invented.
     static func account(for snapshot: HomeSnapshot) -> HomeAccount {
         guard let account = snapshot.account else {
-            guard let local = snapshot.local else {
-                // Straight to signing in, because that is what the chip says.
-                return .signedOut(open: MainAction(title: "Sign in", intent: .signIn))
-            }
-            // The Mac's own name, which the person chose; opens the Account page.
-            let shown = local.name ?? "This Mac"
-            return .onThisMac(
-                initials: AccountPagePresenter.initials(of: shown), name: firstWord(of: shown),
-                open: MainAction(title: "Account", intent: .show(.account)))
+            // Straight to signing in, because that is what the chip says.
+            return .signedOut(open: MainAction(title: "Sign in", intent: .signIn))
         }
 
         // The Account page's own name for them, so the corner never shows somebody the page does not.
@@ -417,17 +453,11 @@ public enum HomePresenter {
 
     // MARK: - Saying hello
 
-    /// "Good morning, Naveen"; the name is the account's, else the Mac's, and never invented.
+    /// "Good morning, Naveen", or "Working late" after 23:00; the name is the account's, else the Mac's, and never invented.
     static func greeting(for snapshot: HomeSnapshot, calendar: Calendar) -> String {
         let name = (snapshot.account?.displayName ?? snapshot.systemName)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let hour = calendar.component(.hour, from: snapshot.now)
-        let timeOfDay =
-            switch hour {
-            case 5..<12: "Good morning"
-            case 12..<18: "Good afternoon"
-            default: "Good evening"
-            }
+        let timeOfDay = HomeMood.at(hour: calendar.component(.hour, from: snapshot.now)).salutation
         guard let name, !name.isEmpty else { return timeOfDay }
         // The first name only. "Good morning, Naveen Bhatt" is a form letter.
         return "\(timeOfDay), \(firstWord(of: name))"

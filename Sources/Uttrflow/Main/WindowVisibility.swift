@@ -5,14 +5,17 @@ import SwiftUI
 
 /// Tells a view whether its window has somebody's attention, by `WindowAttention`. See Docs/app-main-window.md.
 extension View {
-    /// Calls `onChange` with whether this view's window is the one being used, now and whenever it changes.
-    func onWindowAttentionChange(_ onChange: @escaping (Bool) -> Void) -> some View {
-        modifier(WindowAttentionModifier(onChange: onChange))
+    /// Calls `onChange` with whether this view's window is the one being used, and the budget allows motion unless `includingMotionBudget` is false.
+    func onWindowAttentionChange(
+        includingMotionBudget: Bool = true, _ onChange: @escaping (Bool) -> Void
+    ) -> some View {
+        modifier(WindowAttentionModifier(includesMotionBudget: includingMotionBudget, onChange: onChange))
     }
 }
 
 /// Measures the part of the view its scroll view leaves uncovered and hands it to the reporter.
 private struct WindowAttentionModifier: ViewModifier {
+    let includesMotionBudget: Bool
     let onChange: (Bool) -> Void
 
     /// A reference, so a scroll reaches the reporter without re-evaluating the view's body.
@@ -28,7 +31,10 @@ private struct WindowAttentionModifier: ViewModifier {
                 relay.frame = $0
             }
             .background(
-                WindowAttentionReporter(relay: relay, onChange: onChange).allowsHitTesting(false))
+                WindowAttentionReporter(
+                    relay: relay, includesMotionBudget: includesMotionBudget, onChange: onChange
+                )
+                .allowsHitTesting(false))
     }
 }
 
@@ -48,10 +54,12 @@ private final class VisibleFrameRelay {
 /// A zero-sized `NSView` whose only job is to have a `window`.
 private struct WindowAttentionReporter: NSViewRepresentable {
     let relay: VisibleFrameRelay
+    let includesMotionBudget: Bool
     let onChange: (Bool) -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = AttentionReportingView()
+        view.includesMotionBudget = includesMotionBudget
         view.onChange = onChange
         view.relay = relay
         relay.onChange = { [weak view] in view?.recheck() }
@@ -59,11 +67,14 @@ private struct WindowAttentionReporter: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSView, context: Context) {
+        (view as? AttentionReportingView)?.includesMotionBudget = includesMotionBudget
         (view as? AttentionReportingView)?.onChange = onChange
     }
 }
 
 private final class AttentionReportingView: NSView {
+    /// Whether the answer also asks the motion budget, or only whether the view is in sight.
+    var includesMotionBudget = true
     var onChange: ((Bool) -> Void)?
     var relay: VisibleFrameRelay?
     /// The last answer given, so repeated notices do not restart a running animation.
@@ -127,7 +138,7 @@ private final class AttentionReportingView: NSView {
             isOnScreen: window?.occlusionState.contains(.visible) ?? false,
             isViewVisible: isVisibleOnADisplay,
             motion: .current())
-        report(attention.animates)
+        report(includesMotionBudget ? attention.animates : attention.isAttended)
     }
 
     /// Whether the part of this view its scroll view leaves uncovered lies on a display, which a sliver of window does not promise.

@@ -126,83 +126,6 @@ struct OrbitStage: View {
     }
 }
 
-/// The initials in the corner, which are also the way to the Account page.
-struct AccountChip: View {
-    let account: HomeAccount
-    var onIntent: (MainIntent) -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button {
-            onIntent(account.open.intent)
-        } label: {
-            HStack(spacing: 8) {
-                mark
-                Text(label)
-                    .font(.system(size: MainMetrics.calloutSize))
-                    .foregroundStyle(Color.mainMuted)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.leading, 3)
-            .padding(.trailing, 9)
-            .padding(.vertical, 3)
-            .background(.primary.opacity(isHovered ? 0.10 : 0.05), in: .capsule)
-            .overlay(Capsule().strokeBorder(Color.mainSeparator, lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .accessibilityLabel(spokenLabel)
-    }
-
-    /// The circle at the leading edge: filled teal for a person, outlined grey for nobody.
-    @ViewBuilder private var mark: some View {
-        switch account {
-        case .signedIn(let initials, _, _):
-            Text(initials)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 26, height: 26)
-                .background(
-                    LinearGradient(
-                        colors: [Color.dockAccent, Color.stageTealDeep],
-                        startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: .circle)
-        // The same monogram, unfilled: a real account, but not a session.
-        case .onThisMac(let initials, _, _):
-            Text(initials)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(Color.mainMuted)
-                .frame(width: 26, height: 26)
-                .overlay(Circle().strokeBorder(Color.mainSeparator, lineWidth: 1))
-        case .signedOut:
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(Color.mainDim)
-                .frame(width: 26, height: 26)
-        }
-    }
-
-    private var label: String {
-        switch account {
-        case .signedIn(_, let name, _), .onThisMac(_, let name, _): name
-        case .signedOut(let open): open.title
-        }
-    }
-
-    /// Names the account, because "Account" alone says nothing about whose and initials cannot be spoken.
-    private var spokenLabel: String {
-        switch account {
-        case .signedIn(_, let name, let open): "\(open.title), \(name)"
-        // Said in full, so VoiceOver does not report a session that does not exist.
-        case .onThisMac(_, let name, let open): "\(open.title), \(name), on this Mac"
-        case .signedOut(let open): open.title
-        }
-    }
-}
-
 extension Color {
     /// The stage's ground and the microphone's well; fixed values, because the stage is dark by design.
     static let stageGround = Color(rgb: BrandPalette.Surface.ground.dark)
@@ -212,8 +135,6 @@ extension Color {
     static let stageText = Color(rgb: BrandPalette.Text.primary.dark)
     /// The not-ready status text on the stage's fixed dark ground; a fixed value, since `warningInk` follows Light appearance.
     static let stageWarningInk = Color(rgb: BrandPalette.Semantic.warning)
-    /// The brand teal deepened until white sits legibly on it, for the monogram.
-    static let stageTealDeep = Color(rgb: BrandPalette.Teal.deeper)
 }
 
 /// One figure in the row under the stage, with a comparison beneath when the presenter supplies one.
@@ -257,7 +178,7 @@ struct ClipboardRail: View {
                 Spacer(minLength: 6)
                 ForEach(Array(demonstration.keys.enumerated()), id: \.offset) { _, key in
                     Text(key)
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(.system(size: 10, weight: .medium))
                         .padding(.horizontal, 5)
                         .frame(minWidth: 17, minHeight: 17)
                         .cardSurface(.primary.opacity(0.06), cornerRadius: 4)
@@ -294,7 +215,7 @@ struct ClipboardRail: View {
             // The chosen row wears the key that would paste it; the masked one says why it is dots.
             if row.isMasked {
                 Text("hidden")
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 10))
                     .foregroundStyle(Color.mainDim)
             } else if isChosen {
                 Text("⏎")

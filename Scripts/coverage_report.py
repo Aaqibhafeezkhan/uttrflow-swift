@@ -38,6 +38,7 @@ EXCLUDED_MODULES = {
 EXCLUDED_FILES = {
     "UttrflowAudio/AVAudioEngineMicrophoneSource.swift": "drives a physical microphone",
     "UttrflowAudio/RecordingCue+System.swift": "plays a sound out of the speakers",
+    "UttrflowAudio/RecordingCue+Engine.swift": "plays a shaped sound out of the speakers",
     "UttrflowPermissions/MicrophonePermissionGate+System.swift": "puts a system dialog on screen",
     "UttrflowPermissions/AccessibilityPermissionGate+System.swift": "opens System Settings",
     "UttrflowPermissions/SystemSettingsOpener+System.swift": "hands a System Settings address to the system to open",
@@ -95,14 +96,22 @@ EXCLUDED_FILES = {
         "of its own — when an update may install is UpdateGate, and which feed may be read is "
         "UpdateFeed, both tested"
     ),
+    "UttrflowDiagnostics/SentrySDK+Live.swift": (
+        "starts and closes the Sentry SDK, which installs a process-wide crash handler a test "
+        "cannot; the options and the scrubbing it hands over are CrashReporter, which is tested"
+    ),
     "Uttrflow/Onboarding/OnboardingAccountLayer.swift": "wiring only; pairs the backend with the store that believes its key",
     "Uttrflow/Onboarding/NetworkReachability+System.swift": "watches the real network path",
     "Uttrflow/Onboarding/OnboardingView.swift": "SwiftUI, drawn from a tested presentation",
-    "Uttrflow/Onboarding/OnboardingRail.swift": "SwiftUI; the step list it draws is tested in OnboardingStepTests",
+    "Uttrflow/Onboarding/OnboardingBackdrop.swift": "SwiftUI; the aurora, logo and waveform drawn behind a tested presentation",
+    "Uttrflow/Onboarding/OnboardingPieces.swift": "SwiftUI; the card's parts, drawn from a tested presentation",
+    "Uttrflow/Onboarding/OnboardingRail.swift": "SwiftUI; the Settings rail's ground, appearance only",
     "Uttrflow/Onboarding/OnboardingWindowController.swift": "owns an on-screen window and the real permission gates",
-    "Uttrflow/Settings/SettingsWindowController.swift": "owns an on-screen window",
+    "Uttrflow/Settings/SettingsPageController.swift": "hands the Settings model to the main window; probe ordering is tested in SettingsCapabilityProbeTests",
     "Uttrflow/Settings/SettingsViewModel.swift": "observable shell; every decision is in SettingsSession",
-    "Uttrflow/Settings/SettingsRootView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Settings/SettingsPageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Settings/SettingsDiagnosticsView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Settings/MachineDescription+System.swift": "reads the macOS version, chip and memory from the system",
     "Uttrflow/Settings/SettingsPaneView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Settings/SettingsControlView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Settings/SettingsControlStyles.swift": "SwiftUI; appearance only, and every control it restyles keeps the behaviour the platform gives it",
@@ -114,6 +123,16 @@ EXCLUDED_FILES = {
     ),
     "Uttrflow/Sidebar/SidebarView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HomePageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/HomeActivityView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/HomeHeroView.swift": (
+        "SwiftUI, drawn from a tested presentation; the waveform's bars are tested in HomeHeroViewTests"
+    ),
+    "Uttrflow/Main/HomeHeroPieces.swift": (
+        "SwiftUI; the pill's glow is appearance only, and the mood pictures it loads are tested in HomeHeroViewTests"
+    ),
+    "Uttrflow/Main/RedesignColors.swift": (
+        "colour values; the layer resolution and the island's fixed inks are tested in RedesignColorsTests"
+    ),
     "Uttrflow/Main/ClipboardDemonstration.swift": (
         "SwiftUI; what it decides is in ClipboardDemonstrationPhase, which says what is drawn "
         "at an instant, ClipboardDemonstrationMoments, which says when to wake, and "
@@ -127,23 +146,29 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/ApplicationIconSource+System.swift": "asks the system for another app's icon",
     "Uttrflow/Panel/PanelThumbnailSource+System.swift": "decodes a picture off the disk",
     "Uttrflow/Main/OrbitPalette.swift": "colour values; the two decidable parts are tested in OrbitPaletteTests",
-    "Uttrflow/Main/DictationPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/DictionaryPageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/PageParts.swift": "SwiftUI parts of the redesigned pages, drawn from tested presentations",
+    "Uttrflow/Main/PageTable.swift": (
+        "SwiftUI layout; the one sum in it, PageColumns.cellWidths, is tested in PageTableTests"
+    ),
     "Uttrflow/Main/CorrectionsPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/InsightsPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/SnippetsPageView.swift": "SwiftUI, drawn from a tested presentation",
-    "Uttrflow/Main/StylePageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/AccountPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/AvatarView.swift": "SwiftUI; which of the two things it draws is decided in AccountPagePresentation",
     "Uttrflow/Main/MainWindowView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/MainPieces.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/MainEmptyStateScene.swift": "SwiftUI; which scene a page draws is decided and tested in MainEmptyScene",
+    "Uttrflow/Main/MainDialogs.swift": "SwiftUI, drawn from a tested MainNotice and MainConfirmation",
     "Uttrflow/Main/HistoryPageView.swift": "SwiftUI, drawn from a tested presentation",
-    "Uttrflow/Main/DiagnosticsPageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/HistoryRailRow.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/RecordingPlayback.swift": "plays a sound out of the speakers",
     "Uttrflow/Dock/DockPanelController.swift": "owns an on-screen floating window",
     "Uttrflow/Suggestion/SuggestionCoordinator.swift": (
         "wiring only: an event tap, a global key monitor and another app's focused field, "
-        "none of which a headless test has; every rule it sequences is SuggestionSession "
-        "and every field reading it maps goes through SuggestionMoment, both of which are tested"
+        "none of which a headless test has; every rule it sequences is SuggestionSession, "
+        "every field reading it maps goes through SuggestionMoment, and whether the model is asked, "
+        "reused, skipped, drawn fresh or asked for alternatives is ModelPass, all of which are tested"
     ),
     "Uttrflow/Suggestion/SuggestionPanelController.swift": (
         "owns an on-screen floating window; where it puts it is SuggestionGeometry and "
@@ -151,12 +176,20 @@ EXCLUDED_FILES = {
     ),
     "Uttrflow/Suggestion/SuggestionView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Panel/QuickPanelController.swift": "owns an on-screen floating window",
+    "Uttrflow/Panel/QuickPanelGlass.swift": (
+        "SwiftUI glass and colours; the tokens it draws are measured in BrandPaletteTests"
+    ),
     "Uttrflow/Panel/QuickPanelView.swift": (
         "SwiftUI, drawn from a tested presentation, apart from the ⌘-chord and Escape handling "
         "it decides itself, which #630 moves into a pure type in UttrflowUX"
     ),
     "Uttrflow/Dock/DockView.swift": "SwiftUI, drawn from a tested presentation",
-    "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item",
+    "Uttrflow/Dock/DockSetupView.swift": (
+        "SwiftUI, drawn from DockModelSetup, which SpeechModelDockTests covers"
+    ),
+    "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item and its on-screen popover",
+    "Uttrflow/MenuBar/MenuBarPopoverView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/MenuBar/MenuBarGlass.swift": "SwiftUI glass and colours, values from BrandPalette",
     "UttrflowSpeech/TokenizerDownload.swift": "fetches the tokenizer over the real network at install time",
     "UttrflowSpeech/WhisperKitBackend.swift": "loads a downloaded model and decodes real speech",
     "UttrflowSpeech/AppleSpeechBackend.swift": "drives the system recogniser on real speech",
@@ -195,12 +228,11 @@ OVERSIZED_EXCLUSIONS = {
         "the ⌘-chord and Escape handling in it has no test at all; #630 moves it into UttrflowUX"
     ),
     "Uttrflow/Suggestion/SuggestionCoordinator.swift": (
-        "the two rules it keeps are tested in SuggestionReadGateTests and SuggestionDebounceTests"
+        "the two rules it keeps are tested in SuggestionReadGateTests and SuggestionDebounceTests, "
+        "and its model-pass decisions in ModelPassTests; still untested is the capture-consent "
+        "and tap-insertion sequencing"
     ),
     "Uttrflow/Dock/DockView.swift": "what DockViewModel decides is tested in DockClockTests and DockBarsTests",
-    "Uttrflow/Onboarding/OnboardingView.swift": (
-        "OnboardingModel forwards every press to OnboardingFlow, which OnboardingFlowTests drives"
-    ),
     "Uttrflow/Main/MainPieces.swift": (
         "views, metrics and colour mappings; the one rule among them is RowReveal, tested in RowRevealTests"
     ),
