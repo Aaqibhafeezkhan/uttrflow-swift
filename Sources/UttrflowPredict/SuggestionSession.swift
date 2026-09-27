@@ -131,6 +131,9 @@ public struct SuggestionSession: Sendable, Equatable {
     /// The line as of the last read, which is what an accepted suggestion continues.
     public private(set) var typed = ""
 
+    /// Lines taken and then undone in this field, in lower case, never offered again until the line ends or the field changes.
+    public private(set) var undoneHere: Set<String> = []
+
     /// Whether ⎋ has left only the dot in this field.
     private var isMinimised = false
     /// The key this application accepts with, told to the session each turn.
@@ -149,6 +152,8 @@ public struct SuggestionSession: Sendable, Equatable {
     private var drawnAtKeystroke = 0
     /// The same count for the turn still being answered, which becomes the drawn one's only once it draws.
     private var pendingKeystroke = 0
+    /// The last line taken here and the line it was taken over, watched for an undo until the line moves on.
+    private var taken: TakenLine?
 
     /// A session following nothing, with the feature on and nothing drawn.
     public init() {}
@@ -156,6 +161,12 @@ public struct SuggestionSession: Sendable, Equatable {
     /// Notes one key typed in the field, which makes whatever is on offer stale until a turn reads the line again.
     public mutating func keystrokeArrived() {
         invalidate()
+    }
+
+    /// Notes a Return that ended the line, so the empty line after it is a new one and not an undo of what was taken.
+    public mutating func lineEnded() {
+        taken = nil
+        undoneHere = []
     }
 
     /// Notes a click, scroll, switch or anything else that may have moved the caret, so neither the offer drawn nor an answer in flight is drawn again.
@@ -246,7 +257,9 @@ public struct SuggestionSession: Sendable, Equatable {
             return .settled(settle(.silent, silence: .overBudget))
         }
         // A candidate the user has already finished typing adds nothing, and one in another script is never written.
-        let offerable = candidates.filter { $0.text != pending.typed && LatinScript.writes($0.text) }
+        let offerable = candidates.filter {
+            $0.text != pending.typed && LatinScript.writes($0.text) && isOfferable($0.text)
+        }
         let decided = PredictionEngine.ranked(from: offerable, in: pending, now: now)
         // A turn with nothing on offer has nothing to be wrong about, so the gates are never troubled.
         guard decided.suggestion.accepting != nil, let ranking = decided.ranking else {
@@ -271,7 +284,8 @@ public struct SuggestionSession: Sendable, Equatable {
             return settle(.silent, silence: .overBudget)
         }
         let decided = PredictionEngine.decision(
-            from: verified.filter { LatinScript.writes($0.text) }, in: pending, now: now)
+            from: verified.filter { LatinScript.writes($0.text) && isOfferable($0.text) }, in: pending,
+            now: now)
         return settle(decided.suggestion, silence: decided.silence)
     }
 
@@ -286,7 +300,7 @@ public struct SuggestionSession: Sendable, Equatable {
         guard elapsedMilliseconds <= Self.turnBudgetInMilliseconds else {
             return settle(.silent, silence: .overBudget)
         }
-        let usable = Self.drawable(completions, past: pending.typed).map {
+        let usable = Self.drawable(completions.filter(isOfferable), past: pending.typed).map {
             Self.keepingTypedCase($0, typed: pending.typed)
         }
         guard let leader = usable.first else { return settle(.silent, silence: silence) }
@@ -306,7 +320,8 @@ public struct SuggestionSession: Sendable, Equatable {
             case .certain(let leader) = suggestion
         else { return nil }
         // The leader goes through the same sieve first, so an alternative repeating it in any case is dropped with the other repeats.
-        let usable = Self.drawable([leader] + others, past: pending.typed).dropFirst().map {
+        let alternatives = others.filter(isOfferable)
+        let usable = Self.drawable([leader] + alternatives, past: pending.typed).dropFirst().map {
             Self.keepingTypedCase($0, typed: pending.typed)
         }
         guard !usable.isEmpty else { return nil }
@@ -314,6 +329,11 @@ public struct SuggestionSession: Sendable, Equatable {
             .choice(leader: leader, others: Array(usable.prefix(Self.verifiedDepth - 1))), silence: nil)
         shownIsGenerated = true
         return update
+    }
+
+    /// Whether a line may be offered here, which one the person took and undid in this field may not.
+    private func isOfferable(_ line: String) -> Bool {
+        !undoneHere.contains(line.lowercased())
     }
 
     /// The model's lines that can be drawn over what is typed: each extending it in the Latin alphabet, none repeated in any case, in the model's order.
@@ -346,6 +366,7 @@ public struct SuggestionSession: Sendable, Equatable {
             // The offer is gone the moment it is taken, and so is any answer still in flight for it.
             generation += 1
             clearDrawing()
+            taken = TakenLine(line: text, over: typed)
             typed = text
             return .accept(text)
         case .moveSelection(let moved):
@@ -383,9 +404,12 @@ public struct SuggestionSession: Sendable, Equatable {
             isSilencedHere = false
             isMinimised = false
             rejectionsHere = 0
+            taken = nil
+            undoneHere = []
             clearDrawing()
             return nil
         }
+        watchTaken(typing: typing)
         // An emptied line is a fresh start, so neither the suggestions typed past before it nor the ⎋ still binds the field.
         if typing.isEmpty {
             rejectionsHere = 0
@@ -407,6 +431,20 @@ public struct SuggestionSession: Sendable, Equatable {
         rejectionsHere += 1
         // A guess the model invented counts toward quieting the field, but the store is never told to blame it.
         return shownIsGenerated ? nil : offered
+    }
+
+    /// Ends the watch on the last line taken once the line moves, marking it undone when the line went back inside it or to what it was taken over.
+    private mutating func watchTaken(typing: String) {
+        guard let taken else { return }
+        let line = typing.lowercased()
+        let whole = taken.line.lowercased()
+        // The read that shows the taken line in place is still inside the watch.
+        guard line != whole else { return }
+        self.taken = nil
+        // A fuzzy line rewrote what was typed, so its undo lands on the typo rather than inside the line.
+        if whole.hasScalarPrefix(line) || taken.over.lowercased().hasScalarPrefix(line) {
+            undoneHere.insert(whole)
+        }
     }
 
     /// The moment with the three facts only this session knows filled in.
@@ -459,4 +497,12 @@ public struct SuggestionSession: Sendable, Equatable {
         selection = .untouched
         shownIsGenerated = false
     }
+}
+
+/// A line the person took and the line it was taken over, which is what an undo goes back to.
+private struct TakenLine: Sendable, Equatable {
+    /// The whole line the acceptance wrote.
+    let line: String
+    /// The line as typed when the key was pressed.
+    let over: String
 }
