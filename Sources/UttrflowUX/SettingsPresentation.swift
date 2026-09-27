@@ -159,8 +159,16 @@ public struct SettingsRow: Sendable, Equatable, Identifiable {
 
     /// What VoiceOver reads, including why the row is off, which grey alone does not say.
     public var accessibilityLabel: String {
-        [label, explanation ?? keyedExplanation?.text, unavailability]
-            .compactMap(\.self).filter { !$0.isEmpty }.joined(separator: ". ")
+        let parts = [label, explanation ?? keyedExplanation?.text, unavailability]
+            .compactMap(\.self).filter { !$0.isEmpty }
+        // A lone label is read as a name, so only a label with more after it gains a full stop.
+        return parts.count == 1 ? parts[0] : parts.map(Self.sentence).joined(separator: " ")
+    }
+
+    /// A part ending in a full stop, unless it already ends in one or in a question or exclamation mark.
+    static func sentence(_ part: String) -> String {
+        guard let last = part.last, !".?!".contains(last) else { return part }
+        return part + "."
     }
 
     /// Builds a row; operable, plain and without an icon unless told otherwise.

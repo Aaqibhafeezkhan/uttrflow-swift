@@ -527,6 +527,20 @@ struct SettingsRowTests {
             SettingsRow(id: "a", label: "Open at login", control: row.control)
                 .accessibilityLabel == "Open at login")
     }
+
+    @Test("reads one full stop between parts, even where a part already ends in one")
+    func voiceOverHearsNoDoubledStop() {
+        let row = SettingsRow(
+            id: "a", label: "Install updates automatically",
+            explanation: "Either way it never installs mid-dictation.",
+            control: .toggle(field: .installsUpdatesAutomatically, isOn: false),
+            unavailability: "This build has no update feed, so there is nothing to check.")
+        #expect(!row.accessibilityLabel.contains(".."))
+        #expect(
+            row.accessibilityLabel
+                == "Install updates automatically. Either way it never installs mid-dictation. "
+                + "This build has no update feed, so there is nothing to check.")
+    }
 }
 
 /// Light, dark, or whatever the Mac is set to.
