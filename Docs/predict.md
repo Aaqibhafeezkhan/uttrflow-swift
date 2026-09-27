@@ -151,7 +151,8 @@ watch the keyboard, and to put the completion into the field.
 
 The rest of the screen follows from the master switch: **Only suggest when it is sure**
 draws a completion and never a list, **Pause everywhere** stops for half an hour, and the
-**Applications** list carries the four editors that ship switched off, everything the user
+**Applications** list carries the two editors that ship switched off (Cursor and Visual
+Studio Code, which have suggestions of their own), everything the user
 has switched off since, and everything the corpus has learned from — so a switch that is
 off can always be found and turned back on.
 

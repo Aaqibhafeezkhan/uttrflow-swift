@@ -31,7 +31,7 @@ struct SuggestionReadGateTests {
     func offByDefaultIsNotRead() {
         #expect(
             !SuggestionCoordinator.shouldRead(
-                front: "com.apple.dt.Xcode", own: "com.example.self", preferences: Self.on, at: Self.now))
+                front: "com.microsoft.VSCode", own: "com.example.self", preferences: Self.on, at: Self.now))
     }
 
     @Test("nothing is read while suggestions are paused")

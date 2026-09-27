@@ -15,6 +15,7 @@ import UttrflowSettings
 private let noon = Date(timeIntervalSince1970: 1_700_000_000)
 
 private let xcode = "com.apple.dt.xcode"
+private let vscode = "com.microsoft.vscode"
 private let notes = "com.apple.notes"
 
 /// Settings with the feature switched on, which is what most of these are about.
@@ -196,24 +197,24 @@ struct SettingsSuggestionApplicationListTests {
 
     @Test("keeps the list reachable when the feature itself is off, saying what to do first")
     func theListIsThereWithTheFeatureOff() throws {
-        let listed = try #require(row("suggestionsIn.\(xcode)", in: pane(.default)))
+        let listed = try #require(row("suggestionsIn.\(vscode)", in: pane(.default)))
         #expect(listed.unavailability == SettingsEditor.suggestionsAreOff)
     }
 
     @Test("offers the accept key only for an application suggestions actually run in")
     func theAcceptKeyFollowsTheSwitch() throws {
         var settings = switchedOn()
-        #expect(row("suggestionAcceptKey.\(xcode)", in: pane(settings)) == nil)
+        #expect(row("suggestionAcceptKey.\(vscode)", in: pane(settings)) == nil)
 
-        settings.suggestions.set(xcode, isOn: true)
-        let key = try #require(row("suggestionAcceptKey.\(xcode)", in: pane(settings)))
+        settings.suggestions.set(vscode, isOn: true)
+        let key = try #require(row("suggestionAcceptKey.\(vscode)", in: pane(settings)))
         #expect(
             key.control
                 == .menu(
                     options: AcceptKey.allCases.map {
                         SettingsOption(
                             id: $0.rawValue, title: $0.title,
-                            change: .suggestionAcceptKey(application: xcode, key: $0))
+                            change: .suggestionAcceptKey(application: vscode, key: $0))
                     },
                     selectedID: AcceptKey.optionTab.rawValue))
     }
@@ -558,7 +559,7 @@ struct SettingsAddApplicationTests {
             SuggestionApplication(bundleIdentifier: "com.example.uttrflow", name: "Uttrflow"),
             SuggestionApplication(bundleIdentifier: "com.example.alpha", name: "alpha"),
             SuggestionApplication(bundleIdentifier: "com.example.ALPHA", name: "alpha"),
-            SuggestionApplication(bundleIdentifier: xcode, name: "Xcode"),
+            SuggestionApplication(bundleIdentifier: vscode, name: "Visual Studio Code"),
         ]
         let offered = SuggestionApplicationChoices.offered(
             running, preferences: preferences, excluding: "com.example.Uttrflow")

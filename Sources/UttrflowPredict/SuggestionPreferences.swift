@@ -19,15 +19,13 @@ public struct SuggestionApplication: Sendable, Equatable, Hashable {
 
 /// The applications tab-to-complete ships switched off in, and how any application is named.
 public enum SuggestionApplications {
-    /// The four editors that already complete from the whole file, named rather than matched so every one of them stays findable.
+    /// The two editors with suggestions of their own, named rather than matched so both stay findable.
     public static let offByDefault: [SuggestionApplication] = [
-        SuggestionApplication(bundleIdentifier: "com.microsoft.vscode", name: "Visual Studio Code"),
         SuggestionApplication(bundleIdentifier: "com.todesktop.230313mzl4w4u92", name: "Cursor"),
-        SuggestionApplication(bundleIdentifier: "com.apple.dt.xcode", name: "Xcode"),
-        SuggestionApplication(bundleIdentifier: "dev.zed.zed", name: "Zed"),
+        SuggestionApplication(bundleIdentifier: "com.microsoft.vscode", name: "Visual Studio Code"),
     ]
 
-    /// Whether this application is one of the four, compared the way identifiers compare.
+    /// Whether this application is one of the two, compared the way identifiers compare.
     public static func isOffByDefault(_ bundleIdentifier: String) -> Bool {
         let identifier = ApplicationKey.of(bundleIdentifier)
         return offByDefault.contains { $0.bundleIdentifier == identifier }
