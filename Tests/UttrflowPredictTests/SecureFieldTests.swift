@@ -54,6 +54,23 @@ struct SecureFieldTests {
                 description: nil))
     }
 
+    @Test(
+        "A camelCase name that glues a short code to another word is secure.",
+        arguments: [
+            "otpField", "otpInput", "enterOtp", "OTPCode", "pinCode", "pinEntry", "userPin",
+            "cvvNumber", "cardCvv", "cvcInput", "cscValue", "ssnField", "userSSN", "pin2",
+        ])
+    func gluedShortCodesAreSecure(name: String) {
+        #expect(SecureField.namesASecret(name))
+    }
+
+    @Test(
+        "A word that merely starts or ends with a short code's letters is not secure.",
+        arguments: ["pinterest", "Pinned", "spinner", "shipping", "Topping", "cvsReceipt", "Spin"])
+    func wordsContainingCodeLettersAreNotSecure(name: String) {
+        #expect(!SecureField.namesASecret(name))
+    }
+
     @Test("An ordinary field is not secure.")
     func ordinaryIsNotSecure() {
         #expect(

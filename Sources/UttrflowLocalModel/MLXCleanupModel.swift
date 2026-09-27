@@ -17,6 +17,8 @@ public actor MLXCleanupModel: CleanupModel {
     private let maximumTokens: Int
     /// The loaded weights, absent until ``prepare(onProgress:)`` has run.
     private var container: ModelContainer?
+    /// The load in flight, which a second caller joins rather than starting its own.
+    private var loadInFlight: Task<Void, any Error>?
 
     /// Names the model to run, without loading anything yet.
     public init(model: LocalModel, maximumTokens: Int = 256) {
@@ -29,13 +31,22 @@ public actor MLXCleanupModel: CleanupModel {
         onProgress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws(TransformationError) {
         guard container == nil else { return }
+        let step =
+            loadInFlight
+            ?? Task {
+                let directory = try await model.weightsDirectory(
+                    cache: HubCache.default.cacheDirectory,
+                    downloader: { #hubDownloader(AnonymousHub.client()) },
+                    onProgress: onProgress)
+                container = try await QuantizedLoad.container(
+                    from: directory, using: #huggingFaceTokenizerLoader())
+            }
+        loadInFlight = step
         do {
-            let directory = try await model.weightsDirectory(
-                cache: HubCache.default.cacheDirectory, downloader: { #hubDownloader(AnonymousHub.client()) },
-                onProgress: onProgress)
-            container = try await QuantizedLoad.container(
-                from: directory, using: #huggingFaceTokenizerLoader())
+            try await step.value
+            loadInFlight = nil
         } catch {
+            loadInFlight = nil
             throw .transformFailed(kind: .localModel, description: error.localizedDescription)
         }
     }

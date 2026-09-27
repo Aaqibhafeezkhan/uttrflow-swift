@@ -63,8 +63,18 @@ public enum ResponseUnwrapper {
 
         let inner = String(text.dropFirst().dropLast())
         // A quote around part of the answer is something the speaker meant.
-        guard !inner.contains(first), !inner.contains(last) else { return text }
+        guard !containsQuote(inner, first), !containsQuote(inner, last) else { return text }
         return inner.trimmed()
+    }
+
+    /// Whether the text holds this quote mark, not counting an apostrophe between two letters.
+    private static func containsQuote(_ text: String, _ mark: Character) -> Bool {
+        let chars = Array(text)
+        return chars.indices.contains { index in
+            guard chars[index] == mark else { return false }
+            guard mark == "'", index > 0, index < chars.count - 1 else { return true }
+            return !(chars[index - 1].isLetter && chars[index + 1].isLetter)
+        }
     }
 
     /// Whether the text opens and closes on one quote pair, whichever of the three it is.

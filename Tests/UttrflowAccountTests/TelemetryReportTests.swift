@@ -112,13 +112,20 @@ struct TelemetryReportTests {
         #expect(report.appVersion == TelemetryReport.AppVersion(major: 2100, minor: 12, patch: 31))
     }
 
+    /// Releases are `YY.MMDD.REVISION`, so the second part is a month and day and reaches 1231.
+    @Test("reports a year-month-day version whose second part passes 999")
+    func reportsAMonthDayVersion() throws {
+        let report = try #require(Telemetry.report(appVersion: .init(major: 26, minor: 1231, patch: 0)))
+        #expect(report.appVersion == TelemetryReport.AppVersion(major: 26, minor: 1231, patch: 0))
+    }
+
     /// A version rounded into range is a different release's version, and it would be believed.
     @Test("refuses a version the contract cannot hold rather than rounding it")
     func refusesAnUnrepresentableVersion() {
         #expect(Telemetry.report(appVersion: .init(major: 10_000, minor: 9, patch: 14)) == nil)
         #expect(Telemetry.report(appVersion: .init(major: -1, minor: 9, patch: 14)) == nil)
-        #expect(Telemetry.report(appVersion: .init(major: 2026, minor: 1_000, patch: 14)) == nil)
-        #expect(Telemetry.report(appVersion: .init(major: 2026, minor: 9, patch: 1_000)) == nil)
+        #expect(Telemetry.report(appVersion: .init(major: 26, minor: 10_000, patch: 0)) == nil)
+        #expect(Telemetry.report(appVersion: .init(major: 26, minor: 926, patch: 1_000)) == nil)
     }
 
     /// The macOS major version is reported through the same range, so it is refused the same way.

@@ -50,7 +50,31 @@ public enum SecureField {
         ]
         if sensitivePhrases.contains(where: phrase.contains) { return true }
 
-        return ["otp", "cvv", "cvc", "csc", "pin", "ssn"].contains(where: wordSet.contains)
+        let codes = ["otp", "cvv", "cvc", "csc", "pin", "ssn"]
+        if codes.contains(where: wordSet.contains) { return true }
+        let pieces = text.split { !$0.isLetter && !$0.isNumber }
+        return pieces.contains { piece in codes.contains { gluesCode($0, into: piece) } }
+    }
+
+    /// Whether a camelCase word opens or closes with a short code at a case boundary, as `otpField` or `userPin` do.
+    static func gluesCode(_ code: String, into word: Substring) -> Bool {
+        let chars = Array(word)
+        let width = code.count
+        guard chars.count > width else { return false }
+        let head = chars[..<width]
+        if String(head).lowercased() == code {
+            let next = chars[width]
+            let headIsCaps = head.allSatisfy(\.isUppercase)
+            if next.isUppercase && !headIsCaps || next.isNumber { return true }
+            if headIsCaps && next.isUppercase && chars.count > width + 1 && chars[width + 1].isLowercase {
+                return true
+            }
+        }
+        let tail = chars[(chars.count - width)...]
+        guard String(tail).lowercased() == code, let first = tail.first, first.isUppercase else {
+            return false
+        }
+        return chars[chars.count - width - 1].isLowercase
     }
 
     /// Whether a value reads back as mask characters alone, which a field showing dots but not declaring itself does.

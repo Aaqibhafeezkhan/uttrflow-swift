@@ -2,6 +2,8 @@
 """Validates the Sparkle feed a bundle or release artifact carries."""
 
 import argparse
+import base64
+import binascii
 import plistlib
 import sys
 import urllib.parse
@@ -26,6 +28,17 @@ def classify(url):
     raise FeedError(f"SUFeedURL is neither https nor a loopback address: {url}")
 
 
+def is_public_key(key):
+    """Returns whether key is base64 for a 32-byte Ed25519 public key that is not all zeros."""
+    if not isinstance(key, str):
+        return False
+    try:
+        raw = base64.b64decode(key, validate=True)
+    except (binascii.Error, ValueError):
+        return False
+    return len(raw) == 32 and any(raw)
+
+
 def check_plist(path, forbid_local=False):
     """Validates the updater keys in an Info.plist, returning the feed kind or 'absent'."""
     with open(path, "rb") as handle:
@@ -39,7 +52,7 @@ def check_plist(path, forbid_local=False):
         raise FeedError(f"release artifacts must not use a loopback update feed: {feed}")
 
     key = info.get("SUPublicEDKey", "")
-    if not key or " " in key:
+    if not is_public_key(key):
         raise FeedError("SUFeedURL is set and SUPublicEDKey is not a key")
     if info.get("SUVerifyUpdateBeforeExtraction") is not True:
         raise FeedError("SUFeedURL is set and SUVerifyUpdateBeforeExtraction is not true")
@@ -53,6 +66,9 @@ def main(argv):
     classify_command = subcommands.add_parser("classify", help="classify one feed URL")
     classify_command.add_argument("url")
 
+    key_command = subcommands.add_parser("check-key", help="check one SUPublicEDKey value")
+    key_command.add_argument("key")
+
     plist_command = subcommands.add_parser("check-plist", help="check updater keys in an Info.plist")
     plist_command.add_argument("plist")
     plist_command.add_argument("--forbid-local", action="store_true")
@@ -61,6 +77,10 @@ def main(argv):
     try:
         if arguments.command == "classify":
             print(classify(arguments.url))
+        elif arguments.command == "check-key":
+            if not is_public_key(arguments.key):
+                raise FeedError("SUPublicEDKey is not a key")
+            print("key")
         else:
             print(check_plist(arguments.plist, forbid_local=arguments.forbid_local))
     except FeedError as error:

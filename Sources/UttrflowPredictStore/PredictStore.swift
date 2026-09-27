@@ -40,14 +40,25 @@ public actor PredictStore: PredictionStore {
             return database
         } catch {
             guard error == .corrupt else { throw error }
-            try? FileManager.default.removeItem(atPath: path)
-            for suffix in ["-wal", "-shm"] {
-                try? FileManager.default.removeItem(atPath: path + suffix)
-            }
+            setAsideCorrupt(at: path)
             let replacement = try Database(path: path)
             try Schema.migrate(replacement)
             secureFiles(at: path)
             return replacement
+        }
+    }
+
+    /// Moves a corrupt database and its sidecars aside under the JSON stores' convention, deleting only what cannot move.
+    private static func setAsideCorrupt(at path: String) {
+        let now = Date()
+        for suffix in ["", "-wal", "-shm"] {
+            let url = URL(filePath: path + suffix)
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+                continue
+            }
+            if LocalStore.setAside(url, now: now) == nil {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 
@@ -88,16 +99,7 @@ public actor PredictStore: PredictionStore {
         _ candidates: [Candidate], here: Int64?
     ) throws(PredictStoreError) -> [Candidate] {
         guard let here, !candidates.isEmpty else { return candidates }
-        let texts = Array(Set(candidates.map(\.text)))
-        let placeholders = Array(repeating: "?", count: texts.count).joined(separator: ", ")
-        let retired = Set(
-            try database.rows(
-                "SELECT text FROM entry WHERE surface_id = ? AND superseded_by IS NOT NULL AND text IN (\(placeholders))",
-                { statement in
-                    statement.bind(1, here)
-                    for (offset, text) in texts.enumerated() { statement.bind(Int32(offset + 2), text) }
-                }
-            ) { $0.text(0) })
+        let retired = try retiredTexts(surfaceIdentifier: here)
         return retired.isEmpty ? candidates : candidates.filter { !retired.contains($0.text) }
     }
 

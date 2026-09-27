@@ -32,9 +32,15 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
         }
     }
 
+    /// One recording's sink, compared by identity so a tap from an earlier recording cannot reach a later one.
+    private final class Sink: Sendable {
+        let call: @Sendable ([Float]) -> Void
+        init(_ call: @escaping @Sendable ([Float]) -> Void) { self.call = call }
+    }
+
     private struct State {
         /// Where samples go, kept so the tap can be rebuilt without the caller knowing.
-        var sink: (@Sendable ([Float]) -> Void)?
+        var sink: Sink?
         var live: Live?
     }
 
@@ -52,12 +58,12 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
     }
 
     func deliver(to onSamples: (@Sendable ([Float]) -> Void)?) {
-        state.withLock { $0.sink = onSamples }
+        state.withLock { $0.sink = onSamples.map(Sink.init) }
     }
 
-    /// Reads the sink rather than capturing it, so an engine that outlived its sink delivers to nobody.
-    private func emit(_ samples: [Float]) {
-        state.withLock(\.sink)?(samples)
+    /// Delivers only to the sink the tap was opened for, so an engine that outlived its recording delivers to nobody.
+    private func emit(_ samples: [Float], for owner: Sink) {
+        state.withLock { $0.sink === owner ? owner : nil }?.call(samples)
         drainer.blockDelivered()
     }
 
@@ -70,7 +76,7 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
 
     /// Builds an engine for whatever the current input device is, and starts it.
     func open() throws(AudioCaptureError) {
-        guard state.withLock(\.sink) != nil else { throw .notRecording }
+        guard let owner = state.withLock(\.sink) else { throw .notRecording }
         // Read before the engine: a refused microphone reports a working format and taps silence.
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
             throw .microphoneDenied
@@ -92,7 +98,7 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
             [weak self] buffer, _ in
             // On the audio thread: a dropped buffer costs milliseconds, a throw the recording.
             guard let samples = try? resampler.resample(buffer) else { return }
-            self?.emit(samples)
+            self?.emit(samples, for: owner)
         }
 
         engine.prepare()
@@ -114,7 +120,7 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
 
         // Published only if the recording is still wanted, so a stop that raced this cannot strand it.
         let published = state.withLock { state -> Bool in
-            guard state.sink != nil else { return false }
+            guard state.sink === owner else { return false }
             state.live = live
             return true
         }

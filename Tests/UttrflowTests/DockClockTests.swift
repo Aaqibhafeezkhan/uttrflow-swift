@@ -1,6 +1,7 @@
 // Tests for the clock on the floating button.
 
 import Foundation
+import UttrflowCore
 import UttrflowPipeline
 import Testing
 
@@ -70,5 +71,40 @@ struct DockClockTests {
         dock.show(DictationPresenter.dock(for: .recording), now: later)
 
         #expect(dock.recordingStartedAt == later)
+    }
+
+    @Test("reads the time since the key went down as minutes and seconds")
+    func readsElapsed() {
+        let recording = DictationPresenter.dock(for: .recording)
+
+        #expect(DockView.clockText(for: recording, startedAt: start, now: start) == "0:00")
+        #expect(
+            DockView.clockText(for: recording, startedAt: start, now: start.addingTimeInterval(4.6))
+                == "0:04")
+        #expect(
+            DockView.clockText(for: recording, startedAt: start, now: start.addingTimeInterval(83))
+                == "1:23")
+    }
+
+    /// A clock stamped a moment after the frame it is drawn in must not read as negative.
+    @Test("never counts below zero, and reads zero before a start is stamped")
+    func neverNegative() {
+        let recording = DictationPresenter.dock(for: .recording)
+
+        #expect(
+            DockView.clockText(for: recording, startedAt: start, now: start.addingTimeInterval(-2))
+                == "0:00")
+        #expect(DockView.clockText(for: recording, startedAt: nil, now: start) == "0:00")
+    }
+
+    /// Near the cap the time left matters more than the time spent, so it takes the clock's place.
+    @Test("gives way to the countdown once the cap is near")
+    func countdownWins() {
+        let nearCap = DictationPresenter.dock(
+            for: .recording, advice: .approaching(remaining: .seconds(25)))
+
+        #expect(
+            DockView.clockText(for: nearCap, startedAt: start, now: start.addingTimeInterval(275))
+                == "30 sec left")
     }
 }

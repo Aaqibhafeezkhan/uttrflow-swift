@@ -65,6 +65,14 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         onFinish?(readiness)
     }
 
+    /// The controller still open if there is one, so at most one onboarding window exists at a time.
+    static func reusing(
+        _ existing: OnboardingWindowController?, orMaking make: () -> OnboardingWindowController
+    ) -> (controller: OnboardingWindowController, isNew: Bool) {
+        if let existing { return (existing, false) }
+        return (make(), true)
+    }
+
     /// Whether the window is on screen, which a closed or minimised one is not.
     var isVisible: Bool { window?.isVisible == true }
 

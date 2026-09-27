@@ -98,7 +98,7 @@ extension LocalStore {
     }
 
     /// Renames an unreadable file to a timestamped name beside it, answering `nil` when it cannot be moved.
-    static func setAside(_ url: URL, now: Date) -> URL? {
+    public static func setAside(_ url: URL, now: Date) -> URL? {
         let name = url.lastPathComponent
         let stamp = "\(name)\(setAsideMarker)\(Int(now.timeIntervalSince1970))"
         let folder = url.deletingLastPathComponent()

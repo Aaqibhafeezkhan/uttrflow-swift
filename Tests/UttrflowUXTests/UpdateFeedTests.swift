@@ -61,4 +61,23 @@ struct UpdateFeedTests {
         #expect(!accepts("//127.0.0.1/a.xml"))
         #expect(!accepts("appcast.xml"))
     }
+
+    @Test("refuses an https URL with no host")
+    func httpsNeedsAHost() {
+        #expect(!accepts("https:///no-host"))
+        #expect(!accepts("https://:443/a.xml"))
+    }
+
+    /// The build gate in `Scripts/update_feed_gate.py` is tested against this same table.
+    @Test("agrees with the build gate on every URL in the shared table")
+    func sharedTable() throws {
+        let table = URL(filePath: #filePath).deletingLastPathComponent().appending(
+            path: "../../Scripts/update_feed_cases.json")
+        let cases = try JSONDecoder().decode([String: [String]].self, from: Data(contentsOf: table))
+        let accepted = try #require(cases["accepted"])
+        let refused = try #require(cases["refused"])
+        #expect(!accepted.isEmpty && !refused.isEmpty)
+        for feed in accepted { #expect(accepts(feed), "\(feed)") }
+        for feed in refused { #expect(!accepts(feed), "\(feed)") }
+    }
 }

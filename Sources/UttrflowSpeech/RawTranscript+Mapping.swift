@@ -114,8 +114,8 @@ extension RawTranscript {
 
 extension RawSegment {
     fileprivate func transcriptionSegment(shiftedBy offset: Duration) -> TranscriptionSegment {
-        // Whisper emits a leading space on each word, which no correction indexes.
-        let spoken = words?.map {
+        // An empty list falls back to the segment's text; Whisper's leading space on each word is trimmed.
+        let spoken = words.flatMap { $0.isEmpty ? nil : $0 }?.map {
             TranscribedWord(
                 text: $0.text.trimmingCharacters(in: .whitespaces),
                 confidence: $0.probability)

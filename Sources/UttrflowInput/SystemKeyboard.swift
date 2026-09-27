@@ -6,7 +6,8 @@ public import UttrflowCore
 
 /// The one place the product asks the window server what the keyboard is doing. See `Docs/shortcuts.md`.
 public final class SystemKeyboard: KeyboardEventSource {
-    private let delivery = Delivery()
+    /// The sink the tap reads; internal so tests can see a restart forget the old tap's disables.
+    let delivery = Delivery()
     private let running = Mutex<RunningTap?>(nil)
 
     public init() {}
@@ -30,6 +31,7 @@ public final class SystemKeyboard: KeyboardEventSource {
             current = nil
         }
         delivery.set(nil)
+        delivery.forgetDisables()
     }
 
     deinit { stop() }
@@ -119,6 +121,12 @@ final class Delivery: @unchecked Sendable {
     func port() -> CFMachPort? {
         guard let held = tapPointer.load(ordering: .acquiring) else { return nil }
         return Unmanaged<CFMachPort>.fromOpaque(held).takeUnretainedValue()
+    }
+
+    /// Clears the disable history, so a newly built tap is judged only on its own disables.
+    func forgetDisables() {
+        disables.store(0, ordering: .relaxed)
+        lastDisable.store(0, ordering: .relaxed)
     }
 
     /// Whether to turn the tap back on, which it is unless it keeps being disabled in a short window.
