@@ -90,8 +90,12 @@ extension FieldReading {
     static func conversation(_ title: String?, of application: String? = nil) -> String? {
         guard var name = Self.trimmed(title) else { return nil }
         // An edited window marks itself, an unread window counts itself, and neither is part of what the window names.
-        while let last = name.last, last == "•" || last == "*" { name = String(name.dropLast()) }
-        name = Self.withoutTrailingCount(name)
+        var previous: String
+        repeat {
+            previous = name
+            while let last = name.last, last == "•" || last == "*" { name = String(name.dropLast()) }
+            name = Self.withoutTrailingCount(name)
+        } while name != previous
         while let first = name.first, first == "•" || first == "*" { name = String(name.dropFirst()) }
         guard let trimmed = Self.trimmed(name), trimmed.count <= conversationCap else { return nil }
         // A window called after its own application names no thread inside it, so it is no identity at all.

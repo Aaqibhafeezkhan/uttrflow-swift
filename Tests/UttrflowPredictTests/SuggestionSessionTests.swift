@@ -300,15 +300,28 @@ struct SuggestionRejectionTests {
         #expect(session.rejectionsHere == 0)
     }
 
-    @Test("Typing past a guess the model invented is not a refusal: the model was wrong, not the field.")
-    func aGeneratedGuessIsNotRefused() throws {
+    @Test("A model guess typed past counts toward quieting the field but blames nothing in the store.")
+    func aGeneratedGuessCountsButIsNotBlamed() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
         _ = session.resolveGenerated(["git checkout"], for: asked, elapsedMilliseconds: 0)
         #expect(session.suggestion == .certain("git checkout"))
         let turn = session.turn(in: field, at: PredictionContext(typed: "git x"))
         #expect(turn.rejected == nil)
-        #expect(session.rejectionsHere == 0)
+        #expect(session.rejectionsHere == 1)
+    }
+
+    @Test("Three model guesses typed past in one field quiet it, as three remembered ones do.")
+    func generatedGuessesTypedPastQuietTheField() throws {
+        var session = SuggestionSession()
+        for _ in 0..<Quieting.rejectionsBeforeSilence {
+            let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
+            _ = session.resolveGenerated(["git checkout"], for: asked, elapsedMilliseconds: 0)
+            #expect(session.turn(in: field, at: PredictionContext(typed: "git x")).rejected == nil)
+        }
+        #expect(session.rejectionsHere == Quieting.rejectionsBeforeSilence)
+        let quiet = PredictionContext(typed: "git c", rejectionsThisSession: session.rejectionsHere)
+        #expect(Quieting.reason(quiet) == .rejectedTooOften)
     }
 
     @Test(
@@ -368,6 +381,25 @@ struct SuggestionRejectionTests {
         #expect(session.route(KeyStroke(.tab)) != .accept("git checkout"))
     }
 
+    @Test(
+        "A redraw that narrows the model's list lets go of the highlight, so Return cannot take a line nobody chose."
+    )
+    func aNarrowedListDropsTheHighlight() throws {
+        var session = SuggestionSession()
+        let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
+        _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
+        _ = session.expandGenerated(["git commit --amend", "git checkout main"], for: asked)
+        _ = session.route(KeyStroke(.downArrow))
+        _ = session.route(KeyStroke(.downArrow))
+        #expect(session.selection == SuggestionSelection(index: 2, hasMoved: true))
+
+        let again = try draw(&session, typing: "git com")
+
+        #expect(again?.suggestion == .choice(leader: "git commit -m", others: ["git commit --amend"]))
+        #expect(session.selection == .untouched)
+        #expect(session.route(KeyStroke(.return)) == .giveBack(KeyStroke(.return)))
+    }
+
     @Test("Quiet mode keeps no list across a redraw, even the model's.")
     func quietModeKeepsNoList() throws {
         var session = SuggestionSession()
@@ -402,14 +434,14 @@ struct SuggestionRejectionTests {
         #expect(session.expandGenerated(["git checkout main"], for: current) == nil)
     }
 
-    @Test("A remembered suggestion drawn after a generated one counts again when typed past.")
+    @Test("A remembered suggestion drawn after a generated one is blamed again when typed past.")
     func aRememberedSuggestionCountsAgain() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
         _ = session.resolveGenerated(["git checkout"], for: asked, elapsedMilliseconds: 0)
         _ = try draw(&session, typing: "git co")
         #expect(session.turn(in: field, at: PredictionContext(typed: "git x")).rejected == "git commit -m")
-        #expect(session.rejectionsHere == 1)
+        #expect(session.rejectionsHere == 2)
     }
 
     @Test("A difference only of case is still typing the suggestion, not typing past it.")

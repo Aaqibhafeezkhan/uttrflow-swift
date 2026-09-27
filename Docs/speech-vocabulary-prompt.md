@@ -108,6 +108,11 @@ shipped prompt, runs out of room mid-word. Issue #961 is the user-visible form o
 collision. `CappedDecodeRetry` recovers the audio past the cap by re-decoding the tail; the
 underlying budget is unchanged.
 
+Each retry is a fresh decode with the same prompt, so it advances by the same ~23 or ~44 Hindi
+words, and `CappedDecodeRetry.maxRetries` is 10: one dictation recovers at most roughly 230 to
+440 Hindi words past the cap. A dictation that is still capped when the retries run out is
+marked `DecodeEffort.capUnresolved` rather than returned as if it were complete (#1727).
+
 ## Two decoding options that cost something
 
 **`wordTimestamps: true`** is the only way to get a per-word probability out of WhisperKit,

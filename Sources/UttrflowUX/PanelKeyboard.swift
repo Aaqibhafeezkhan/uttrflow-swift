@@ -38,8 +38,6 @@ public enum PanelKey: Sendable, Equatable {
     case reindent(Clip.ID)
     /// E6 — promote a plain clip to a note.
     case makeNote(Clip.ID)
-    /// E5 — tick or untick the nth box of a note.
-    case tickBox(Clip.ID, index: Int)
     /// B6 — Return or a click with ⌘ held.
     case choosePlain(Clip.ID)
     /// ⌘-Return: choose the highlighted clip without its formatting.
@@ -100,11 +98,11 @@ extension PanelSnapshot {
 extension PanelSnapshot {
     /// One keystroke, as a pure function of state, so which clip Return means is computed, not accumulated.
     public func applying(_ key: PanelKey) -> PanelResponse {
-        // A sheet with nothing to type into holds the list still: the row it asks about must stay listed.
+        // A sheet with nothing to type into takes only its answer, so no other key moves, replaces or rewrites what it asks about.
         if let sheet, !sheet.takesTyping {
             switch key {
-            case .up, .down, .jump, .search: return stayingOpen
-            default: break
+            case .return, .returnPlain, .escape: break
+            default: return stayingOpen
             }
         }
         return acting(on: key)
@@ -141,7 +139,6 @@ extension PanelSnapshot {
         case .deleteCategory(let name): opening(.deletingCategory(name, keepingClips: true))
         case .reindent(let id): reindenting(id)
         case .makeNote(let id): promoting(id)
-        case .tickBox(let id, let index): ticking(id, box: index)
         case .returnPlain: sheet == nil ? resolvingPlain(results.selected) : committingSheet()
         case .choosePlain(let id): choosingPlain(id)
         case .jump(let jump): PanelResponse(state: jumping(jump), outcome: .open)

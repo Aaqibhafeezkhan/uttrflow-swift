@@ -6,10 +6,11 @@ public enum TokenizerAssets {
     /// What a complete tokenizer consists of; WhisperKit needs both files or the folder is no use.
     public static let fileNames = ["tokenizer.json", "tokenizer_config.json"]
 
-    /// Whether a complete tokenizer sits directly in `folder`, which is where WhisperKit searches.
+    /// Whether a complete, non-empty tokenizer sits directly in `folder`, which is where WhisperKit searches.
     public static func arePresent(in folder: URL) -> Bool {
-        fileNames.allSatisfy {
-            FileManager.default.fileExists(atPath: folder.appending(path: $0).path)
+        fileNames.allSatisfy { name in
+            let size = try? folder.appending(path: name).resourceValues(forKeys: [.fileSizeKey]).fileSize
+            return (size ?? 0) > 0
         }
     }
 

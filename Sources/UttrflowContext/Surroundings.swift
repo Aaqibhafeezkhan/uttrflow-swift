@@ -241,6 +241,9 @@ public struct Surroundings: Sendable, Equatable {
             case .control where scalar.properties.isWhitespace:
                 if !separated { kept.append(" ") }
                 separated = true
+            case .format where scalar.value == 0x200C || scalar.value == 0x200D:
+                kept.append(scalar)  // joiners change what the text is, so they stay
+                separated = false
             case .control, .format:
                 continue
             default:

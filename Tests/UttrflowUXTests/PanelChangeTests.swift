@@ -246,6 +246,23 @@ struct PanelSheetWithoutFieldTests {
         }
     }
 
+    @Test("row shortcuts neither replace the sheet nor change a clip (#1702)", arguments: sheets)
+    func rowShortcutsAreHeld(sheet: PanelSheet) {
+        var panel = PanelFixture.panel(Self.clips)
+        panel.sheet = sheet
+        let id = PanelDeleteTests.pinned.id
+        let keys: [PanelKey] = [
+            .alias(id), .move(id), .reindent(id), .makeNote(id), .renameCategory("Work"),
+            .deleteCategory("Work"), .delete(id), .choose(id), .choosePlain(id), .reveal(id),
+            .filter(.links), .scope(.pinned), .category(number: 1),
+        ]
+        for key in keys {
+            let response = panel.applying(key)
+            #expect(response.state == panel, "\(key)")
+            #expect(response.outcome == .open, "\(key)")
+        }
+    }
+
     @Test("Return still confirms the delete under its unchanged query")
     func returnStillConfirms() {
         var panel = PanelFixture.panel(Self.clips)

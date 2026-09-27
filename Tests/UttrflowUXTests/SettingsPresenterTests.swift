@@ -430,9 +430,39 @@ struct SettingsPrivacyPaneTests {
         #expect(periods.map(\.id) == ["transcripts"])
     }
 
+    @Test("offers the usage statistics switch, on by default, saying what is sent")
+    func offersTheUsageStatisticsSwitch() throws {
+        let row = try #require(privacy().row(SettingsToggleField.sharesUsageStatistics.rawValue))
+        #expect(row.control == .toggle(field: .sharesUsageStatistics, isOn: true))
+        #expect(row.isEnabled)
+        #expect(row.explanation?.contains("never what you dictate") == true)
+
+        let updated = try SettingsEditor.apply(.toggle(.sharesUsageStatistics, isOn: false), to: .default)
+        #expect(!updated.sharesUsageStatistics)
+    }
+
     @Test("every row on this tab can be operated")
     func privacyRowsAreAlwaysOperable() {
         #expect(privacy().everyRow.allSatisfy { $0.isEnabled })
+    }
+
+    @Test("offers crash reports off by default, and shows the stored choice")
+    func crashReportsAreOptIn() {
+        #expect(
+            privacy().row("sendsCrashReports")?.control == .toggle(field: .sendsCrashReports, isOn: false))
+        var settings = Settings.default
+        settings.sendsCrashReports = true
+        #expect(
+            privacy(settings).row("sendsCrashReports")?.control
+                == .toggle(field: .sendsCrashReports, isOn: true))
+    }
+
+    @Test("the crash report switch is written through both ways")
+    func crashReportSwitchApplies() throws {
+        let on = try SettingsEditor.apply(.toggle(.sendsCrashReports, isOn: true), to: .default)
+        #expect(on.sendsCrashReports)
+        let off = try SettingsEditor.apply(.toggle(.sendsCrashReports, isOn: false), to: on)
+        #expect(!off.sendsCrashReports)
     }
 }
 

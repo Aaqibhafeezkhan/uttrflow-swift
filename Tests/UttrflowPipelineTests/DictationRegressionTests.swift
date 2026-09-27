@@ -128,8 +128,17 @@ private final class RegressionCleaner: TranscriptCleaning, Sendable {
 /// A ``TextInserting`` that records every string that reached the user's document.
 private final class RegressionInserter: TextInserting, Sendable {
     private let log = Mutex<[String]>([])
+    private let gate: RegressionGate?
+    private let failure: TextInsertionError?
+
+    init(gate: RegressionGate? = nil, failure: TextInsertionError? = nil) {
+        self.gate = gate
+        self.failure = failure
+    }
 
     func insert(_ text: String) async throws(TextInsertionError) -> InsertionAttempt {
+        if let gate { await gate.pass() }
+        if let failure { throw failure }
         log.withLock { $0.append(text) }
         return InsertionAttempt(.accessibility)
     }
@@ -410,6 +419,27 @@ struct DictationRegressionTests {
             inserter.received.isEmpty,
             "the last stage is the one that would put the words on screen")
         #expect(cleaner.requests == 1, "the cancel arrived while it was already tidying")
+    }
+
+    @Test(
+        "cancelling during insertion ends idle and reports no outcome",
+        .timeLimit(.minutes(1)),
+        arguments: [nil, TextInsertionError.insertionTimedOut] as [TextInsertionError?])
+    func cancellingDuringInsertionLeavesNoTrace(failure: TextInsertionError?) async throws {
+        let inserting = RegressionGate()
+        let inserter = RegressionInserter(gate: inserting, failure: failure)
+        let pipeline = makeRegressionPipeline(inserter: inserter)
+        await pipeline.startRecording()
+        let dictation = Task { await pipeline.finishRecording() }
+        await inserting.waitUntilReached()
+        #expect(await pipeline.currentState == .inserting)
+
+        await pipeline.cancel()
+        #expect(await pipeline.currentState == .idle)
+        await inserting.open()
+        await dictation.value
+
+        #expect(await pipeline.currentState == .idle, "the write finishing must not undo the cancel")
     }
 
     /// The cancel has to name the dictation it abandons, or the next one is thrown away too.

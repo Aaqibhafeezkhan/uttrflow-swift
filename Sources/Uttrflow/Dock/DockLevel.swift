@@ -21,9 +21,9 @@ enum DockLevel {
 /// The row of capsules, one per 20 Hz arrival, newest first; the horizontal axis is time.
 struct DockBars {
     /// Enough to fill the widest meter with one bar entering and one leaving.
-    static let capacity = 24
+    static let capacity = 28
 
-    /// Above this a bar takes the mark's accent: half scale, the one threshold needing no explanation.
+    /// Above this a bar is drawn at full strength: half scale, the one threshold needing no explanation.
     static let accentThreshold: CGFloat = 0.5
 
     private(set) var levels: [CGFloat]
@@ -39,6 +39,6 @@ struct DockBars {
     /// Empties the row, so a new dictation cannot open showing the end of the last one.
     mutating func clear() { levels = Array(repeating: 0, count: Self.capacity) }
 
-    /// Which of the app's two teals a bar is drawn in.
+    /// Whether a bar is drawn at full strength rather than held back.
     static func isLoud(_ level: CGFloat) -> Bool { level > accentThreshold }
 }

@@ -226,12 +226,12 @@ public struct SuggestionSession: Sendable, Equatable {
         }
         // A candidate the user has already finished typing adds nothing, and one in another script is never written.
         let offerable = candidates.filter { $0.text != pending.typed && LatinScript.writes($0.text) }
-        let decided = PredictionEngine.decision(from: offerable, in: pending, now: now)
+        let decided = PredictionEngine.ranked(from: offerable, in: pending, now: now)
         // A turn with nothing on offer has nothing to be wrong about, so the gates are never troubled.
-        guard decided.suggestion.accepting != nil else {
+        guard decided.suggestion.accepting != nil, let ranking = decided.ranking else {
             return .settled(settle(decided.suggestion, silence: decided.silence))
         }
-        let head = Ranking(offerable, now: now).candidates.prefix(Self.verifiedDepth).map(\.candidate)
+        let head = ranking.candidates.prefix(Self.verifiedDepth).map(\.candidate)
         return .verify(
             VerificationRequest(
                 surface: query.surface, typed: pending.typed, candidates: head,
@@ -381,12 +381,11 @@ public struct SuggestionSession: Sendable, Equatable {
         guard
             !(lowered.hasScalarPrefix(earlier) && lowered.dropFirst(earlier.count).allSatisfy(\.isWhitespace))
         else { return nil }
-        // Typing past a guess the model invented says the model was wrong, not that the field wants quiet.
-        guard !shownIsGenerated else { return nil }
         // Only an offer that completed the line can be typed past; leaving a fuzzy or corrected one, or shortening the line, says nothing.
         guard offered.lowercased().hasScalarPrefix(typed.lowercased()) else { return nil }
         rejectionsHere += 1
-        return offered
+        // A guess the model invented counts toward quieting the field, but the store is never told to blame it.
+        return shownIsGenerated ? nil : offered
     }
 
     /// The moment with the three facts only this session knows filled in.
@@ -409,6 +408,8 @@ public struct SuggestionSession: Sendable, Equatable {
         {
             let still = Array(Self.drawable([leader] + others, past: typed).dropFirst())
             if !still.isEmpty {
+                // A narrowed list moves what sits under the highlight, so the highlight goes back to the leader.
+                if still != others { selection = .untouched }
                 suggestion = .choice(leader: leader, others: still)
                 return armed(showing: suggestion, silence: nil)
             }

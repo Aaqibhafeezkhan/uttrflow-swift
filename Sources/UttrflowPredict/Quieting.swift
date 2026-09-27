@@ -60,7 +60,7 @@ public enum Quieting {
         case notOnThisMachine
         /// The leader has less evidence than `PredictionEngine.supportFloor`.
         case evidenceTooThin
-        /// The leader cannot be undone, so nothing is offered in its place.
+        /// The leader, or every close rival to it, cannot be undone, so nothing is offered.
         case irreversibleNotCertain
         /// The turn ran past `SuggestionSession.turnBudgetInMilliseconds`.
         case overBudget

@@ -124,10 +124,7 @@ private struct Script {
             minimised = false
         } else {
             #expect(session.rejectionsHere == before || session.rejectionsHere == before + 1)
-            if generatedBefore {
-                #expect(session.rejectionsHere == before)
-                #expect(turn.rejected == nil)
-            }
+            if generatedBefore { #expect(turn.rejected == nil) }
         }
         #expect(session.rejectionsHere <= Quieting.rejectionsBeforeSilence)
         switch turn.step {

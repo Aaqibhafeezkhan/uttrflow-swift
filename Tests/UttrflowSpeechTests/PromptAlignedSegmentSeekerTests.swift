@@ -79,6 +79,22 @@ struct PromptAlignedSegmentSeekerTests {
         #expect(try PromptAlignedSegmentSeeker.rows(of: weights, from: 0) === weights)
     }
 
+    @Test("refuses weights of any rank but two rather than returning them unshifted")
+    func refusesAnotherRank() throws {
+        let weights = try MLMultiArray(shape: [1, 6, 4], dataType: .float32)
+
+        #expect(throws: PromptAlignedSegmentSeeker.UnexpectedRank(shape: [1, 6, 4])) {
+            try PromptAlignedSegmentSeeker.rows(of: weights, from: 2)
+        }
+    }
+
+    @Test("leaves weights of another rank alone when there is nothing to shift")
+    func leavesAnotherRankAloneWithoutAPrompt() throws {
+        let weights = try MLMultiArray(shape: [1, 6, 4], dataType: .float32)
+
+        #expect(try PromptAlignedSegmentSeeker.rows(of: weights, from: 0) === weights)
+    }
+
     // MARK: Padded rows
 
     /// A width WhisperKit's own buffers use, which an IOSurface pads to 1504 elements a row.
