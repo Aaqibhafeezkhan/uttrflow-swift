@@ -89,6 +89,8 @@ final class MainWindowController {
     var onDraft: (() -> Void)?
     /// The window came into view, so pages skipped while it was out of sight can be built now.
     var onBecameVisible: (() -> Void)?
+    /// The window came into or went out of sight, with which.
+    var onVisibilityChange: ((Bool) -> Void)?
 
     /// Whether any of the window is on screen, which is when its pages are worth building.
     var isOnScreen: Bool {
@@ -238,8 +240,10 @@ final class MainWindowController {
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.isOnScreen else { return }
-                self.onBecameVisible?()
+                guard let self else { return }
+                let isOnScreen = self.isOnScreen
+                if isOnScreen { self.onBecameVisible?() }
+                self.onVisibilityChange?(isOnScreen)
             }
         }
         return window
