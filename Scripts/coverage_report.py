@@ -175,7 +175,9 @@ EXCLUDED_FILES = {
     "Uttrflow/Dock/DockSetupView.swift": (
         "SwiftUI, drawn from DockModelSetup, which SpeechModelDockTests covers"
     ),
-    "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item",
+    "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item and its on-screen popover",
+    "Uttrflow/MenuBar/MenuBarPopoverView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/MenuBar/MenuBarGlass.swift": "SwiftUI glass and colours, values from BrandPalette",
     "UttrflowSpeech/TokenizerDownload.swift": "fetches the tokenizer over the real network at install time",
     "UttrflowSpeech/WhisperKitBackend.swift": "loads a downloaded model and decodes real speech",
     "UttrflowSpeech/AppleSpeechBackend.swift": "drives the system recogniser on real speech",
