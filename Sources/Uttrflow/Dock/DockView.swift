@@ -35,6 +35,8 @@ final class DockViewModel {
     private(set) var recordingStartedAt: Date?
     /// Whether the idle button collapses to a grip, from the "Shrink it to a grip" setting.
     var shrinksToGrip = true
+    /// Whether the panel is on screen; a hidden button draws nothing, so its meter and spinners stop.
+    var isShown = true
 
     /// The only way the presentation changes; starts the clock on the first recording presentation.
     func show(_ presentation: DockPresentation, now: Date = Date()) {
@@ -123,7 +125,9 @@ struct DockView: View {
 
     @ViewBuilder private var form: some View {
         let presentation = model.presentation
-        if presentation.showsWaveform {
+        if !model.isShown {
+            EmptyView()
+        } else if presentation.showsWaveform {
             listening()
         } else if presentation.showsProgress {
             working()
