@@ -54,6 +54,14 @@ struct HomeHeroViewTests {
         #expect(MoodPictures.cached(for: .morning) == nil)
     }
 
+    @Test("four tiles take one row where they fit and two rows where they do not, with no measuring pass")
+    func tileGridRows() {
+        let four = HomeStatTileView.narrowest * 4 + HomeTileGrid.spacing * 3
+        #expect(HomeTileGrid.rows(count: 4, width: four) == 1)
+        #expect(HomeTileGrid.rows(count: 4, width: four - 1) == 2)
+        #expect(HomeTileGrid.rows(count: 0, width: four) == 0)
+    }
+
     @Test("an account picture is decoded to avatar size and kept for the same bytes")
     func accountPicture() async throws {
         let image = try #require(await MoodPictures.picture(for: .evening)?.image)
