@@ -406,9 +406,9 @@ public enum FocusedFieldReader {
         var role: String? { self[kAXRoleAttribute] as? String }
         var title: String? { self[kAXTitleAttribute] as? String }
 
-        /// Whether the element declares itself secure by role, subrole or name, asked of the answers already fetched.
+        /// Whether the element declares itself secure by role or subrole, or as a field by name, asked of the answers already fetched.
         var isSecure: Bool {
-            SecureField.isDeclaredSecure(
+            SecureField.isDeclaredSecureOnScreen(
                 role: role, subrole: self[kAXSubroleAttribute] as? String,
                 identifier: self[kAXIdentifierAttribute] as? String,
                 placeholder: self[kAXPlaceholderValueAttribute] as? String,
