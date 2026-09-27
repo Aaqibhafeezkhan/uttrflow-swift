@@ -176,7 +176,7 @@ struct DictationPipelineSeamTests {
     @Test("a terminal cases the words after a seam as it would have in one breath")
     func terminalSeamIsNotASentenceStart() async {
         let text = await dictate(["git status.", "git diff."], seeing: Self.terminal)
-        #expect(text == "Git status git diff")
+        #expect(text == "git status git diff")
     }
 
     @Test("the caret's mid-sentence case applies to the message's first word, not to every piece's")

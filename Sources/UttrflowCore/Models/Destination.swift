@@ -6,8 +6,10 @@ public enum Destination: String, Sendable, Equatable, CaseIterable, Codable {
     case spreadsheet
     /// Postico, TablePlus, DataGrip, DBeaver, pgAdmin.
     case sqlEditor
-    /// Xcode, Cursor, VS Code, Zed, JetBrains, terminals.
+    /// Xcode, Cursor, VS Code, Zed, JetBrains.
     case codeEditor
+    /// Terminal, iTerm, Warp, kitty, Ghostty, Alacritty.
+    case terminal
     /// Slack, WhatsApp, Telegram, Discord, Messages, Teams.
     case messaging
     /// Mail, Outlook, Gmail, Superhuman.

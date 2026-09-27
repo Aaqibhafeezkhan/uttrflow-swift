@@ -132,6 +132,10 @@ public struct DestinationFormatter: Sendable, Equatable {
             destination: .codeEditor, firstWord: .fromInsertionPoint, terminalStop: .never,
             layout: .preserveNewlines, grammar: .asSpoken, numbers: .always, digits: .none,
             promptBlock: "codeEditor"),
+        .terminal: DestinationFormatter(
+            destination: .terminal, firstWord: .asSpoken, terminalStop: .never,
+            layout: .preserveNewlines, grammar: .asSpoken, numbers: .always, digits: .none,
+            promptBlock: "terminal"),
         .messaging: DestinationFormatter(
             destination: .messaging, firstWord: .fromInsertionPoint,
             terminalStop: .offForShortMessages(sentences: 2), layout: .paragraphs,

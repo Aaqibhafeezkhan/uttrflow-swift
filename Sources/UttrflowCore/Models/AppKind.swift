@@ -9,12 +9,13 @@ public enum AppKind: String, Sendable, Equatable, CaseIterable, Codable {
     case notes
     case documentEditor
 
-    /// Where words typed into this sort of app are going; a terminal and an editor want the same treatment.
+    /// Where words typed into this sort of app are going; a terminal preserves case, an editor capitalises.
     public var destination: Destination {
         switch self {
         case .chat: .messaging
         case .email: .email
-        case .codeEditor, .terminal: .codeEditor
+        case .codeEditor: .codeEditor
+        case .terminal: .terminal
         case .sqlEditor: .sqlEditor
         case .spreadsheet: .spreadsheet
         case .notes, .documentEditor: .document
@@ -27,6 +28,7 @@ public enum AppKind: String, Sendable, Equatable, CaseIterable, Codable {
         case .messaging: self = .chat
         case .email: self = .email
         case .codeEditor: self = .codeEditor
+        case .terminal: self = .terminal
         case .sqlEditor: self = .sqlEditor
         case .spreadsheet: self = .spreadsheet
         case .document: self = .documentEditor
