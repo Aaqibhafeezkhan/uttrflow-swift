@@ -185,6 +185,24 @@ struct SelfCorrectionPassTests {
         #expect(cleaned(input, by: sut) == input)
     }
 
+    /// A contracted pronoun heads a fresh clause as the pronoun does, so it cannot anchor a correction either.
+    @Test(
+        "leaves a clause that opens on a contracted pronoun",
+        arguments: [
+            "he's in the kitchen, actually, he's cooking dinner",
+            "we're late, sorry, we're stuck in traffic",
+            "you're right, actually, you're always right",
+            "they'll call, I mean, they'll call if it rains",
+            "she\u{2019}s at home, actually, she\u{2019}s working",
+            "that's fine, sorry, that's what I meant",
+            "he is in the kitchen, actually, he is cooking",
+            "I'll drive, sorry, I'll take the train",
+        ]
+    )
+    func leavesContractedPronounClauses(input: String) {
+        #expect(cleaned(input, by: sut) == input)
+    }
+
     /// A Hindi pronoun heads a fresh clause as an English one does, so it cannot anchor a correction.
     @Test(
         "leaves a Hinglish apology and the clause before it",

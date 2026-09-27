@@ -117,4 +117,76 @@ struct FullTreeSwitchTests {
         #expect(!FullTreeSwitch.isNeeded(in: "com.example.chat", after: reading("AXTextField", nil, true)))
         #expect(!FullTreeSwitch.isNeeded(in: "com.example.chat", after: reading("AXGroup", nil, false)))
     }
+
+    @Test(
+        "A write whose answer timed out still belongs to the switch, so a tree that came on later is turned off on stop"
+    )
+    func aTreeThatCameOnLateIsTurnedOff() {
+        let tree = FullTreeSwitch()
+        let chrome = SlowApplication()
+        tree.switchOn(processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host, at: 0)
+        #expect(tree.switchedOn.isEmpty)
+        chrome.answering = true
+        chrome.values[FullTreeSwitch.enhancedAttribute] = true
+        tree.switchOffEverything { _ in chrome.host }
+        #expect(chrome.values[FullTreeSwitch.enhancedAttribute] == false)
+    }
+
+    @Test("A process whose attempt got no answer is tried again after a while, a few times at most")
+    func anUnansweredAttemptIsTriedAgain() {
+        let tree = FullTreeSwitch()
+        let chrome = SlowApplication()
+        let wait = FullTreeSwitch.retryInNanoseconds
+        tree.switchOn(processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host, at: 0)
+        let first = chrome.writes.count
+        tree.switchOn(
+            processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host, at: wait - 1)
+        #expect(chrome.writes.count == first)
+        for attempt in 1..<(FullTreeSwitch.mostAttempts + 3) {
+            tree.switchOn(
+                processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host,
+                at: UInt64(attempt) * wait)
+        }
+        #expect(chrome.writes.count == first * FullTreeSwitch.mostAttempts)
+    }
+
+    @Test("A retry that finds the tree on after its own earlier write settles it as this switch's")
+    func aRetryFindingItsOwnWriteSettles() {
+        let tree = FullTreeSwitch()
+        let chrome = SlowApplication()
+        tree.switchOn(processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host, at: 0)
+        chrome.answering = true
+        chrome.values[FullTreeSwitch.enhancedAttribute] = true
+        let before = chrome.writes.count
+        tree.switchOn(
+            processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host,
+            at: FullTreeSwitch.retryInNanoseconds)
+        #expect(tree.switchedOn == [9: FullTreeSwitch.enhancedAttribute])
+        #expect(chrome.writes.count == before + 1)
+        tree.switchOn(
+            processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host,
+            at: 10 * FullTreeSwitch.retryInNanoseconds)
+        #expect(chrome.writes.count == before + 1)
+    }
+}
+
+/// A browser that answers no read in time and every write as not implemented, until told to answer.
+private final class SlowApplication {
+    var values: [String: Bool] = [:]
+    var answering = false
+    var writes: [(String, Bool)] = []
+
+    var host: FullTreeSwitch.Host {
+        FullTreeSwitch.Host(
+            read: {
+                self.answering && $0 == FullTreeSwitch.enhancedAttribute ? self.values[$0] ?? false : nil
+            },
+            write: { attribute, isOn in
+                self.writes.append((attribute, isOn))
+                if self.answering, attribute == FullTreeSwitch.enhancedAttribute {
+                    self.values[attribute] = isOn
+                }
+                return false
+            })
+    }
 }

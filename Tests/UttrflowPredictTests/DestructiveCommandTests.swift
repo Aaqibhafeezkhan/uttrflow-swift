@@ -222,7 +222,7 @@ struct DestructiveCommandTests {
         arguments: [
             "echo x > notes.txt", "echo \"\" > notes.txt", "> notes.txt", "sort data.csv >| data.csv",
             "ls 1> listing.txt", "make &> build.log", "echo x >notes.txt", "cat a.txt > b.txt && ls",
-            "make 2>&1 | tee build.log",
+            "make 2>&1 | tee build.log", "make >& build.log", "make >&build.log", "ls -la >&listing.txt && ls",
         ])
     func truncatingRedirectionIsDestructive(_ line: String) {
         #expect(
@@ -236,8 +236,108 @@ struct DestructiveCommandTests {
             "make 2> errors.log", "make 2>&1 | tee", "echo x >&2", "make > /dev/null",
             "make > /dev/null 2>&1", "echo x > /dev/stderr", "make &>> build.log", "sort < data.csv",
             "grep '>' notes.txt", "make | tee -a build.log", "make | tee --append build.log", "make | tee",
+            "make >&2", "make 1>&-", "make >& /dev/null", "make >>& build.log",
         ])
     func harmlessRsyncAndRedirectionAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "A destroying command behind a wrapper that runs it is recognised, past the wrapper's flags and values.",
+        arguments: [
+            "timeout 60 rm -rf build", "timeout -s KILL 60 rm -rf build", "timeout -k 5 10 rm x",
+            "gtimeout 60 rm -rf build", "caffeinate rm -rf ~/scratch", "caffeinate -i -t 600 rm -rf build",
+            "watch -n1 rm x", "watch -n 5 rm x", "ionice -c 3 rm -rf build", "chronic rm -rf build",
+            "unbuffer rm -rf build", "stdbuf -oL rm -rf build", "stdbuf -o L rm -rf build",
+            "taskpolicy -c background rm -rf build", "arch -x86_64 rm -rf build",
+            "arch -arch arm64 rm -rf build", "flock /tmp/lock rm -rf build", "flock -w 5 /tmp/lock rm x",
+            "chroot /srv/jail rm -rf /data", "pkexec rm -rf /opt/app", "nice timeout 60 rm -rf build",
+        ])
+    func wrappedDestroyers(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A wrapper running an ordinary command is ordinary, its duration or file never read as the command.",
+        arguments: [
+            "timeout 5 ls", "timeout 60 make verify", "caffeinate -d", "caffeinate make build",
+            "watch -n1 git status", "flock /tmp/rm ls", "chroot /srv/rm ls", "stdbuf -oL tail log.txt",
+        ])
+    func wrappedOrdinaryCommands(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "A destroying command after a shell reserved word is recognised, in a loop, a condition or a negation.",
+        arguments: [
+            #"for f in *.log; do rm -rf "$f"; done"#, "if true; then rm -rf build; fi",
+            "if [ -d x ]; then ls; else rm -rf build; fi", "if false; then ls; elif true; then rm -rf x; fi",
+            "! rm -rf dist", "if rm -rf build; then echo gone; fi", "while true; do rm x; done",
+            "until false; do rm x; done", "while sudo rm -rf x; do sleep 1; done",
+            "for b in a b; do git branch -D $b; done",
+        ])
+    func destroyersAfterReservedWords(_ line: String) {
+        #expect(DestructiveCommand.matches(line), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A loop or a condition whose commands destroy nothing is ordinary.",
+        arguments: [
+            "for f in a b; do echo $f; done", "if true; then ls; fi", "! grep -q x notes.txt",
+            "while true; do date; done",
+        ])
+    func ordinaryCompoundCommands(_ line: String) {
+        #expect(!DestructiveCommand.matches(line), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "A push that deletes or rewrites remote refs the local repository lacks is destructive.",
+        arguments: [
+            "git push --mirror origin", "git push --mirror", "git push --prune origin",
+            "git push --prune origin refs/heads/*:refs/heads/*", "git -C repo push --mirror backup",
+        ])
+    func mirroringPushIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A fetch that prunes and a push naming its refs plainly are ordinary.",
+        arguments: ["git fetch --prune", "git fetch --prune origin", "git remote prune origin", "git push origin main"])
+    func pruningFetchIsOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "A cloud or hosting tool deleting a repository, a release, a bucket or a resource is destructive.",
+        arguments: [
+            "gh repo delete example/demo --yes", "gh release delete v1.0", "gh release delete-asset v1.0 app.zip",
+            "gh -R example/demo release delete v1.0", "gh secret delete TOKEN", "gh api -X DELETE repos/o/r",
+            "gh api --method DELETE repos/o/r", "sudo gh repo delete example/demo",
+            "aws s3 rm s3://example-bucket --recursive", "aws s3 rm s3://example-bucket/key.txt",
+            "aws s3 rb s3://example-bucket --force", "aws --profile prod s3 rm s3://example-bucket --recursive",
+            "aws --region eu-west-1 s3 rb s3://example-bucket", "aws s3 sync . s3://example-bucket --delete",
+            "aws s3api delete-bucket --bucket example-bucket", "aws ec2 terminate-instances --instance-ids i-1",
+            "aws rds delete-db-instance --db-instance-identifier db", "timeout 60 aws s3 rm s3://b --recursive",
+            "gcloud compute instances delete vm-1", "gcloud --project demo sql instances delete db",
+            "az group delete --name demo", "az -o json vm delete -g demo -n vm1", "gsutil rm gs://example/x",
+            "gsutil -m rm -r gs://example", "gsutil rb gs://example", "gsutil rsync -d src gs://example",
+        ])
+    func cloudDeletionsAreDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A cloud or hosting tool that only reads or creates is ordinary.",
+        arguments: [
+            "gh repo view example/demo", "gh release list", "gh pr create --title delete", "gh api repos/o/r",
+            "aws s3 ls", "aws s3 ls s3://example-bucket/rm", "aws s3 cp a.txt s3://example-bucket",
+            "aws s3 sync . s3://example-bucket", "aws --region delete-me s3 ls", "aws ec2 describe-instances",
+            "gcloud compute instances list", "az group list", "gsutil ls gs://example",
+        ])
+    func cloudReadsAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
 }

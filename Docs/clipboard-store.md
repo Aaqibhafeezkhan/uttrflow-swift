@@ -106,6 +106,16 @@ language and the rich text is what once quietly hollowed out a clip: a Swift sni
 language chip on the second copy and a formatted note lost its formatting, while the row looked
 identical.
 
+One exception to the kind: a kept clip (pinned, named or filed) that is on disk keeps its kind and
+language when the same text arrives again classified as a secret. A secret is never written to
+disk, so taking the arrival's kind would delete the one clip the store promises never to age out,
+and the text was already on disk and shown in the panel under the user's own decision to keep it.
+A clip that is not kept still becomes a secret and leaves the disk.
+
+The rich text comes from the new copy only when the new copy carries some. A plain copy of the
+same text keeps the clip's rich text, because that may be a note the user wrote or promoted in the
+panel, checklist state included, and a plain copy has nothing to replace it with.
+
 ## Rebuilding a clip
 
 `Clip.text` is `let` on purpose — a clip is what was on the clipboard — so editing one builds a

@@ -16,7 +16,7 @@ enum CompletionText {
     /// The fewest characters a continuation that opens a new word must have to be a word at all.
     static let shortestNewWord = 3
 
-    /// The line cut where its continuation takes up a part of a screen label — a comma-separated part, eight characters or more, repeated exactly, as "Received from Priya" is — its timestamp parts dropped, or nothing when that leaves no continuation; a reply may still quote the screen in its own words, a shell a file name, a query a column list.
+    /// The line cut where its continuation takes up a part of a screen label — a comma-separated part, eight characters or more, repeated exactly, as "Received from Priya" is — its trailing timestamp parts dropped, or nothing when that leaves no continuation; a reply may still quote the screen in its own words, a shell a file name, a query a column list.
     static func trimmed(_ line: String, typed: String, echoing context: [String]) -> String? {
         let continuation = String(line.dropFirst(typed.count))
         let known = Set(
@@ -26,9 +26,11 @@ enum CompletionText {
         if let copied = parts.indices.dropFirst().first(where: { known.contains(fold(parts[$0])) }) {
             parts.removeSubrange(copied...)
         }
-        let own = parts.joined(separator: ", ")
-        // A stamp the model wrote after its line is as little the answer as one it copied.
-        var kept = Substring(Timestamps.without(own))
+        // A stamp the model wrote after its line is as little the answer as one it copied; a time inside the line is its words.
+        while parts.count > 1, let last = parts.last, Timestamps.isTimestamp(Substring(last)) {
+            parts.removeLast()
+        }
+        var kept = Substring(parts.joined(separator: ", "))
         let changed = kept.count < continuation.count
         // The separator the copy or the stamp hung off is not part of the answer either.
         while changed, let last = kept.last, last.isWhitespace || last == "," || last == ";" {
@@ -125,15 +127,14 @@ enum CompletionText {
         return abbreviations.contains(word)
     }
 
-    /// The lines a pass keeps once each is unsigned, ended at its first sentence where it is prose, and held to the register's length; prose that copies the screen is dropped.
+    /// The lines a pass keeps once each is unsigned, ended at its first sentence where it is prose, grounded in its specifics and held to the register's length; prose that copies the screen is dropped.
     static func finished(_ lines: [String], typed: String, in situation: GenerationSituation) -> [String] {
         let register = Register.infer(from: situation, typed: typed)
         let context = contextNeverCopied(in: situation)
         var seen: Set<String> = []
         return lines.compactMap { line in
             guard
-                var kept = SignOff.unsigned(
-                    line, typed: typed, screen: context, ownLines: situation.recentLines)
+                var kept = SignOff.unsigned(line, typed: typed, ownLines: situation.recentLines)
             else { return nil }
             // A command or a query reuses the paths and names on screen, so only prose is held to its own words.
             if register.endsAtSentence {
@@ -141,6 +142,8 @@ enum CompletionText {
                 guard !copiesContext(kept, typed: typed, context: context, ownLines: situation.recentLines)
                 else { return nil }
             }
+            // A number, an amount or an address the model added is kept only where someone already wrote it.
+            guard Specifics.areGrounded(kept, typed: typed, in: situation) else { return nil }
             guard kept.count - typed.count <= register.longestContinuation, seen.insert(kept).inserted
             else { return nil }
             return kept

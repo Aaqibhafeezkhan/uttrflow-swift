@@ -131,7 +131,11 @@ public enum FocusedFieldReader {
     /// The same read synchronously, for an application front or not, which is what a probe shows the operator.
     public static func surroundings(of app: FrontmostApp) -> Surroundings? {
         // A field with no window, or a window focused as a whole, has nothing around it worth a walk.
-        guard AXIsProcessTrusted(), let field = SurfaceProbe.focusedField(of: app.processIdentifier),
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard AXIsProcessTrusted(), !slowFields.isQuiet(app.processIdentifier, at: now),
+            let field = SurfaceProbe.focusedField(of: app.processIdentifier),
+            !slowFields.isResting(
+                SlowFields.Key(process: app.processIdentifier, element: CFHash(field)), at: now),
             let window = element(field, kAXWindowAttribute), !CFEqual(field, window)
         else { return nil }
         let answers = AXNode(window).answers
@@ -143,12 +147,19 @@ public enum FocusedFieldReader {
     /// The fields whose reads ran past their budget lately, which are left alone until their rest is over.
     static let slowFields = SlowFields()
 
+    /// Lets an application quieted by a resting field be asked again, for a click, a switch or a key that may move focus.
+    public static func focusMayHaveMoved() {
+        slowFields.focusMayHaveMoved()
+    }
+
     /// The same reading, synchronously, for the queue above and for the capability probe; the identity is read on main.
     static func snapshot(
         app: FrontmostApp, while isWanted: @Sendable () -> Bool = { true }
     ) -> FocusedFieldSnapshot? {
         let started = DispatchTime.now().uptimeNanoseconds
-        guard AXIsProcessTrusted(), let field = SurfaceProbe.focusedField(of: app.processIdentifier)
+        // An application whose focused field rests is not even asked for its focus, which can itself be the slow part.
+        guard AXIsProcessTrusted(), !slowFields.isQuiet(app.processIdentifier, at: started),
+            let field = SurfaceProbe.focusedField(of: app.processIdentifier)
         else { return nil }
         let slow = SlowFields.Key(process: app.processIdentifier, element: CFHash(field))
         // A field whose read ran over lately is asked nothing, so a heavy document does not stall its application every turn.
@@ -204,7 +215,7 @@ public enum FocusedFieldReader {
         guard goOn() else { return nil }
         let fieldRect = frame(of: field)
         guard goOn() else { return nil }
-        let caretRect = caret(field, at: range, frame: fieldRect, while: goOn)
+        let caretRect = caret(field, at: range, frame: fieldRect, pointSize: style?.size, while: goOn)
         guard goOn() else { return nil }
         let windowRect = window.flatMap { frame(of: $0) }
         guard goOn() else { return nil }
@@ -315,10 +326,10 @@ public enum FocusedFieldReader {
 
     /// The caret's screen rectangle, from the selection where the field answers it and from the text marker where it does not; `frame` is the field's own, already read.
     private static func caret(
-        _ field: AXUIElement, at range: CFRange?, frame: CGRect?, while goOn: () -> Bool
+        _ field: AXUIElement, at range: CFRange?, frame: CGRect?, pointSize: CGFloat?, while goOn: () -> Bool
     ) -> CGRect? {
         CaretLocator.caret(
-            at: range.map { (location: $0.location, length: $0.length) }, frame: frame,
+            at: range.map { (location: $0.location, length: $0.length) }, frame: frame, pointSize: pointSize,
             bounds: { goOn() ? SurfaceProbe.bounds(field, at: CFRange(location: $0, length: $1)) : nil },
             markerBounds: { goOn() ? markerBounds(field) : nil })
     }
@@ -395,9 +406,9 @@ public enum FocusedFieldReader {
         var role: String? { self[kAXRoleAttribute] as? String }
         var title: String? { self[kAXTitleAttribute] as? String }
 
-        /// Whether the element declares itself secure by role, subrole or name, asked of the answers already fetched.
+        /// Whether the element declares itself secure by role or subrole, or as a field by name, asked of the answers already fetched.
         var isSecure: Bool {
-            SecureField.isDeclaredSecure(
+            SecureField.isDeclaredSecureOnScreen(
                 role: role, subrole: self[kAXSubroleAttribute] as? String,
                 identifier: self[kAXIdentifierAttribute] as? String,
                 placeholder: self[kAXPlaceholderValueAttribute] as? String,

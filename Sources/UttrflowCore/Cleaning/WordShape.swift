@@ -27,6 +27,11 @@ public struct WordShape: Equatable, Sendable {
     /// Whether the word closes a sentence.
     public var endsSentence: Bool { suffix.contains(where: { ".!?".contains($0) }) }
 
+    /// Whether marks after a word are an ellipsis with no question or exclamation mark, which is a pause rather than a stop.
+    public static func trailsOff(_ marks: String) -> Bool {
+        (marks.contains("\u{2026}") || marks.contains("..")) && !marks.contains(where: { "?!".contains($0) })
+    }
+
     /// The same word with a new core, keeping the punctuation around it.
     public func replacingCore(with text: String) -> String { prefix + text + suffix }
 

@@ -198,6 +198,18 @@ struct TerminalPathGateTests {
         #expect(await verifier.verified(candidates, in: here, typed: "", now: moment).map(\.text) == lines)
     }
 
+    @Test("While the branch listing is cold, a branch the refs hold stands and one they do not is held back.")
+    func coldBranchListingFallsBackToTheRefs() async throws {
+        let folder = try Folder()
+        try folder.file(".git/refs/heads/main", contents: "0123456789abcdef0123456789abcdef01234567\n")
+        let verifier = Verifier(index: EnvironmentIndex(reader: StubEnvironment([:])))
+        let standing = await verifier.standing(
+            ["git merge main", "git merge no-such-branch", "git merge feature/login-fix"],
+            after: "git merge ",
+            in: shell(in: folder.path), now: moment)
+        #expect(standing == ["git merge main"])
+    }
+
     @Test("A model's line with a path that is not here is dropped before the machine has answered.")
     func generatedLinesAreChecked() async throws {
         let folder = try Folder()

@@ -207,15 +207,16 @@ public actor PredictStore: PredictionStore {
         return Self.strongest(order.compactMap { byText[$0] })
     }
 
-    /// The candidates with the most evidence, compared across every folder before any is dropped.
+    /// The candidates ranking would score highest, compared across every folder before any is dropped.
     static func strongest(_ candidates: [Candidate]) -> [Candidate] {
-        let ordered = candidates.sorted { first, second in
-            let a = first.evidence
-            let b = second.evidence
-            return (second.editDistance, a?.count ?? 0, a?.lastUsed ?? .distantPast, second.text)
-                > (first.editDistance, b?.count ?? 0, b?.lastUsed ?? .distantPast, first.text)
+        // Decay scales every score alike from any later moment, so the newest use orders them as ranking would.
+        let latest = candidates.compactMap(\.evidence?.lastUsed).max() ?? .distantPast
+        let scored = candidates.map { (candidate: $0, score: Frecency.score($0, now: latest)) }
+        let ordered = scored.sorted { first, second in
+            (second.candidate.editDistance, first.score, second.candidate.text)
+                > (first.candidate.editDistance, second.score, first.candidate.text)
         }
-        return Array(ordered.prefix(candidateLimit))
+        return ordered.prefix(candidateLimit).map(\.candidate)
     }
 
     /// One text known in two surfaces becomes one candidate: evidence summed, the nearer edit kept.
@@ -269,20 +270,33 @@ public actor PredictStore: PredictionStore {
         ORDER BY count DESC LIMIT ?
         """
 
-    /// Every candidate whose opening is what was typed, matched without regard to case.
+    /// The same range scan newest first, so a line used lately is read however many older lines outnumber it.
+    static let recentPrefixQuery = """
+        SELECT \(entryColumns) FROM entry
+        WHERE surface_id = ? AND text_lower >= ? AND text_lower < ? AND superseded_by IS NULL
+        ORDER BY last_used DESC LIMIT ?
+        """
+
+    /// The most used and the most recent candidates whose opening is what was typed, each once, matched without regard to case.
     private func exactCandidates(
         surfaceIdentifier id: Int64, typed: String
     ) throws(PredictStoreError) -> [Candidate] {
         let lowered = typed.lowercased()
         guard let upper = Self.upperBound(of: lowered) else { return [] }
-        return try readCandidates(
-            Self.prefixQuery,
-            {
-                $0.bind(1, id)
-                $0.bind(2, lowered)
-                $0.bind(3, upper)
-                $0.bind(4, Int64(Self.candidateLimit))
-            }, distance: 0)
+        var seen: Set<String> = []
+        var found: [Candidate] = []
+        for query in [Self.prefixQuery, Self.recentPrefixQuery] {
+            let read = try readCandidates(
+                query,
+                {
+                    $0.bind(1, id)
+                    $0.bind(2, lowered)
+                    $0.bind(3, upper)
+                    $0.bind(4, Int64(Self.candidateLimit))
+                }, distance: 0)
+            found += read.filter { seen.insert($0.text).inserted }
+        }
+        return found
     }
 
     /// The fallback, run only when nothing matched exactly, behind the character-mask filter.
@@ -316,7 +330,11 @@ public actor PredictStore: PredictionStore {
                     query: queryMask, candidate: FuzzyMatch.mask(units.prefix(width)), within: budget)
             else { return nil }
             let distance = FuzzyMatch.prefixDistance(needle, units, within: budget)
-            guard distance <= budget else { return nil }
+            // A near miss that would add, drop or change a typed digit writes a different number, never a fixed typo.
+            guard distance <= budget, FuzzyMatch.keepsDigits(of: needle, in: units, atDistance: distance)
+            else {
+                return nil
+            }
             return Candidate(
                 text: text, source: .personal,
                 evidence: Entry(
@@ -577,7 +595,17 @@ public actor PredictStore: PredictionStore {
         ) { Int64($0.integer(0)) }.first
     }
 
-    /// Keeps a surface within its cap, dropping superseded entries first and then the weakest.
+    /// The order entries leave a full surface: fragments a longer line grew out of, then the weakest, and retirements last.
+    static let evictionOrder = """
+        CASE
+          WHEN superseded_by IS NULL THEN 1
+          WHEN length(superseded_by) > length(text)
+            AND substr(lower(superseded_by), 1, length(text_lower)) = text_lower THEN 0
+          ELSE 2
+        END ASC, count ASC, last_used ASC
+        """
+
+    /// Keeps a surface within its cap, never dropping a correction or a refusal while a live entry could go instead.
     private func evictWeakest(surfaceIdentifier id: Int64) throws(PredictStoreError) {
         try evictWeakestSuccessions(surfaceIdentifier: id)
         let held = try database.rows(
@@ -588,7 +616,7 @@ public actor PredictStore: PredictionStore {
             """
             DELETE FROM entry WHERE id IN (
               SELECT id FROM entry WHERE surface_id = ?
-              ORDER BY (superseded_by IS NOT NULL) DESC, count ASC, last_used ASC LIMIT ?
+              ORDER BY \(Self.evictionOrder) LIMIT ?
             )
             """,
             {
