@@ -37,6 +37,12 @@ public actor CaptureSession {
     private var unwrittenAcceptances: [UnwrittenAcceptance] = []
     /// The most acceptances held for a retry, beyond which the oldest is dropped.
     static let unwrittenAcceptanceLimit = 32
+    /// The id the next held value or acceptance is given, so a retry can tell it is still the one at the head.
+    private var nextHeldID: UInt64 = 0
+    /// True while held finished values are being retried, so a re-entrant retry does not write the same one twice.
+    private var isRetryingCommits = false
+    /// True while held acceptances are being retried, so a re-entrant retry does not write the same one twice.
+    private var isRetryingAcceptances = false
 
     /// A session writing to this sink, remembering its answers in this file.
     public init(
@@ -117,23 +123,37 @@ public actor CaptureSession {
 
     /// Keeps a failed acceptance for a retry, dropping the oldest past the limit.
     private func hold(_ acceptance: UnwrittenAcceptance) {
+        var acceptance = acceptance
+        acceptance.heldID = claimHeldID()
         unwrittenAcceptances.append(acceptance)
         if unwrittenAcceptances.count > Self.unwrittenAcceptanceLimit { unwrittenAcceptances.removeFirst() }
     }
 
     /// Retries held acceptances in order, stopping at the first that fails again.
     private func retryUnwrittenAcceptances() async {
+        guard !isRetryingAcceptances else { return }
+        isRetryingAcceptances = true
+        defer { isRetryingAcceptances = false }
         while let next = unwrittenAcceptances.first {
             do {
                 try await write(next)
-                unwrittenAcceptances.removeFirst()
+                // A forget or the limit may have dropped it during the write, so only the same head is removed.
+                if unwrittenAcceptances.first?.heldID == next.heldID { unwrittenAcceptances.removeFirst() }
             } catch let failure as AcceptanceWriteFailure {
-                unwrittenAcceptances[0] = failure.remaining
+                if unwrittenAcceptances.first?.heldID == next.heldID {
+                    unwrittenAcceptances[0] = failure.remaining
+                }
                 return
             } catch {
                 return
             }
         }
+    }
+
+    /// Hands out the next held id, so no two held entries share one.
+    private func claimHeldID() -> UInt64 {
+        defer { nextHeldID &+= 1 }
+        return nextHeldID
     }
 
     /// What the user has decided about capture so far.
@@ -267,18 +287,24 @@ public actor CaptureSession {
 
     /// Keeps a failed finished value for a retry, dropping the oldest past the limit.
     private func hold(_ unwritten: UnwrittenCommit) {
+        var unwritten = unwritten
+        unwritten.heldID = claimHeldID()
         unwrittenCommits.append(unwritten)
         if unwrittenCommits.count > Self.unwrittenCommitLimit { unwrittenCommits.removeFirst() }
     }
 
     /// Retries held finished values in order, stopping at the first that fails again.
     private func retryUnwrittenCommits() async {
+        guard !isRetryingCommits else { return }
+        isRetryingCommits = true
+        defer { isRetryingCommits = false }
         while let next = unwrittenCommits.first {
             do {
                 try await write(next)
-                unwrittenCommits.removeFirst()
+                // A forget or the limit may have dropped it during the write, so only the same head is removed.
+                if unwrittenCommits.first?.heldID == next.heldID { unwrittenCommits.removeFirst() }
             } catch let failure as CommitWriteFailure {
-                unwrittenCommits[0] = failure.remaining
+                if unwrittenCommits.first?.heldID == next.heldID { unwrittenCommits[0] = failure.remaining }
                 return
             } catch {
                 return
@@ -299,6 +325,8 @@ struct UnwrittenCommit: Sendable {
     let previous: String?
     /// When it was finished.
     let moment: Date
+    /// Which held entry this is, given when it is held and kept through every retry.
+    var heldID: UInt64 = 0
 }
 
 /// A failed finished-value write, carrying what is left of it to retry.
@@ -321,6 +349,8 @@ struct UnwrittenAcceptance: Sendable {
     let moment: Date
     /// True once the line itself is in the corpus, so a retry only counts the acceptance.
     var lineRecorded = false
+    /// Which held entry this is, given when it is held and kept through every retry.
+    var heldID: UInt64 = 0
 }
 
 /// A failed acceptance write, carrying what is left of it to retry.
