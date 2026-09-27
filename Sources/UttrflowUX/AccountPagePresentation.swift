@@ -1,4 +1,4 @@
-// The Account page: who is signed in, the four facts about them, and the page for working without an account.
+// The Account page: who is signed in and the four facts about them.
 public import Foundation
 public import UttrflowAccount
 
@@ -13,9 +13,9 @@ public struct AccountIdentity: Sendable, Equatable {
     public let name: String
     /// Absent when the provider gave none, which is allowed.
     public let emailAddress: String?
-    /// "Google", "GitHub", "Apple" — or "This Mac" for somebody working without an Uttrflow account.
+    /// "Google", "GitHub" or "Apple".
     public let provider: String
-    /// Which provider signed this person in, or `nil` for a ``LocalAccount``, which has no third party.
+    /// Which provider signed this person in, or `nil` when it is not known.
     public let providerID: SignInProvider?
 
     /// Builds an identity; the picture is optional.
@@ -64,8 +64,6 @@ public struct AccountFact: Sendable, Equatable, Identifiable {
 public struct AccountPageSnapshot: Sendable, Equatable {
     /// The session on this Mac. Absent when nobody has signed in.
     public let entitlement: Entitlement?
-    /// The choice to work without an account; consulted only when ``entitlement`` is absent.
-    public let local: LocalAccount?
     /// The signed-in person's picture as bytes, since only `UttrflowAccount` may reach the network.
     public let picture: Data?
     /// What Uttrflow may currently do, which differs from who is signed in once an entitlement ages out.
@@ -80,10 +78,9 @@ public struct AccountPageSnapshot: Sendable, Equatable {
     /// Builds a snapshot; everything after the clock is optional.
     public init(
         entitlement: Entitlement?, access: DictationAccess, now: Date, picture: Data? = nil,
-        local: LocalAccount? = nil, memberSince: Date? = nil, macName: String? = nil
+        memberSince: Date? = nil, macName: String? = nil
     ) {
         self.entitlement = entitlement
-        self.local = local
         self.picture = picture
         self.access = access
         self.now = now
@@ -100,7 +97,7 @@ public struct AccountPagePresentation: Sendable, Equatable {
     public let identity: AccountIdentity?
     /// The facts under the banner, in order; a fact nobody knows is left out rather than guessed.
     public let facts: [AccountFact]
-    /// The one button at the foot: Sign out for a session, Sign in for this Mac.
+    /// The one button at the foot: Sign out for a session.
     public let action: MainAction?
     /// What pressing ``action`` does, for its tooltip.
     public let actionHelp: String?
@@ -152,22 +149,12 @@ public enum AccountPagePresenter {
         Dictionary, Corrections and Snippets stay on this Mac.
         """
 
-    /// What Sign in does for somebody on this Mac, as its tooltip.
-    public static let signInHelp = """
-        Needs the network for sign-in. It replaces this Mac account with a real one and leaves \
-        everything on this Mac exactly where it is.
-        """
-
     /// Draws the Account page from a snapshot.
     public static func page(
         for snapshot: AccountPageSnapshot, locale: Locale = .autoupdatingCurrent
     ) -> AccountPagePresentation {
         let callout = MainCallout(symbolName: "lock", tone: .good, message: localDataPromise)
         guard let entitlement = snapshot.entitlement else {
-            // Somebody who chose this Mac gets a page about that account, not an invitation to another.
-            if let local = snapshot.local {
-                return page(for: local, macName: snapshot.macName, callout: callout, locale: locale)
-            }
             return AccountPagePresentation(
                 chrome: chrome,
                 identity: nil,
@@ -221,43 +208,6 @@ public enum AccountPagePresenter {
         return AccountFact(kind: .thisMac, label: "This Mac", value: name)
     }
 
-    // MARK: - Working without an account
-
-    /// The page for somebody using this Mac, drawn as an account rather than a warning, with no plan.
-    static func page(
-        for local: LocalAccount, macName: String?, callout: MainCallout, locale: Locale
-    ) -> AccountPagePresentation {
-        AccountPagePresentation(
-            chrome: chrome,
-            identity: identity(for: local),
-            facts: facts(for: local, macName: macName, locale: locale),
-            action: MainAction(
-                title: "Sign in", symbolName: "person.crop.circle.badge.plus", intent: .signIn),
-            actionHelp: signInHelp,
-            notice: nil,
-            callout: callout,
-            emptyState: nil)
-    }
-
-    /// The Mac's owner as the Account page and the window chip both draw them; no name gives "?", not "TM".
-    static func identity(for local: LocalAccount) -> AccountIdentity {
-        AccountIdentity(
-            initials: initials(of: local.name),
-            name: local.name ?? "This Mac",
-            emailAddress: nil,
-            provider: "This Mac",
-            providerID: nil)
-    }
-
-    /// What working without an account amounts to: no provider, a start date and this Mac.
-    static func facts(for local: LocalAccount, macName: String?, locale: Locale) -> [AccountFact] {
-        [
-            AccountFact(kind: .signIn, label: "Signed in with", value: "No account — this Mac only"),
-            AccountFact(kind: .since, label: "Using since", value: since(local.since, locale: locale)),
-            thisMac(macName),
-        ].compactMap(\.self)
-    }
-
     /// A day in the reader's own locale, as "12 Sep 2026" reads in English.
     static func since(_ moment: Date, locale: Locale) -> String {
         var format = Date.FormatStyle.dateTime.day().month(.abbreviated).year()
@@ -305,7 +255,7 @@ public enum AccountPagePresenter {
     static func notice(for access: DictationAccess) -> MainCallout? {
         switch access {
         // Nothing to say: one is a current subscription, the other a page that explains itself.
-        case .allowed, .allowedOnThisMac, .refused:
+        case .allowed, .refused:
             nil
         case .allowedAwaitingNetwork:
             MainCallout(

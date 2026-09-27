@@ -23,13 +23,8 @@ final class OnboardingModel {
         }
     }
 
-    /// Whether the window was opened by Sign In rather than by a permission button.
-    @ObservationIgnored var asksToSignIn = false
-
     func start() {
-        Task { [flow, asksToSignIn] in
-            await asksToSignIn ? flow.resume(askingToSignIn: true) : flow.start()
-        }
+        Task { [flow] in await flow.start() }
     }
 
     /// Re-reads both permissions when the window comes to the front; System Settings never tells the app.

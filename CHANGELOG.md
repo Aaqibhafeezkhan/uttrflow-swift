@@ -11,6 +11,16 @@ Each released version is a git tag and a build at
 
 ## [Unreleased]
 
+### Changed
+- **Uttrflow needs you to sign in before anything opens.** Without a session only the sign-in
+  window shows: the main window, Settings, the menu bar popover, the floating button, the
+  clipboard panel, suggestions and dictation all wait for it. Signing out, or a session that
+  has ended, closes them and returns to sign-in. A signed-in Mac still works offline.
+
+### Removed
+- **Working on this Mac without an account.** A Mac that used it is asked to sign in after
+  updating; its transcripts, dictionary and snippets stay where they are.
+
 ## [26.0926.0] — 2026-09-27
 
 The first release numbered `YY.MMDD.REVISION`. Nothing about updating changes: an installed

@@ -18,6 +18,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     var onFinish: ((OnboardingReadiness) -> Void)?
     /// The window has gone, however it went; the Account page re-reads the session on it.
     var onClose: (() -> Void)?
+    /// Called as soon as a sign-in's profile is kept, before the setup pages after it.
+    var onSignIn: (() -> Void)?
 
     private let flow: OnboardingFlow
     private let model: OnboardingModel
@@ -40,10 +42,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             record: record,
             authentication: account.authentication,
             profiles: account.profiles,
-            local: account.local,
             network: network,
-            // Read here, not in the flow, so the flow under test greets whoever the test says.
-            systemName: { NSFullUserName() },
             openBrowser: { url in
                 Task { @MainActor in NSWorkspace.shared.open(url) }
             },
@@ -54,6 +53,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         )
         model = OnboardingModel(flow: flow)
         super.init()
+        flow.onSignIn = { [weak self] in self?.onSignIn?() }
         flow.onFinish = { [weak self] readiness in
             guard let self else { return }
             self.finish(readiness) { self.close() }
@@ -81,8 +81,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     var isRequired: Bool { flow.isRequired }
 
     /// Puts the window on screen and brings the app forward; a first run is the one moment that is right.
-    func present(askingToSignIn: Bool = false) {
-        model.asksToSignIn = askingToSignIn
+    func present() {
         let window = window ?? makeWindow()
         self.window = window
         window.center()

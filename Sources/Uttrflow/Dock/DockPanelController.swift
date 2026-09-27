@@ -113,6 +113,9 @@ final class DockPanelController {
         panel.orderOut(nil)
     }
 
+    /// Whether the button is on screen.
+    var isVisible: Bool { panel.isVisible }
+
     /// The only way the button's appearance ever changes.
     func update(with presentation: DockPresentation) {
         model.show(presentation)
