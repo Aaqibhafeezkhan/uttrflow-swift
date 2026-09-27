@@ -182,12 +182,15 @@ struct DiagnosticsModelCardTests {
                     isInstalled: false, bytesOnDisk: nil, isMultilingual: true)))
         #expect(missing.models[0].status == "Not downloaded")
         #expect(missing.models[0].state == .attention)
+        #expect(missing.models[0].name == "Speech model to download")
+        #expect(!missing.models[0].name.hasPrefix("Downloaded"))
 
         let present = page(
             DiagnosticsSnapshot(
                 speechModel: DiagnosticsModelPresence(
                     isInstalled: true, bytesOnDisk: 632_000_000, isMultilingual: true)))
         #expect(present.models[0].status == "In use")
+        #expect(present.models[0].name == "Downloaded speech model")
         #expect(present.models[0].chips.contains("Every language"))
         #expect(present.models[1].status == "Ready")
     }

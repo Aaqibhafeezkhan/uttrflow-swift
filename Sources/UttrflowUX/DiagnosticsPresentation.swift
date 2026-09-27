@@ -325,20 +325,25 @@ public enum DiagnosticsPresenter {
     static func downloadedSpeechCard(
         _ snapshot: DiagnosticsSnapshot, inUse: Bool, locale: Locale
     ) -> DiagnosticsModelCard {
-        let card = { (chips: [String], status: String, state: DiagnosticsState) in
+        let card = { (name: String, chips: [String], status: String, state: DiagnosticsState) in
             DiagnosticsModelCard(
                 title: "Speech", symbolName: "waveform", tint: .dictation,
-                name: name(for: SpeechEngineKind.whisperKit), chips: chips + [onDevice],
-                status: status, state: state)
+                name: name, chips: chips + [onDevice], status: status, state: state)
         }
-        guard let model = snapshot.speechModel else { return card([], "Not checked yet", .unknown) }
+        let downloaded = name(for: SpeechEngineKind.whisperKit)
+        guard let model = snapshot.speechModel else {
+            return card(downloaded, [], "Not checked yet", .unknown)
+        }
         guard model.isInstalled else {
-            return card([], "Not downloaded", inUse ? .attention : .unknown)
+            return card(notYetDownloaded, [], "Not downloaded", inUse ? .attention : .unknown)
         }
         let size = model.bytesOnDisk.map { [MainFormatting.bytes($0, locale: locale)] } ?? []
         let languages = model.isMultilingual ? "Every language" : "English"
-        return card(size + [languages], inUse ? "In use" : "Ready", .good)
+        return card(downloaded, size + [languages], inUse ? "In use" : "Ready", .good)
     }
+
+    /// The downloadable recogniser's name while its files are missing, so it never claims to be downloaded.
+    static let notYetDownloaded = "Speech model to download"
 
     /// The clean-up engine that tidies now, or what is still being asked.
     static func cleanUpCard(_ snapshot: DiagnosticsSnapshot) -> DiagnosticsModelCard {
@@ -513,7 +518,7 @@ public enum DiagnosticsPresenter {
         let lacksModel = recogniser == .whisperKit && snapshot.speechModel?.isInstalled == false
         let speech = DiagnosticsRow(
             title: "Speech",
-            detail: lacksModel ? "\(name(for: recogniser)), not downloaded yet" : name(for: recogniser),
+            detail: lacksModel ? notYetDownloaded : name(for: recogniser),
             state: lacksModel ? .attention : .good)
 
         return [speech]
