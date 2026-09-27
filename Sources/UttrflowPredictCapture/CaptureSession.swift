@@ -125,7 +125,9 @@ public actor CaptureSession {
     public func importShellHistory(
         forHomeDirectory home: String, into surface: Surface, at moment: Date
     ) async throws -> Int {
-        guard !preferences.hasImportedShellHistory else { return 0 }
+        guard !preferences.hasImportedShellHistory,
+            preferences.decision(for: surface.bundleIdentifier) == .proceed
+        else { return 0 }
         preferences.hasImportedShellHistory = true
         try preferencesFile.save(preferences)
         for path in ShellHistory.paths(inHomeDirectory: home) {
