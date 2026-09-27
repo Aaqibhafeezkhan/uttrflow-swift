@@ -75,6 +75,7 @@ struct OnboardingScreen: View {
                 .padding(.bottom, OnboardingMetrics.cardBottom)
         }
         .frame(width: OnboardingMetrics.windowWidth, height: OnboardingMetrics.windowHeight)
+        .coordinateSpace(.named(OnboardingMetrics.windowSpace))
         .ignoresSafeArea()
         .environment(\.colorScheme, .dark)
     }
@@ -109,7 +110,7 @@ struct OnboardingCard: View {
         }
         .frame(width: OnboardingMetrics.cardWidth)
         .frame(maxHeight: .infinity)
-        .background(OnboardingInk.glass.opacity(0.46))
+        .background(OnboardingCardGlass(mood: page.mood))
         .clipShape(.rect(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous)
@@ -241,6 +242,12 @@ enum OnboardingMetrics {
     static let cardTop: CGFloat = 66
     static let cardTrailing: CGFloat = 40
     static let cardBottom: CGFloat = 40
+    /// The window's coordinate space, which the card's glass lines its sky up in.
+    static let windowSpace = "onboarding.window"
+    /// How much the card's glass saturates the sky behind it.
+    static let glassSaturation: Double = 1.5
+    /// How strongly the violet-black tint covers the glass.
+    static let glassTint: Double = 0.46
     /// The picture at the top of the card.
     static let pictureHeight: CGFloat = 170
     static let roundSize: CGFloat = 64
