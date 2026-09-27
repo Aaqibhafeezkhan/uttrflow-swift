@@ -64,14 +64,14 @@ public struct WordShape: Equatable, Sendable {
     /// Quotes a full stop belongs inside, which is where a spoken "close quote" leaves the end of a sentence.
     static let closingQuotes: Set<Character> = ["\"", "'", "\u{201D}", "\u{2019}", "\u{00BB}"]
 
-    /// The word with a full stop where the sentence wants one: after a symbol like `%`, inside a closing quote.
-    public static func finished(_ text: String) -> String {
+    /// The word with a full stop, or `mark`, where the sentence wants one: after a symbol like `%`, inside a closing quote.
+    public static func finished(_ text: String, with mark: String = ".") -> String {
         let shape = WordShape(text)
         guard !shape.core.isEmpty, !shape.suffix.contains(where: finishers.contains) else { return text }
         let quoted = trailingQuotes(of: text)
         // A quotation opening and closing on one word is a quoted term rather than a sentence, so it takes none.
         guard quoted.isEmpty || !shape.prefix.contains(where: openingQuotes.contains) else { return text }
-        return String(text.dropLast(quoted.count)) + "." + quoted
+        return String(text.dropLast(quoted.count)) + mark + quoted
     }
 
     /// The word with `mark` on its end; a clause mark replaces one already there, a quote follows it.

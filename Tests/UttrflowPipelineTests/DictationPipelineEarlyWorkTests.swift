@@ -508,27 +508,63 @@ struct DictationPipelineEarlyWorkTests {
         #expect(await speech.calls == 3)
     }
 
-    @Test("a speech-bearing piece with no words fails the dictation instead of inserting a partial answer")
-    func speechBearingPieceIsNotSkipped() async {
+    @Test("a speech-bearing piece with no words is decoded again, without the vocabulary, in its own place")
+    func speechBearingPieceIsDecodedAgain() async {
         for blank in [false, true] {
             let speech = NumberingSpeechEngine(
                 silentCalls: blank ? [] : [2], blankCalls: blank ? [2] : [])
-            let inserter = CollectingInserter()
             let pipeline = makePipeline(
                 capture: FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces)),
-                speech: speech, inserter: inserter, earlyPoll: .seconds(60))
+                speech: speech, earlyPoll: .seconds(60))
 
             await pipeline.startRecording()
             await pipeline.finishRecording()
 
-            #expect(
-                await pipeline.currentState
-                    == .failed(
-                        DictationFailure(
-                            SpeechEngineError.transcriptionFailed(
-                                description: "speech in a recording piece produced no words"))))
-            #expect(inserter.texts.isEmpty)
+            let outcome = await pipeline.currentState.outcome
+            #expect(outcome?.text == "W1 X. W3 X. W4 X")
+            #expect(outcome?.missedPieces == 0)
+            #expect(await speech.calls == 4)
+            #expect(await speech.biases[2].isEmpty, "the second decode goes without the vocabulary")
         }
+    }
+
+    /// A long dictation is many pieces, and one short blank one must not cost the rest. Issue #2099.
+    @Test("a piece with speech that decodes to no words twice is left out and counted, and the rest go in")
+    func speechBearingPieceIsSkippedAfterTwoDecodes() async {
+        let speech = NumberingSpeechEngine(blankCalls: [2, 3])
+        let inserter = CollectingInserter()
+        let pipeline = makePipeline(
+            capture: FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces)),
+            speech: speech, inserter: inserter, earlyPoll: .seconds(60))
+
+        await pipeline.startRecording()
+        await pipeline.finishRecording()
+
+        let outcome = await pipeline.currentState.outcome
+        #expect(outcome?.text == "W1 X. W4 X")
+        #expect(outcome?.missedPieces == 1)
+        #expect(inserter.texts == ["W1 X. W4 X"])
+    }
+
+    @Test(
+        "a recording whose every speech-bearing piece decodes to no words fails as untranscribed, not silent")
+    func everyPieceMissedFails() async {
+        let speech = NumberingSpeechEngine(blankCalls: Set(1...6))
+        let inserter = CollectingInserter()
+        let pipeline = makePipeline(
+            capture: FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces)),
+            speech: speech, inserter: inserter, earlyPoll: .seconds(60))
+
+        await pipeline.startRecording()
+        await pipeline.finishRecording()
+
+        #expect(
+            await pipeline.currentState
+                == .failed(
+                    DictationFailure(
+                        SpeechEngineError.transcriptionFailed(
+                            description: "speech in a recording piece produced no words"))))
+        #expect(inserter.texts.isEmpty)
     }
 
     @Test("a genuinely silent trailing window is skipped after speech")

@@ -79,12 +79,14 @@ public struct DictationOutcome: Sendable, Equatable {
     public let arrival: InsertionArrival
     /// Whether the words went into a field that hides what is typed, so no history or clip keeps them.
     public let intoSecureField: Bool
+    /// Pieces of speech that decoded to no words twice and are missing from the text; zero when nothing is.
+    public let missedPieces: Int
 
     public init(
         text: String, method: TextInsertionMethod, cleanedBy: TransformerKind,
         insertedInto: String? = nil, insertedIntoIdentifier: String? = nil,
         spokenFor: Duration? = nil, changes: AppliedChanges = .none, fromRecording: Bool = false,
-        arrival: InsertionArrival = .notReported, intoSecureField: Bool = false
+        arrival: InsertionArrival = .notReported, intoSecureField: Bool = false, missedPieces: Int = 0
     ) {
         self.text = text
         self.method = method
@@ -96,6 +98,7 @@ public struct DictationOutcome: Sendable, Equatable {
         self.isFromRecording = fromRecording
         self.arrival = arrival
         self.intoSecureField = intoSecureField
+        self.missedPieces = missedPieces
     }
 
     /// The words Uttrflow may keep or show, which is none for a secure field.
