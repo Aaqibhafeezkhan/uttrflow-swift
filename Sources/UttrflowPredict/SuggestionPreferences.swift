@@ -1,3 +1,4 @@
+import Synchronization
 import UttrflowCore
 public import struct Foundation.Date
 public import struct Foundation.TimeInterval
@@ -31,8 +32,41 @@ public enum SuggestionApplications {
         return offByDefault.contains { $0.bundleIdentifier == identifier }
     }
 
-    /// What to call an application: the shipped name where there is one, else the identifier's tail.
+    /// Where the app looks up an installed application's own name; nothing installed means the fallback alone.
+    private static let installedNames = Mutex<(@Sendable (String) -> String?)?>(nil)
+
+    /// Sets how an installed application's own name is found, which the app does once at launch.
+    public static func lookUpInstalledNames(with lookup: @escaping @Sendable (String) -> String?) {
+        installedNames.withLock { $0 = lookup }
+    }
+
+    /// What to call an application: its installed name, else the shipped name, else the identifier's tail.
     public static func name(of bundleIdentifier: String) -> String {
+        let lookup = installedNames.withLock { $0 }
+        return name(of: bundleIdentifier, installed: [lookup?(bundleIdentifier)])
+    }
+
+    /// Names an application by the first usable installed name, trusted in the order given, before any fallback.
+    public static func name(of bundleIdentifier: String, installed candidates: [String?]) -> String {
+        if let installed = firstUsable(candidates) { return installed }
+        return fallbackName(of: bundleIdentifier)
+    }
+
+    /// The first candidate with something in it once trimmed, and without a trailing ".app".
+    public static func firstUsable(_ candidates: [String?]) -> String? {
+        for case let text? in candidates {
+            guard let start = text.firstIndex(where: { !$0.isWhitespace }),
+                let end = text.lastIndex(where: { !$0.isWhitespace })
+            else { continue }
+            var name = String(text[start...end])
+            if name.lowercased().hasSuffix(".app") { name = String(name.dropLast(4)) }
+            if !name.isEmpty { return name }
+        }
+        return nil
+    }
+
+    /// The shipped name where there is one, else the identifier's tail capitalised.
+    static func fallbackName(of bundleIdentifier: String) -> String {
         let identifier = ApplicationKey.of(bundleIdentifier)
         if let known = offByDefault.first(where: { $0.bundleIdentifier == identifier }) {
             return known.name
