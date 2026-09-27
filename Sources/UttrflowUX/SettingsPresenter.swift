@@ -271,7 +271,7 @@ public enum SettingsPresenter {
                             .playsSoundWhenRecordingStarts,
                             label: "Play a sound when recording starts",
                             settings, capabilities
-                        ).with(icon: .symbol("bolt", .amber)),
+                        ).with(icon: .symbol("speaker.wave.2", .amber)),
                         toggleRow(
                             .opensAtLogin, label: "Open at login", settings, capabilities
                         ).with(icon: .symbol("power", .dictation)),
