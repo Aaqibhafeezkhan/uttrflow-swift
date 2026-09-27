@@ -8,6 +8,22 @@ public enum FunctionWords {
     /// Whether the word carries meaning, so a restatement may be anchored on it or replace it.
     public static func isContent(_ word: String) -> Bool { !word.isEmpty && !holds(word) }
 
+    /// Whether a sentence cannot end on the word, since it leads into what follows ("the", "and", "is", "let's").
+    public static func leadsOn(_ word: String) -> Bool {
+        let key = word.lowercased()
+        return leadingOn.contains(key) || Restatement.contractedSubjects.contains(key)
+    }
+
+    /// Articles, possessives, conjunctions, prepositions that take an object, and the copula.
+    static let leadingOn: Set<String> = [
+        "a", "an", "the", "my", "your", "our", "their", "its",
+        "and", "or", "but", "nor", "because", "although", "though", "if", "unless", "than", "whether",
+        "of", "to", "into", "onto", "from", "with", "for",
+        "is", "are", "was", "were",
+        "let's", "let\u{2019}s", "what's", "what\u{2019}s", "who's", "who\u{2019}s", "here's",
+        "here\u{2019}s",
+    ]
+
     /// Articles, determiners, prepositions, conjunctions, auxiliaries and pronouns; dialect stays content.
     public static let all: Set<String> = [
         "a", "an", "the",

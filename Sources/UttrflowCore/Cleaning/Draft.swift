@@ -214,10 +214,12 @@ public struct Draft: Sendable, Equatable {
     /// Moves a word's closing marks back onto the previous word and its opening marks onto the next.
     private mutating func carryMarks(from index: Int, by pass: PassID) {
         let shape = WordShape(words[index].text)
-        // A comma is the pause the removed word stood in, so it goes with the word; every other mark is the sentence's.
+        // A comma or an ellipsis is the pause the removed word stood in, so it goes with the word; every other mark is the sentence's.
         let amount = shape.core.contains(where: \.isNumber)
+        let trailsOff = WordShape.trailsOff(shape.suffix)
         let closing = shape.suffix.filter {
             $0 != "," && !$0.isWhitespace && !(amount && Self.isOwnSymbol($0))
+                && !(trailsOff && ($0 == "." || $0 == "\u{2026}"))
         }
         let opening = shape.prefix.filter {
             $0 != "," && !$0.isWhitespace && !(amount && Self.isOwnSymbol($0))

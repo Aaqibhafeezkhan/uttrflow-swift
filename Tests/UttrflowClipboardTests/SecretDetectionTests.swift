@@ -171,6 +171,22 @@ struct SecretDetectionTests {
     }
 
     @Test(
+        "masks a webhook nested in another address, a percent-encoded token name, and a host with a closing dot",
+        arguments: [
+            "https://example.com/r?next=https://hooks.slack.com/services/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",
+            "https://example.com/r?a=1&redirect=https://hooks.slack.com/services/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#x",
+            "https://web.archive.org/web/2024/https://discord.com/api/webhooks/123456789012345678/Zx9kLmQ2rT7pQ3vB8nW4yH6sAbCdEf",
+            "https://api.example.com/x?access%5Ftoken=Zx9kLmQ2rT7pQ3vB",
+            "https://api.example.com/x?ACCESS%5ftoken=Zx9kLmQ2rT7pQ3vB",
+            "https://api.example.com/x?%74oken=Zx9kLmQ2rT7pQ3vB",
+            "https://hooks.slack.com./services/T0AB1CD2E/B0FG3HI4J/Zx9kLmQ2rT7pQ3vB8nW4yH6s",
+            "https://discord.com./api/webhooks/123456789012345678/Zx9kLmQ2rT7pQ3vB8nW4yH6sAbCdEf",
+        ])
+    func disguisedBearerAddresses(_ text: String) {
+        #expect(ClipKindDetector.kind(of: text) == .secret)
+    }
+
+    @Test(
         "leaves an ordinary address with a query alone",
         arguments: [
             "https://hooks.slack.com/",
@@ -179,6 +195,11 @@ struct SecretDetectionTests {
             "https://example.com/login?token=",
             "https://example.com/login?token={token}",
             "https://example.com/watch?v=dQw4w9WgXcQ&t=42",
+            "https://example.com/r?next=https://hooks.slack.com/",
+            "https://example.com/r?next=https://example.org/services/a/b/c",
+            "https://example.com/x?q%5Fx=Zx9kLmQ2rT7pQ3vB",
+            "https://example.com/x?%zztoken=Zx9kLmQ2rT7pQ3vB",
+            "https://hooks.slack.com../services/a/b/c",
         ])
     func ordinaryAddresses(_ text: String) {
         #expect(ClipKindDetector.kind(of: text) == .link)

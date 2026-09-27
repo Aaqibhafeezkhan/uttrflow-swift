@@ -20,6 +20,8 @@ extension HeavyClipScans {
             "schemes": "ab+c",
             "scheme separators": "a://b:",
             "signed addresses": "a://b?sig=&",
+            "nested addresses": "a://b?n=",
+            "encoded names": "a://b?%5F%=",
             "quoted values and comments": "pwd=\"a\" x,",
             "quoted values and key lists": "pwd='a', k x",
             "keyword assignments": "pwd=",

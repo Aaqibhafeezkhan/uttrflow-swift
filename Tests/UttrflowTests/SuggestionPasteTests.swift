@@ -55,4 +55,14 @@ struct SuggestionPasteTests {
         #expect(pastes(dvorakV, [.command], on: dvorakV))
         #expect(!pastes(qwertyV, [.command], on: dvorakV))
     }
+
+    @Test("Tab, Escape and any Command shortcut may move focus, and typing does not")
+    func keysThatMayMoveFocus() {
+        #expect(SuggestionCoordinator.mayMoveFocus(keyCode: 48, modifiers: []))
+        #expect(SuggestionCoordinator.mayMoveFocus(keyCode: 53, modifiers: []))
+        #expect(SuggestionCoordinator.mayMoveFocus(keyCode: 37, modifiers: [.command]))
+        #expect(!SuggestionCoordinator.mayMoveFocus(keyCode: 9, modifiers: []))
+        #expect(!SuggestionCoordinator.mayMoveFocus(keyCode: 9, modifiers: [.shift]))
+        #expect(!SuggestionCoordinator.mayMoveFocus(keyCode: 36, modifiers: []))
+    }
 }

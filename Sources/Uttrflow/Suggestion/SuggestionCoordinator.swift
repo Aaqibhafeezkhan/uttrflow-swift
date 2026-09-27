@@ -232,11 +232,15 @@ final class SuggestionCoordinator {
             // A key this app inserted must not wake another turn, or the feature types on its own.
             if let cgEvent = event.cgEvent, SyntheticEvent.isOurs(cgEvent) { return }
             let text = Self.typedText(characters: event.characters, modifiers: event.modifierFlags)
+            if Self.mayMoveFocus(keyCode: event.keyCode, modifiers: event.modifierFlags) {
+                FocusedFieldReader.focusMayHaveMoved()
+            }
             MainActor.assumeIsolated { self?.keyPressed(Key(keyCode: event.keyCode), typing: text) }
         }
         if let keys { monitors.append(keys) }
         // A click moves the caret or the focus without a key, so it wakes a turn the way a pause does.
         let clicks = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
+            FocusedFieldReader.focusMayHaveMoved()
             MainActor.assumeIsolated {
                 self?.noteActivity()
                 self?.withdraw()
@@ -257,6 +261,12 @@ final class SuggestionCoordinator {
                     [weak self] _ in MainActor.assumeIsolated { self?.withdraw() }
                 })
         }
+    }
+
+    /// Whether a key-down may move keyboard focus to another field: Tab, Escape, or any ⌘ shortcut.
+    nonisolated static func mayMoveFocus(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        let key = Key(keyCode: keyCode)
+        return key == .tab || key == .escape || modifiers.contains(.command)
     }
 
     /// Whether a key-down is ⌘V under the selected layout, matched by the key its ⌘ table puts V on.
@@ -375,6 +385,7 @@ final class SuggestionCoordinator {
 
     /// Another application came to the front, so whatever was being worked out for the last field is stale now.
     private func applicationChanged() {
+        FocusedFieldReader.focusMayHaveMoved()
         noteActivity()
         withdraw()
         wake(.applicationChanged)

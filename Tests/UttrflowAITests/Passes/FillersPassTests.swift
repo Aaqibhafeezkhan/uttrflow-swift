@@ -103,4 +103,35 @@ struct FillersPassTests {
     func dropsTheBracketingComma(input: String, expected: String) {
         #expect(cleaned(input, by: sut) == expected)
     }
+
+    /// The recogniser marks the hesitation's pause with an ellipsis or a stop, which is not the sentence ending.
+    @Test(
+        "takes the pause a filler was written with, not a sentence end",
+        arguments: [
+            ("I think we should um... move the meeting.", "I think we should move the meeting."),
+            ("I think we should um\u{2026} move the meeting.", "I think we should move the meeting."),
+            ("The problem is um. We don't have enough time.", "The problem is we don't have enough time."),
+            ("Let's um. Order pizza for the team.", "Let's order pizza for the team."),
+            ("We are going to... Um. Ship it next week.", "We are going to... ship it next week."),
+            ("we are done um. next item", "we are done next item"),
+            ("Send it to um. The team", "Send it to the team"),
+            ("Let's um. I think go", "Let's I think go"),
+        ]
+    )
+    func takesThePause(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test(
+        "keeps a full stop that ends the sentence the filler trailed",
+        arguments: [
+            ("we are done um. Next item", "we are done. Next item"),
+            ("Okay. Um. So we go", "Okay. So we go"),
+            ("I sent it um. Then I left", "I sent it. Then I left"),
+            ("it works um...? right", "it works? right"),
+        ]
+    )
+    func keepsASentenceEnd(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
 }

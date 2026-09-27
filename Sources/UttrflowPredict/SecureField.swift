@@ -12,6 +12,21 @@ public enum SecureField {
         return [identifier, placeholder, description].contains { $0.map(namesASecret) ?? false }
     }
 
+    /// The roles a form names a secret field under; a message, a row or a page naming one is only talking about it.
+    static let namedFieldRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]
+
+    /// Whether an element seen beside the focused field is secure: the secure role anywhere, a secret's name only on a field.
+    public static func isDeclaredSecureOnScreen(
+        role: String?, subrole: String?, identifier: String?, placeholder: String?,
+        description: String?
+    ) -> Bool {
+        if role == secureRole || subrole == secureRole { return true }
+        guard let role, namedFieldRoles.contains(role) else { return false }
+        return isDeclaredSecure(
+            role: role, subrole: subrole, identifier: identifier, placeholder: placeholder,
+            description: description)
+    }
+
     /// The whole rule both dictation boundaries ask: declared secure, or else a value of mask characters alone, read only then.
     public static func isSecure(
         role: String?, subrole: String?, identifier: String?, placeholder: String?,

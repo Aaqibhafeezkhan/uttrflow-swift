@@ -160,7 +160,7 @@ enum ShellWords {
             return close(.background)
         }
 
-        /// A redirection: `<`, `>`, `>>`, `>|`, `<>` and a descriptor duplication, the target of `<` kept as a file the command reads.
+        /// A redirection: `<`, `>`, `>>`, `>|`, `<>`, `>& file` and a descriptor duplication, the target of `<` kept as a file the command reads.
         mutating func redirect(_ character: Character) -> Bool {
             // A here-document, a here-string and a process substitution are all text only the shell can produce.
             if peek() == "(" || (character == "<" && peek() == "<") { return false }
@@ -183,13 +183,22 @@ enum ShellWords {
             truncates = (operators == ">" || operators == ">|") && (descriptor.isEmpty || descriptor == "1")
             if characters.dropFirst(index).first == "&" {
                 index += 1
-                while let next = characters.dropFirst(index).first, next.isNumber || next == "-" {
-                    index += 1
+                let run = characters[index...].prefix { $0.isNumber || $0 == "-" }
+                let after = characters.dropFirst(index + run.count).first
+                // `>&` before a word that is not a descriptor sends both outputs to that file, as `&>` does.
+                if character == ">", run.isEmpty || !(after.map(Self.endsWord) ?? true) {
+                    return true
                 }
+                index += run.count
                 redirection = nil
                 truncates = false
             }
             return true
+        }
+
+        /// Whether a character ends an unquoted word.
+        static func endsWord(_ character: Character) -> Bool {
+            " \t\n;&|<>()".contains(character)
         }
 
         mutating func singleQuoted() -> Bool {

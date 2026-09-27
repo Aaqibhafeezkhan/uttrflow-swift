@@ -33,13 +33,32 @@ public enum DestructiveCommand {
             || flag == "--remove-sent-files"
     }
 
-    /// Words that run the command after them, with the flags of theirs that take a value.
-    private static let wrappers: [String: Set<String>] = [
-        "sudo": ["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"], "doas": ["-u", "-C"],
-        "env": ["-u", "-S", "-P"], "nice": ["-n"], "nohup": [], "time": [], "command": [], "builtin": [],
-        "exec": ["-a"], "noglob": [], "nocorrect": [],
-        "xargs": ["-I", "-J", "-L", "-n", "-P", "-s", "-E", "-R", "-S", "-d"],
+    /// A word that runs the command after it: its flags that take a value, and how many plain words of its own precede the command.
+    private struct Wrapper {
+        let valued: Set<String>
+        var operands = 0
+    }
+
+    /// Words that run the command after them, each read past before the command is judged.
+    private static let wrappers: [String: Wrapper] = [
+        "sudo": Wrapper(valued: ["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"]),
+        "doas": Wrapper(valued: ["-u", "-C"]), "env": Wrapper(valued: ["-u", "-S", "-P"]),
+        "nice": Wrapper(valued: ["-n"]), "nohup": Wrapper(valued: []), "time": Wrapper(valued: []),
+        "command": Wrapper(valued: []), "builtin": Wrapper(valued: []), "exec": Wrapper(valued: ["-a"]),
+        "noglob": Wrapper(valued: []), "nocorrect": Wrapper(valued: []),
+        "xargs": Wrapper(valued: ["-I", "-J", "-L", "-n", "-P", "-s", "-E", "-R", "-S", "-d"]),
+        "timeout": Wrapper(valued: ["-s", "--signal", "-k", "--kill-after"], operands: 1),
+        "gtimeout": Wrapper(valued: ["-s", "--signal", "-k", "--kill-after"], operands: 1),
+        "caffeinate": Wrapper(valued: ["-t", "-w"]), "watch": Wrapper(valued: ["-n", "--interval"]),
+        "ionice": Wrapper(valued: ["-c", "-n", "-p", "-P", "-u"]), "chronic": Wrapper(valued: []),
+        "unbuffer": Wrapper(valued: []), "stdbuf": Wrapper(valued: ["-i", "-o", "-e"]),
+        "taskpolicy": Wrapper(valued: ["-c", "-d", "-g", "-t", "-l"]), "arch": Wrapper(valued: ["-arch"]),
+        "flock": Wrapper(valued: ["-w", "--timeout", "-E", "--conflict-exit-code"], operands: 1),
+        "chroot": Wrapper(valued: ["-u", "-g", "-G"], operands: 1), "pkexec": Wrapper(valued: ["--user"]),
     ]
+
+    /// Shell reserved words that stand in front of the command a clause runs, as a loop's `do` and an `if`'s `then` do.
+    private static let reservedWords: Set<String> = ["do", "then", "else", "elif", "if", "while", "until", "!"]
 
     /// Programs that destroy whatever they are pointed at.
     private static let destroyers: Set<String> = [
@@ -54,43 +73,113 @@ public enum DestructiveCommand {
         case named(String, [String])
     }
 
-    /// The program a parsed clause runs, read past assignments and every wrapper.
+    /// The program a parsed clause runs, read past assignments, reserved words and every wrapper.
     private static func command(in tokens: [ShellWord]) -> Command {
         var rest = tokens[...]
         while let first = rest.first {
             guard !first.isUnresolved else { return .unresolved }
             let name = programName(first.text)
-            if TerminalLineCheck.isAssignment(first.text), rest.count > 1 {
+            if TerminalLineCheck.isAssignment(first.text) || reservedWords.contains(name), rest.count > 1 {
                 rest.removeFirst()
                 continue
             }
-            guard let flags = wrappers[name], rest.count > 1 else {
+            guard let wrapper = wrappers[name], rest.count > 1 else {
                 return .named(name, Array(rest.dropFirst().map(\.text)))
             }
             rest.removeFirst()
             while let flag = rest.first, flag.text.count > 1, flag.text.hasPrefix("-") {
                 guard !flag.isUnresolved else { return .unresolved }
                 rest.removeFirst()
-                if flags.contains(flag.text), !rest.isEmpty { rest.removeFirst() }
+                if wrapper.valued.contains(flag.text), !rest.isEmpty { rest.removeFirst() }
             }
+            rest = rest.dropFirst(wrapper.operands)
         }
         return .none
     }
 
-    /// The first kubectl argument that is neither a global flag nor the value a flag takes.
-    private static func kubectlVerb(_ lowered: [String]) -> String? {
-        let valued: Set = [
-            "-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user", "-s", "--server",
-            "--token", "--as", "--as-group", "--as-uid", "--request-timeout", "-v", "--v", "--cache-dir",
-            "--certificate-authority", "--client-certificate", "--client-key", "--tls-server-name",
-            "--password", "--username", "--profile", "--profile-output", "--log-file", "--vmodule",
-        ]
+    /// A tool whose verbs follow its option flags: the flags that take a value, and which verbs delete for good.
+    private struct VerbTool: Sendable {
+        let valued: Set<String>
+        /// Whether the tool's positional words, then all its arguments, both lowercased, name an irreversible deletion.
+        let destroys: @Sendable (_ positionals: [String], _ arguments: [String]) -> Bool
+    }
+
+    /// Cluster, cloud and hosting tools, each judged by the verbs its option flags leave.
+    private static let verbTools: [String: VerbTool] = [
+        "kubectl": VerbTool(
+            valued: [
+                "-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user", "-s", "--server",
+                "--token", "--as", "--as-group", "--as-uid", "--request-timeout", "-v", "--v", "--cache-dir",
+                "--certificate-authority", "--client-certificate", "--client-key", "--tls-server-name",
+                "--password", "--username", "--profile", "--profile-output", "--log-file", "--vmodule",
+            ],
+            destroys: { positionals, _ in positionals.first == "delete" }),
+        "gh": VerbTool(
+            valued: [
+                "-r", "--repo", "--hostname", "-x", "--method", "-f", "--field", "--raw-field", "-h", "--header",
+                "-q", "--jq", "-t", "--template", "--input", "-p", "--preview", "--cache",
+            ],
+            destroys: { positionals, arguments in
+                positionals.dropFirst().first?.hasPrefix("delete") == true
+                    || (positionals.first == "api" && requestsDelete(arguments))
+            }),
+        "aws": VerbTool(
+            valued: [
+                "--profile", "--region", "--output", "--endpoint-url", "--query", "--cli-read-timeout",
+                "--cli-connect-timeout", "--ca-bundle", "--color", "--cli-binary-format", "--exclude", "--include",
+            ],
+            destroys: { positionals, arguments in
+                guard let service = positionals.first, let operation = positionals.dropFirst().first else {
+                    return false
+                }
+                if service == "s3" {
+                    return operation == "rm" || operation == "rb" || (operation == "sync" && arguments.contains("--delete"))
+                }
+                return operation.hasPrefix("delete-") || operation.hasPrefix("terminate-")
+            }),
+        "gcloud": VerbTool(
+            valued: [
+                "--project", "--account", "--configuration", "--format", "--verbosity", "--zone", "--region",
+                "--impersonate-service-account", "--billing-project", "--filter", "--flatten",
+            ],
+            destroys: { positionals, _ in positionals.contains("delete") }),
+        "az": VerbTool(
+            valued: [
+                "--subscription", "-g", "--resource-group", "-n", "--name", "-o", "--output", "--query", "-l",
+                "--location",
+            ],
+            destroys: { positionals, _ in positionals.contains("delete") }),
+        "gsutil": VerbTool(
+            valued: ["-o", "-h", "-u"],
+            destroys: { positionals, arguments in
+                positionals.first == "rm" || positionals.first == "rb"
+                    || (positionals.first == "rsync" && arguments.contains("-d"))
+            }),
+    ]
+
+    /// The words a tool's option flags leave, each flag's value skipped and everything after `--` kept.
+    private static func positionals(_ lowered: [String], valued: Set<String>) -> [String] {
+        var found: [String] = []
         var rest = lowered[...]
         while let word = rest.popFirst() {
-            guard word.hasPrefix("-") else { return word }
+            if word == "--" {
+                found += rest
+                break
+            }
+            guard word.count > 1, word.hasPrefix("-") else {
+                found.append(word)
+                continue
+            }
             if valued.contains(word), !rest.isEmpty { rest.removeFirst() }
         }
-        return nil
+        return found
+    }
+
+    /// Whether an HTTP request's lowercased flags ask for the DELETE method.
+    private static func requestsDelete(_ arguments: [String]) -> Bool {
+        zip(arguments, arguments.dropFirst()).contains { flag, value in
+            (flag == "-x" || flag == "--method") && value == "delete"
+        } || arguments.contains { $0 == "-xdelete" || $0 == "--method=delete" }
     }
 
     /// A parsed command word as the program it names, lowercased.
@@ -105,6 +194,9 @@ public enum DestructiveCommand {
         guard case .named(let command, let arguments) = parsed else { return false }
         let lowered = arguments.map { $0.lowercased() }
         if destroyers.contains(command) || command.hasPrefix("mkfs.") { return true }
+        if let tool = verbTools[command], tool.destroys(positionals(lowered, valued: tool.valued), lowered) {
+            return true
+        }
         switch command {
         case "git":
             if matchesDestructiveGit(arguments) { return true }
@@ -126,8 +218,6 @@ public enum DestructiveCommand {
             if lowered.contains("prune") || (lowered.first == "volume" && lowered.dropFirst().first == "rm") {
                 return true
             }
-        case "kubectl":
-            if kubectlVerb(lowered) == "delete" { return true }
         case "terraform", "tofu":
             if lowered.contains("destroy") || lowered.contains("-destroy") { return true }
         case "crontab":
@@ -185,7 +275,7 @@ public enum DestructiveCommand {
         "trino", "presto", "spark-sql", "hive", "beeline", "cqlsh", "impala-shell", "vsql", "redshift",
     ]
 
-    /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, or changes discarded by a checkout, switch or restore.
+    /// Whether a git clause throws work away for good: a forced, deleting, mirroring or pruning push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, or changes discarded by a checkout, switch or restore.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
         let head = subcommandIndex(arguments)
         // The flags of the clause's own subcommand, so the same word as a message or path is not one.
@@ -196,7 +286,7 @@ public enum DestructiveCommand {
         if let flags = flags(after: "push"),
             flags.contains(where: {
                 $0.hasPrefix("--force") || $0 == "-f" || $0 == "--delete" || $0 == "-d" || $0.hasPrefix("+")
-                    || ($0.hasPrefix(":") && $0.count > 1)
+                    || ($0.hasPrefix(":") && $0.count > 1) || $0 == "--mirror" || $0 == "--prune"
             })
         {
             return true
