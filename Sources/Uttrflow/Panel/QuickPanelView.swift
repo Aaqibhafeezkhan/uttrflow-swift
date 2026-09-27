@@ -167,7 +167,7 @@ struct QuickPanelView: View {
 
     /// The mark at the head of the search bar, or nothing when the bundle lacks the resource.
     @ViewBuilder private var logo: some View {
-        if let mark = Bundle.module.image(forResource: "uttrflow-logo") {
+        if let mark = Self.logoMark {
             // The resource is an alpha shape, so the tint here is what draws it.
             Image(nsImage: mark)
                 .renderingMode(.template)
@@ -179,6 +179,9 @@ struct QuickPanelView: View {
                 .accessibilityLabel("Uttrflow")
         }
     }
+
+    /// The mark, read once, since `Bundle.image(forResource:)` does not cache and `body` runs on every key.
+    private static let logoMark = Bundle.module.image(forResource: "uttrflow-logo")
 
     /// One scrolling row: the kind filters as a segmented control, then the collection chips.
     private var chipRow: some View {
@@ -499,24 +502,12 @@ struct QuickPanelView: View {
 
     /// The picture, decoded once at drawn size; a file that has gone shows the card colour.
     private func thumbnail(_ file: URL) -> some View {
-        Group {
-            // Decoded once and at the size it is drawn; see `PanelThumbnails`.
-            if let picture = PanelThumbnails.shared.thumbnail(for: file) {
-                Image(nsImage: picture)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Color.panelCard
-            }
-        }
-        .frame(width: 34, height: 24)
-        .clipShape(.rect(cornerRadius: 4))
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.panelLine, lineWidth: 1))
-        // Kicks the off-main decode on appearance and again if the row reuses the same view for a different file.
-        .task(id: file) {
-            PanelThumbnails.shared.prepare(file)
-        }
-        .accessibilityHidden(true)
+        // Its own view, so a decode landing redraws this picture and not the whole panel; see `PanelThumbnails`.
+        PanelThumbnailView(file: file)
+            .frame(width: 34, height: 24)
+            .clipShape(.rect(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.panelLine, lineWidth: 1))
+            .accessibilityHidden(true)
     }
 
     /// Drawn only when the detector is confident, and quieter than the alias chip beside it.
