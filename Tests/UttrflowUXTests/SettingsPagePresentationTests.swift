@@ -125,8 +125,8 @@ struct SettingsGeneralDesignTests {
         #expect(row("handsFree", in: pane(.general, settings)) == nil)
         #expect(
             row("shortcut.dictate", in: pane(.general, settings))?.explanation
-                == "Press ⌥Space to start talking, and again to stop")
-        #expect(row("shortcut.dictate", in: pane(.general))?.explanation == "Hold ⌥Space to talk, anywhere")
+                == "Press ⌃⌥ to start talking, and again to stop")
+        #expect(row("shortcut.dictate", in: pane(.general))?.explanation == "Hold ⌃⌥ to talk, anywhere")
     }
 
     @Test("a held chord of modifiers names its own keys, and only Fn gets the Fn advice")
