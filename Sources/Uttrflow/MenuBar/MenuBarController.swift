@@ -42,6 +42,11 @@ final class MenuBarController: NSObject {
     /// Whether the popover is on screen.
     var isPopoverShown: Bool { panel.isVisible }
 
+    /// Signed out: a click asks for sign-in instead of opening the popover, and the menu offers only that and Quit.
+    var requiresSignIn = false {
+        didSet { if requiresSignIn { closePopover() } }
+    }
+
     init(
         statusBar: NSStatusBar = .system,
         initial: MenuBarPresentation = MenuBarPresenter.present(MenuBarState())
@@ -73,7 +78,14 @@ final class MenuBarController: NSObject {
 
     /// Drops the popover open as though clicked, for the failure whose fix is "the words are in here".
     func openMenu() {
+        guard !requiresSignIn else { return askToSignIn() }
         showPopover()
+    }
+
+    /// The one thing a click does while signed out.
+    private func askToSignIn() {
+        closePopover()
+        onCommand?(.open(.onboarding))
     }
 
     /// Gives the slot back. Without it the item lingers until the process dies.
@@ -165,6 +177,8 @@ final class MenuBarController: NSObject {
             statusItem.menu = menu
             sender.performClick(nil)
             statusItem.menu = nil
+        } else if requiresSignIn {
+            askToSignIn()
         } else if panel.isVisible {
             closePopover()
         } else {
