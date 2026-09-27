@@ -62,8 +62,9 @@
 # (or, for the private key, its exact block) so a real key added anywhere in the file
 # still fails.
 #
-# One of those values, `9f2b7c4e1a8d3f6b`, is short enough that a real secret could
-# plausibly collide with it by value alone, so its two fixture lines are allowed by
+# Two of those values, `9f2b7c4e1a8d3f6b` and `abcd1234efgh5678`, are short enough that
+# a real secret could plausibly collide with them by value alone, so their fixture lines
+# that gitleaks flags are allowed by
 # their exact matched text (`regexTarget = "match"`, key name and all) rather than by
 # the bare value — a real `api_key`-shaped credential with that same value but a
 # different key name or separator still fails.
@@ -102,9 +103,11 @@ useDefault = true
   ]
 
 [[allowlists]]
-  description = "The 9f2b7c4e1a8d3f6b fixture, allowed only by its exact key-name-and-value match text."
+  description = "The 9f2b7c4e1a8d3f6b and abcd1234efgh5678 fixtures, allowed only by their exact key-name-and-value match text."
   regexTarget = "match"
   regexes = [
     '''^API_KEY=9f2b7c4e1a8d3f6b"$''',
     '''^api_key: 9f2b7c4e1a8d3f6b"$''',
+    '''^secret-keys = abcd1234efgh5678"$''',
+    '''^SECRETKEY=abcd1234efgh5678"$''',
   ]
