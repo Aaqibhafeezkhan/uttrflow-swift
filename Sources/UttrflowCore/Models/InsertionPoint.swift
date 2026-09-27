@@ -63,4 +63,45 @@ public struct InsertionPoint: Sendable, Equatable, Codable {
 
     /// The marks after which a new sentence begins.
     private static let sentenceEnds: Set<Character> = [".", "!", "?"]
+
+    /// Pads `text` so it sits cleanly at the caret: one leading space when the character
+    /// before the caret is not whitespace and not an opening bracket or quote, and one
+    /// trailing space when the character after the caret is a word character. See issue #1908.
+    public func paddedBoundary(for text: String) -> String {
+        // A field that refused to share its preceding text cannot be reasoned about, so the
+        // dictated text is returned as-is.
+        guard let preceding = precedingText, !text.isEmpty, !text.allSatisfy(\.isWhitespace) else {
+            return text
+        }
+        var result = ""
+        if Self.requiresLeadingSpace(in: text, precedingText: preceding) {
+            result += " "
+        }
+        result += text
+        if let following = followingText, Self.requiresTrailingSpace(in: text, followingText: following) {
+            result += " "
+        }
+        return result
+    }
+
+    /// Whether the dictated word needs a leading space to read as joined onto `precedingText`.
+    private static func requiresLeadingSpace(in text: String, precedingText: String) -> Bool {
+        // The dictated text already opens with its own whitespace, so the field is already joined.
+        if text.first?.isWhitespace == true { return false }
+        guard let previous = precedingText.last, !previous.isWhitespace, !previous.isNewline else {
+            return false
+        }
+        return !openingBracketOrQuote.contains(previous)
+    }
+
+    /// Whether the dictated word needs a trailing space to read as separate from `followingText`.
+    private static func requiresTrailingSpace(in text: String, followingText: String) -> Bool {
+        // The dictated text already closes with its own whitespace, so the field is already split.
+        if text.last?.isWhitespace == true { return false }
+        guard let next = followingText.first else { return false }
+        return next.isLetter || next.isNumber || next == "_"
+    }
+
+    /// Brackets and quotes that open a context the dictated word belongs inside, so no space precedes it.
+    private static let openingBracketOrQuote: Set<Character> = ["(", "[", "{", "\"", "'", "\u{201C}", "\u{2018}"]
 }
