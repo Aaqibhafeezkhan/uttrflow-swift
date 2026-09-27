@@ -69,6 +69,11 @@ enum SuggestionLog {
         "a completion landed nowhere: \(String(describing: error)) typedChars=\(typed.count)"
     }
 
+    /// The field was not the drawn line at acceptance, so nothing was written; the reason is fixed wording only.
+    static func refusedUnwritten(_ reason: String, typed: String) -> String {
+        "a completion was refused unwritten: \(reason) typedChars=\(typed.count)"
+    }
+
     /// A turn left behind, named by the step it was waiting on and the bundle identifier of the application it read.
     static func stall(step: SuggestionTurnStep?, application: String?, afterSeconds seconds: Double) -> String
     {

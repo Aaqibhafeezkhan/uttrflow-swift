@@ -43,6 +43,26 @@ typed line, and `SuggestionLogTests` checks each one against invented text; `TUR
 A run is followed by these sizes and by the order of the lines, which is enough for
 `Scripts/e2e_predict.sh`: it types text it chose, so it knows the length to expect.
 
+## Sign-in and the session
+
+`HTTPAuthenticationService` and `KeychainTokenStore` log each step under the category
+`account`, by port and HTTP status alone. No token, code, state, email address or name is
+logged.
+
+| Line | Says |
+|---|---|
+| `sign-in: waiting on loopback port N` | the browser was given a page that comes back to port N |
+| `sign-in: no loopback port, signing in by code instead` | no port bound, so the device code is shown |
+| `sign-in: the browser came back, exchanging the code` | the redirect reached the port |
+| `sign-in: token exchange answered N` | `POST /v1/auth/token` answered N |
+| `session: token kept in the data-protection keychain` or `file-based keychain` | which keychain took the refresh token |
+| `sign-in: the Keychain refused the session` | neither keychain took it; the sign-in fails |
+| `sign-in: profile answered N` | the first `GET /v1/me` answered N |
+| `profile refused: unsigned, wrongly signed or inconsistent` | the entitlement did not verify |
+| `session: refresh answered N` | `POST /v1/auth/refresh` answered N; 401 signs this Mac out |
+| `session: profile answered N` | a later `GET /v1/me` answered N; 304 means unchanged |
+| `session: signed out on this Mac` | both halves of the session are gone |
+
 ## How it is enforced
 
 `Scripts/log_privacy_audit.py` runs in `make verify` (`make log-audit`). It reads every

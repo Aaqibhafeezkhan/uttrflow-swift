@@ -29,9 +29,6 @@ enum HiddenInputLine {
     /// How far short of the caret a row's text may end and still be the caret's row, about one character.
     static let reach: CGFloat = 6
 
-    /// How long one read may take before it gives up, since it runs on the keystroke's own read.
-    static let budget = Duration.milliseconds(40)
-
     /// How far apart two edges may be and still meet, in points.
     static let tolerance: CGFloat = 3
 
@@ -43,15 +40,14 @@ enum HiddenInputLine {
 
     /// The caret's line around an input stub at `stub`, or nothing when no rendered line sits where the stub is.
     static func read<Tree: ElementTree>(
-        around field: Tree.Element, at stub: CGRect, in tree: Tree,
-        deadline: ContinuousClock.Instant = .now + budget
+        around field: Tree.Element, at stub: CGRect, in tree: Tree, while goOn: () -> Bool = { true }
     ) -> Reading? {
         var visits = maximumElements
         var ancestor = field
         for _ in 0..<maximumAncestors {
             guard visits > 0, let parent = tree.parent(of: ancestor) else { return nil }
             ancestor = parent
-            let rows = rows(under: parent, in: tree, visits: &visits, deadline: deadline)
+            let rows = rows(under: parent, in: tree, visits: &visits, while: goOn)
             if let reading = reading(of: rows, at: stub) { return reading }
         }
         return nil
@@ -66,11 +62,11 @@ enum HiddenInputLine {
 
     /// Every row of text under a root, each keyed by the outermost element on its path that holds one line only.
     static func rows<Tree: ElementTree>(
-        under root: Tree.Element, in tree: Tree, visits: inout Int, deadline: ContinuousClock.Instant
+        under root: Tree.Element, in tree: Tree, visits: inout Int, while goOn: () -> Bool
     ) -> [Row] {
         var rows: [(container: Tree.Element, row: Row)] = []
         var stack: [(element: Tree.Element, path: [(Tree.Element, CGRect?)])] = [(root, [])]
-        while visits > 0, ContinuousClock.now < deadline, let (element, path) = stack.popLast() {
+        while visits > 0, goOn(), let (element, path) = stack.popLast() {
             visits -= 1
             // A field that hides what is typed is passed over whole, its text never asked for.
             guard !tree.isSecure(element) else { continue }

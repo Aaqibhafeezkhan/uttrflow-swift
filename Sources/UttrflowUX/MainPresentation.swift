@@ -395,7 +395,18 @@ public enum MainFormatting {
 
     /// How many words are in dictated text: whitespace-separated runs, the one definition every figure uses.
     public static func words(in text: String) -> Int {
-        text.split(whereSeparator: \.isWhitespace).count
+        // Counted in one pass without building the substrings, since every redraw counts every dictation.
+        var count = 0
+        var inWord = false
+        for character in text {
+            if character.isWhitespace {
+                inWord = false
+            } else if !inWord {
+                inWord = true
+                count += 1
+            }
+        }
+        return count
     }
 
     /// The time of day a row is stamped with: "4:12 PM".

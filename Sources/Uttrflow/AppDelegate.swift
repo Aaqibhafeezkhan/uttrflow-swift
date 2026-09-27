@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         info: Bundle.main.infoDictionary ?? [:], sdk: LiveCrashReportingSDK())
     /// Keeps the pipeline's stage timings for the session, which is what the diagnostics page reports on.
     private let diagnostics = DiagnosticsRecorder()
-    /// Anonymous counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
+    /// Counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
     private var telemetry: UsageTelemetry?
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
     private let secureInput = SecureInputWatch()
@@ -960,6 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             monitor: ActivationMonitor(),
             cue: cue,
             activation: settings.hotkeyActivation,
+            handsFreeEnabled: settings.handsFreeEnabled,
             clock: ContinuousClock(),
             onAdvice: { [weak self] advice in
                 Task { @MainActor in self?.recordingAdviceChanged(to: advice) }
@@ -2041,13 +2042,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let kept = await history.records(
                 keeping: Retention(days: settings.transcriptRetentionDays, now: Date()))
             self.kept = kept
+            hasReadHistory = true
             knownRecordings = await recordings.waiting(now: Date())
             recents = RecentDictations(showing: kept)
             knownWords = await dictionary.allEntries()
             knownSnippets = await snippets.snippets()
             readAccount()
-            await refreshPicture()
             await refreshPermissions()
+            // The picture may need a round trip, so it follows the paint rather than holding it back.
+            defer { Task { [weak self] in await self?.refreshPictureThenRedraw() } }
             // A later refresh has newer state, and painting over it would leave the older reading up.
             guard reading == refreshGeneration else { return }
             // Read even out of sight, since the menu's Recent list comes from this reading too.
@@ -2079,7 +2082,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     systemName: NSFullUserName(),
                     shortcut: shortcut, settings: settings, now: now,
                     speechModel: speechModelLoad, speechDownload: speechReadiness.download,
-                    speechModelBytes: SpeechModel.default.downloadBytes)),
+                    speechModelBytes: SpeechModel.default.downloadBytes, hasReadHistory: hasReadHistory)),
             sidebar: SidebarPresenter.sidebar(
                 for: SidebarSnapshot(
                     // The page the window shows, which may be the Settings page on one of its tabs.
@@ -2097,7 +2100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for: HistorySnapshot(
                     entries: entries, query: query(for: .history), settings: settings,
                     keepsRecordings: true, recordings: knownRecordings,
-                    retrying: retryingRecording, playing: playback.playing, now: now)),
+                    retrying: retryingRecording, playing: playback.playing, now: now,
+                    hasReadHistory: hasReadHistory)),
             dictionary: DictionaryPresenter.page(
                 for: DictionarySnapshot(
                     entries: knownWords, draft: wordDraft, refusal: wordRefusal,
@@ -2113,7 +2117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             insights: InsightsPresenter.page(
                 for: InsightsSnapshot(
                     entries: entries, settings: settings,
-                    range: InsightsRange(rawValue: scope(for: .insights)), now: now)),
+                    range: InsightsRange(rawValue: scope(for: .insights)), now: now,
+                    hasReadHistory: hasReadHistory)),
             snippets: SnippetsPresenter.page(
                 for: SnippetsSnapshot(
                     snippets: knownSnippets, draft: snippetDraft, refusal: snippetRefusal,
@@ -2200,6 +2205,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var mainWindowIsBehind = false
     /// Everything the store keeps, which is not ``recents`` — that is the menu's five.
     private var kept: [DictationRecord] = []
+    /// Whether ``kept`` has been read yet, so Home never shows its first-run page before it knows.
+    private var hasReadHistory = false
     /// Recordings whose words were lost, as of the last refresh.
     private var knownRecordings: [KeptRecording] = []
     /// The recording the pipeline is running again, so its row can say so.
@@ -2220,6 +2227,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The last answer each gate gave; absent means unchecked, which the pages draw as silence.
     private var knownPermissions: [PermissionKind: PermissionStatus] = [:]
+
+    /// Reads the account picture and redraws only when it changed.
+    private func refreshPictureThenRedraw() async {
+        let before = knownPicture?.path
+        await refreshPicture()
+        if knownPicture?.path != before { redrawMainWindow() }
+    }
 
     private func refreshPicture() async {
         guard let path = account.profiles.load()?.account.avatarPath else {
@@ -2482,6 +2496,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if updated.hotkeyActivation != previous.hotkeyActivation {
             let activation = updated.hotkeyActivation
             Task { [weak self] in await self?.controller?.setActivation(activation) }
+        }
+        if updated.handsFreeEnabled != previous.handsFreeEnabled {
+            let enabled = updated.handsFreeEnabled
+            Task { [weak self] in await self?.controller?.setHandsFreeEnabled(enabled) }
         }
         telemetry?.setEnabled(updated.sharesUsageStatistics)
         // As above: a switch that drew itself and changed nothing.

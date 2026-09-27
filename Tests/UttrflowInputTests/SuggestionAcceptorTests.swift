@@ -552,3 +552,77 @@ struct LaggingReadAcceptTests {
         #expect(field.text.isEmpty)
     }
 }
+
+/// Focus whose field has stopped answering, or hides what is typed, at the moment of acceptance.
+private struct ChangedFocus: AccessibilityFocus {
+    let field: any FocusedTextField
+    let isSecure: Bool
+    let tail: FieldTail
+    func focusedTextField() -> (any FocusedTextField)? { field }
+    func hasFocusedElement() -> Bool { true }
+    func isSelfFrontmost() -> Bool { false }
+    func frontmostApplication() -> InsertionDestination? { nil }
+    func focusedFieldIsSecure() -> Bool { isSecure }
+    func tail(upTo count: Int) -> FieldTail { tail }
+}
+
+@Suite("Accepting into a field that changed under the ghost")
+struct ChangedFieldAcceptTests {
+    private func acceptor(
+        _ field: RecordingField, typist: RecordingTypist, isSecure: Bool = false, tail: FieldTail
+    ) -> SuggestionAcceptor {
+        let focus = ChangedFocus(field: field, isSecure: isSecure, tail: tail)
+        return SuggestionAcceptor(
+            completion: TextInsertion.completion(focus: focus, typist: typist), focus: focus)
+    }
+
+    @Test("A field that cannot be read at acceptance is refused, and an add-only edit writes nothing.")
+    func refusesAnUnreadableAppend() async {
+        let field = RecordingField()
+        let typist = RecordingTypist()
+        let accepting = acceptor(field, typist: typist, tail: .unreadable)
+        #expect(
+            await accepting.aim(.certain("git commit"), after: "git com")
+                == .refused("the focused field cannot be read"))
+        await #expect(throws: TextInsertionError.self) {
+            try await accepting.accept(.certain("git commit"), after: "git com")
+        }
+        #expect(field.text.isEmpty)
+        #expect(typist.text.isEmpty)
+    }
+
+    @Test("A field that cannot be read at acceptance is refused, and a replacing edit sends no backspace.")
+    func refusesAnUnreadableReplacement() async {
+        let field = RecordingField()
+        let typist = RecordingTypist()
+        await #expect(throws: TextInsertionError.self) {
+            try await acceptor(field, typist: typist, tail: .unreadable)
+                .accept(.certain("git commit -m"), after: "gti c")
+        }
+        #expect(field.text.isEmpty)
+        #expect(field.replaced.isEmpty)
+        #expect(typist.deletions.isEmpty)
+    }
+
+    @Test("A field that hides what is typed is refused even when its line reads as the one drawn.")
+    func refusesASecureField() async {
+        let field = RecordingField()
+        let typist = RecordingTypist()
+        let accepting = acceptor(field, typist: typist, isSecure: true, tail: .text("git com"))
+        #expect(
+            await accepting.aim(.certain("git commit"), after: "git com")
+                == .refused("the focused field hides what is typed"))
+        await #expect(throws: TextInsertionError.self) {
+            try await accepting.accept(.certain("git commit"), after: "git com")
+        }
+        #expect(field.text.isEmpty)
+    }
+
+    @Test("A readable field that is the drawn line is aimed at the edit drawn.")
+    func aimsAtAReadableField() async {
+        let field = RecordingField()
+        let accepting = acceptor(field, typist: RecordingTypist(), tail: .text("git com"))
+        let aim = await accepting.aim(.certain("git commit"), after: "git com")
+        #expect(aim == .write(Acceptance.Edit(replaced: "", inserted: "mit")))
+    }
+}

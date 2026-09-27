@@ -509,3 +509,85 @@ struct CappedDecodeUnresolvedTests {
         #expect(!flagged.isPlain)
     }
 }
+
+/// A recogniser that answers each call with the next transcript it was given, and the last one after that.
+private actor ScriptedBackend: TranscriptionBackend {
+    let minimumDuration: Duration = .zero
+    private var script: [RawTranscript]
+
+    init(_ script: [RawTranscript]) { self.script = script }
+
+    func load() async throws(SpeechEngineError) {}
+
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?
+    ) async throws(SpeechEngineError) -> RawTranscript {
+        try await transcribe(samples, languageHint: languageHint, biasedTowards: [])
+    }
+
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?, biasedTowards vocabulary: [String]
+    ) async throws(SpeechEngineError) -> RawTranscript {
+        script.count > 1 ? script.removeFirst() : script[0]
+    }
+}
+
+@Suite("A capped decode resumed from its last normal word")
+struct CappedDecodeResumeTests {
+    @Test("keeps the stretched fragment out, so the audio decoded again is written once")
+    func fragmentIsNotKeptPastTheResumePoint() async throws {
+        let backend = ScriptedBackend([
+            RawTranscript(
+                text: "hello world tomor",
+                segments: [
+                    RawSegment(
+                        text: "hello world tomor", start: 0, end: 3.0,
+                        words: [
+                            RawWord(text: "hello", start: 0.0, end: 0.4, probability: 0.9),
+                            RawWord(text: "world", start: 0.4, end: 0.8, probability: 0.9),
+                            RawWord(text: "tomor", start: 0.8, end: 3.0, probability: 0.9),
+                        ])
+                ], tokensUsed: 220),
+            RawTranscript(
+                text: "tomorrow",
+                segments: [
+                    RawSegment(
+                        text: "tomorrow", start: 0, end: 2.2,
+                        words: [RawWord(text: "tomorrow", start: 0.0, end: 2.2, probability: 0.9)])
+                ], tokensUsed: 30),
+        ])
+        let samples = Array(repeating: Float(0.1), count: 3 * 16_000)
+
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .english, vocabulary: [], using: backend)
+
+        #expect(raw.text == "hello world tomorrow")
+        let words = raw.segments.flatMap { $0.words ?? [] }
+        #expect(words.map(\.text) == ["hello", "world", "tomorrow"])
+        #expect(zip(words, words.dropFirst()).allSatisfy { $0.end <= $1.start })
+        #expect(raw.segments.map(\.text) == ["hello world", "tomorrow"])
+    }
+
+    @Test("leaves a decode that did not hit the cap as the recogniser wrote it")
+    func uncappedDecodeIsUntouched() async throws {
+        let backend = ScriptedBackend([
+            RawTranscript(
+                text: " Hello, world.",
+                segments: [
+                    RawSegment(
+                        text: " Hello, world.", start: 0, end: 3.0,
+                        words: [
+                            RawWord(text: " Hello,", start: 0.0, end: 0.4, probability: 0.9),
+                            RawWord(text: " world.", start: 0.4, end: 2.5, probability: 0.9),
+                        ])
+                ], tokensUsed: 20)
+        ])
+        let samples = Array(repeating: Float(0.1), count: 3 * 16_000)
+
+        let raw = try await CappedDecodeRetry.transcribe(
+            samples: samples, languageHint: .english, vocabulary: [], using: backend)
+
+        #expect(raw.text == "Hello, world.")
+        #expect(raw.segments.map(\.text) == [" Hello, world."])
+    }
+}

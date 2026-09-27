@@ -5,12 +5,21 @@ import Testing
 @testable import UttrflowContext
 
 /// A field that answers only the questions a test gives it an answer for.
+private struct Field {
+    var bounds: (Int, Int) -> CGRect? = { _, _ in nil }
+    var marker: CGRect? = nil
+    var frame: CGRect? = nil
+
+    func caret(at selection: (location: Int, length: Int)?) -> CGRect? {
+        CaretLocator.caret(at: selection, frame: frame, bounds: bounds, markerBounds: { marker })
+    }
+}
+
+/// The field a test describes.
 private func locator(
-    bounds: @escaping (Int, Int) -> CGRect? = { _, _ in nil },
-    marker: CGRect? = nil,
-    frame: CGRect? = nil
-) -> CaretLocator {
-    CaretLocator(bounds: bounds, markerBounds: { marker }, frame: { frame })
+    bounds: @escaping (Int, Int) -> CGRect? = { _, _ in nil }, marker: CGRect? = nil, frame: CGRect? = nil
+) -> Field {
+    Field(bounds: bounds, marker: marker, frame: frame)
 }
 
 @Suite("Where the caret is found from a field's answers")

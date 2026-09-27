@@ -136,6 +136,7 @@ private final class StopGestureSpy: Sendable {
 
 private func makeHarness(
     activation: HotkeyActivation = .holdToTalk,
+    handsFreeEnabled: Bool = true,
     captureStart: ScriptedOutcome<Void, AudioCaptureError> = .ok,
     monitorStart: ScriptedOutcome<Void, HotkeyError> = .ok,
     gestureSpy: StopGestureSpy = StopGestureSpy()
@@ -162,6 +163,7 @@ private func makeHarness(
             monitor: monitor,
             cue: cue,
             activation: activation,
+            handsFreeEnabled: handsFreeEnabled,
             clock: clock,
             onStopGestureChange: { gesture in gestureSpy.record(gesture) }
         ),
@@ -296,6 +298,69 @@ struct DictationControllerTests {
         await tap(harness)
 
         #expect(await harness.pipeline.currentState.isListening == false)
+        #expect(harness.inserter.received == [controllerTidied])
+    }
+
+    @Test("with hands-free switched off, a double tap is two slips")
+    func doubleTapWithHandsFreeOffIsTwoSlips() async {
+        let harness = makeHarness(handsFreeEnabled: false)
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+
+        #expect(await harness.pipeline.currentState.isListening == false)
+        #expect(harness.inserter.received.isEmpty, "a slip inserts nothing")
+    }
+
+    @Test("with hands-free switched off, a modifier-only double tap opens nothing")
+    func modifierDoubleTapWithHandsFreeOffOpensNothing() async throws {
+        let harness = makeHarness(handsFreeEnabled: false)
+        try await harness.controller.start(
+            binding: HotkeyBinding(keyCode: 58, modifiers: [.option, .command, .control]))
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+
+        #expect(await harness.pipeline.currentState.isListening == false)
+        await harness.controller.stop()
+    }
+
+    @Test("switching hands-free off finishes a double-tap dictation and keeps its words")
+    func switchingHandsFreeOffFinishesIt() async {
+        let harness = makeHarness()
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+        #expect(await harness.pipeline.currentState.isListening)
+
+        await harness.controller.setHandsFreeEnabled(false)
+
+        #expect(await harness.pipeline.currentState.isListening == false)
+        #expect(harness.inserter.received == [controllerTidied])
+        #expect(await harness.controller.isHandsFreeEnabled == false)
+    }
+
+    @Test("switching hands-free back on lets the next double tap open the microphone")
+    func switchingHandsFreeBackOnWorks() async {
+        let harness = makeHarness(handsFreeEnabled: false)
+        await harness.controller.setHandsFreeEnabled(false)
+        await harness.controller.setHandsFreeEnabled(true)
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+
+        #expect(await harness.pipeline.currentState.isListening)
+    }
+
+    @Test("switching hands-free off leaves a held dictation alone")
+    func switchingHandsFreeOffLeavesAHold() async {
+        let harness = makeHarness()
+        await harness.controller.handle(.pressed)
+        await harness.controller.setHandsFreeEnabled(false)
+
+        #expect(await harness.pipeline.currentState.isListening, "a hold is not hands-free")
+        harness.clock.advance(by: .seconds(3))
+        await harness.controller.handle(.released)
         #expect(harness.inserter.received == [controllerTidied])
     }
 
