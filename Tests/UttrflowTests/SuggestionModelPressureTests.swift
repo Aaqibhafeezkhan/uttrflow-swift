@@ -160,7 +160,8 @@ struct MemoryPressureTests {
         let steps = Steps()
         let sandbox = Sandbox()
         let app = app(steps, in: sandbox)
-        app.memoryPressure = SuggestionModelPressure(firstWait: .milliseconds(200), longestWait: .seconds(1_800))
+        app.memoryPressure = SuggestionModelPressure(
+            firstWait: .milliseconds(200), longestWait: .seconds(1_800))
         app.settingsChanged(to: settings(suggesting: true))
         await app.modelPreparation?.value
         app.memoryPressureChanged(to: .warning)

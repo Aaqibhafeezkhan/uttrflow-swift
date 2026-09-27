@@ -684,7 +684,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             releaseTheModel()
             suggestionModel = .releasedForMemory
         case .normal:
-            guard memoryPressure.isReleased, pressureReload == nil else { return }  // a repeated calm keeps the countdown already running
+            // A repeated calm keeps the countdown already running.
+            guard memoryPressure.isReleased, pressureReload == nil else { return }
             let wait = memoryPressure.wait
             pressureReload = Task { [weak self] in
                 try? await Task.sleep(for: wait)
