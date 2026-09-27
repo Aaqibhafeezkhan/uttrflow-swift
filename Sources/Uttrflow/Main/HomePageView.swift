@@ -55,7 +55,8 @@ struct HomePageContent: View {
                     .accessibilityAddTraits(.isHeader)
             }
             Spacer(minLength: 0)
-            HomeSearchField(action: presentation.search, onIntent: onIntent)
+            HomeSearchField(
+                action: presentation.search, isEnabled: presentation.canSearch, onIntent: onIntent)
         }
     }
 
@@ -76,6 +77,8 @@ struct HomePageContent: View {
 /// The search field in the top bar: a button that looks like a field and opens History's search, also on ⌘K.
 struct HomeSearchField: View {
     let action: MainAction
+    /// False while History is empty and has no search field to open; the field is then dimmed and inert.
+    var isEnabled = true
     var onIntent: (MainIntent) -> Void
 
     var body: some View {
@@ -108,8 +111,15 @@ struct HomeSearchField: View {
         }
         .buttonStyle(.plain)
         .keyboardShortcut("k", modifiers: .command)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.5)
+        .help(isEnabled ? "" : Self.nothingToSearch)
         .accessibilityLabel(action.title)
     }
+
+    /// Why the field is dimmed while there is no history.
+    static let nothingToSearch = "Nothing to search yet. Your dictations appear here once you have some."
+
 }
 
 /// One figure with its icon disc and goal ring, washed in its accent.

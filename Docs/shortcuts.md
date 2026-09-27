@@ -146,14 +146,14 @@ What it affects is every dictation binding with a key in it, such as the default
 made only of held modifiers is read from modifier changes rather than key presses, but the notice is
 shown whatever the binding, because the check says only that secure input is on. The Carbon hot keys the clipboard and other
 claimed shortcuts use are delivered anyway, so the clipboard panel can open while dictation cannot.
-Start Dictation in the menu bar and the floating button still work, because neither goes through
+Talk in the menu bar popover and the floating button still work, because neither goes through
 the tap.
 
 `SecureInputWatch` asks `IsSecureEventInputEnabled()` when another app becomes active and when the
-menu bar menu opens — never on a timer, which the energy budget in `Docs/performance.md` rules
-out. When the answer changes, the menu shows the reason under its status line and the floating
+menu bar popover opens — never on a timer, which the energy budget in `Docs/performance.md` rules
+out. When the answer changes, the popover shows the reason in its header and the floating
 button's hover hint says it in place of the keycap, until a later check finds it off again. An app
-that turns secure input on a moment after it becomes active is caught by the next menu open
+that turns secure input on a moment after it becomes active is caught by the next popover open
 rather than by the switch.
 
 ## What a shortcut is for

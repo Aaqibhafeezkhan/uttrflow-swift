@@ -251,6 +251,26 @@ struct DiagnosticsEngineTests {
         #expect(page.engines.first?.detail == "Downloaded speech model")
     }
 
+    @Test("the speech row is not green while the model it needs is missing")
+    func speechRowAgreesWithTheMissingModel() {
+        let missing = DiagnosticsModelPresence(isInstalled: false, bytesOnDisk: nil, isMultilingual: true)
+        let page = DiagnosticsFixture.page(model: missing)
+
+        #expect(page.engines.first?.state == .attention)
+        #expect(page.engines.first?.detail == "Downloaded speech model, not downloaded yet")
+        #expect(page.storage.first?.detail == "Not downloaded")
+
+        let installed = DiagnosticsFixture.page(
+            model: DiagnosticsModelPresence(isInstalled: true, bytesOnDisk: nil, isMultilingual: true))
+        #expect(installed.engines.first?.state == .good)
+
+        let system = DiagnosticsFixture.page(
+            engines: EngineConfiguration(speech: .appleSpeech, transformerPreference: [.rules]),
+            model: missing)
+        #expect(system.engines.first?.state == .good)
+        #expect(system.engines.first?.detail == "Built-in speech recognition")
+    }
+
     /// The first one that can run is the one that runs; the rest are standing by.
     @Test("only the first available clean-up engine is in use")
     func firstAvailableIsInUse() {

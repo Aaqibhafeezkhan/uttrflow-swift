@@ -1,147 +1,172 @@
-// The Insights page: the daily chart, the average line, pace and accuracy, and where the words went.
+// The Insights page: a calendar of how much was said each day, a range switch, and four figures.
 public import Foundation
 public import UttrflowHistory
 public import UttrflowSettings
 
-/// One day's bar in the words-dictated chart.
-public struct InsightsDay: Sendable, Equatable, Identifiable {
-    /// The number on the axis: "23".
-    public let label: String
+/// How far back the calendar reaches.
+public enum InsightsRange: String, Sendable, CaseIterable, Identifiable {
+    case week = "7"
+    case month = "30"
+    case quarter = "90"
+
+    /// The identifier the page reports back when this range is picked.
+    public var id: String { rawValue }
+
+    /// The days the range covers, today included.
+    public var days: Int {
+        switch self {
+        case .week: 7
+        case .month: 30
+        case .quarter: 90
+        }
+    }
+
+    /// "30 days".
+    public var title: String { "\(days) days" }
+}
+
+/// One segment of the range switch.
+public struct InsightsRangeOption: Sendable, Equatable, Identifiable {
+    /// The range this segment picks.
+    public let range: InsightsRange
+    /// Whether this is the range the calendar shows.
+    public let isSelected: Bool
+    /// Why the range cannot be picked; absent when it can.
+    public let unavailableReason: String?
+
+    /// The range's identifier.
+    public var id: String { range.id }
+    /// "30 days".
+    public var title: String { range.title }
+    /// Whether the range reaches no further back than history is kept.
+    public var isAvailable: Bool { unavailableReason == nil }
+
+    /// Builds a segment.
+    public init(range: InsightsRange, isSelected: Bool, unavailableReason: String? = nil) {
+        self.range = range
+        self.isSelected = isSelected
+        self.unavailableReason = unavailableReason
+    }
+}
+
+/// One day's tile on the calendar.
+public struct InsightsCalendarDay: Sendable, Equatable, Identifiable {
+    /// The start of the day.
+    public let date: Date
+    /// The day of the month drawn on the tile: "26".
+    public let number: String
     /// Words dictated that day.
     public let words: Int
-    /// Of the tallest day in the window, so the view scales nothing itself.
+    /// Of the busiest day in the range, 0…1, so the view scales nothing itself.
     public let fraction: Double
-    /// A day with no dictation, drawn flat and grey rather than omitted, since a missing bar is a mystery.
-    public let isSilent: Bool
-    /// Whether this bar is today's.
+    /// Whether this tile is today's.
     public let isToday: Bool
+    /// "1,284 words · 26 Sept", shown on hover and read aloud.
+    public let detail: String
 
-    /// The label, which is unique within the window.
-    public var id: String { label }
+    /// The day, which is unique within the range.
+    public var id: Date { date }
+    /// A day with nothing said, drawn as a bare tile.
+    public var isSilent: Bool { words == 0 }
+    /// The teal's opacity: a floor so a quiet day still reads as spoken on, rising to full on the busiest.
+    public var shade: Double { isSilent ? 0 : 0.15 + 0.85 * fraction }
+    /// Whether the number sits on a tile dark enough to need the deep ink rather than the soft one.
+    public var usesDeepInk: Bool { fraction > 0.6 }
 
-    /// Builds a bar; the fraction is clamped to 0…1.
-    public init(label: String, words: Int, fraction: Double, isSilent: Bool, isToday: Bool) {
-        self.label = label
-        self.words = words
-        self.fraction = min(max(fraction, 0), 1)
-        self.isSilent = isSilent
-        self.isToday = isToday
-    }
-}
-
-/// One app, and the share of dictations that went into it.
-public struct InsightsPlace: Sendable, Equatable, Identifiable {
-    /// The app.
-    public let application: HistoryApplication
-    /// Its share of dictations, 0…1.
-    public let share: Double
-    /// "41%".
-    public let percentage: String
-    /// "1,249 words": how much of the dictating there was, where the share says how it divides.
-    public let words: String
-
-    /// The app's name, which is unique in the list.
-    public var id: String { application.name }
-
-    /// Builds a place; the share is clamped to 0…1.
+    /// Builds a tile; the fraction is clamped to 0…1.
     public init(
-        application: HistoryApplication, share: Double, percentage: String, words: String
+        date: Date, number: String, words: Int, fraction: Double, isToday: Bool, detail: String
     ) {
-        self.application = application
-        self.share = min(max(share, 0), 1)
-        self.percentage = percentage
+        self.date = date
+        self.number = number
         self.words = words
+        self.fraction = min(max(fraction, 0), 1)
+        self.isToday = isToday
+        self.detail = detail
     }
 }
 
-/// The line across the chart that turns each bar into a statement, at the cost of one dashed line.
-public struct InsightsAverage: Sendable, Equatable {
-    /// The mean, rounded.
-    public let words: Int
-    /// Where the line sits, on the same scale as ``InsightsDay/fraction``, so the view scales nothing.
-    public let fraction: Double
-    /// "388 a day".
-    public let label: String
+/// The range laid out as weeks, first weekday on the left.
+public struct InsightsCalendar: Sendable, Equatable {
+    /// The shades the legend steps through, from less to more.
+    public static let legend: [Double] = [0.15, 0.4, 0.65, 0.9]
 
-    /// Builds the line; the fraction is clamped to 0…1.
-    public init(words: Int, fraction: Double, label: String) {
-        self.words = words
-        self.fraction = min(max(fraction, 0), 1)
-        self.label = label
+    /// The months the range spans: "August – September".
+    public let title: String
+    /// The weekday initials across the top, starting on the calendar's first weekday.
+    public let weekdays: [String]
+    /// The empty cells before the first day, so each day falls under its weekday.
+    public let leadingBlanks: Int
+    /// One tile per day of the range, oldest first.
+    public let days: [InsightsCalendarDay]
+
+    /// The rows the grid needs.
+    public var weeks: Int { (leadingBlanks + days.count + 6) / 7 }
+
+    /// Builds a calendar; the blanks are clamped to 0…6.
+    public init(title: String, weekdays: [String], leadingBlanks: Int, days: [InsightsCalendarDay]) {
+        self.title = title
+        self.weekdays = weekdays
+        self.leadingBlanks = min(max(leadingBlanks, 0), 6)
+        self.days = days
     }
 }
 
 /// Everything the insights page is drawn from.
 public struct InsightsSnapshot: Sendable, Equatable {
-    /// Newest first, before retention is applied. The only thing this page now reads.
+    /// Newest first, before retention is applied.
     public let entries: [HistoryEntry]
     /// The user's settings, for the retention window.
     public let settings: Settings
+    /// The range last picked, if any; the presenter falls back when it is absent or out of reach.
+    public let range: InsightsRange?
     /// The clock the page is drawn against.
     public let now: Date
 
-    /// Builds a snapshot; entries and settings default to empty.
+    /// Builds a snapshot; entries and settings default to empty, the range to the presenter's choice.
     public init(
         entries: [HistoryEntry] = [],
         settings: Settings = .default,
+        range: InsightsRange? = nil,
         now: Date
     ) {
         self.entries = entries
         self.settings = settings
+        self.range = range
         self.now = now
     }
 }
 
 /// What the insights page shows.
 public struct InsightsPresentation: Sendable, Equatable {
-    /// The title, caption and window label across the top.
+    /// The title and caption across the top.
     public let chrome: MainPageChrome
-    /// The chart along the top. Empty exactly when ``emptyState`` is set.
-    public let days: [InsightsDay]
-    /// The mean across the charted days. Absent when there is nothing to average.
-    public let average: InsightsAverage?
-    /// "12,410 words · 10–23 August".
-    public let chartCaption: String
-    /// The heading over the chart.
-    public let chartTitle: String
-    /// Words per minute, and accuracy where it can be measured; two tiles or one, never a placeholder.
+    /// The range switch. Empty exactly when ``emptyState`` is set.
+    public let ranges: [InsightsRangeOption]
+    /// The calendar. Absent exactly when ``emptyState`` is set.
+    public let calendar: InsightsCalendar?
+    /// Words, dictations, words per minute and the streak, in that order.
     public let figures: [MainStatistic]
-    /// The pace, day by day, for the sparkline. Empty when nothing was timed.
-    public let paceTrend: [Int]
-    /// The apps dictated into, busiest first.
-    public let places: [InsightsPlace]
-    /// Shown until there is a week to chart.
+    /// Shown until there is a week to show.
     public let emptyState: MainEmptyState?
-    /// The line under the page while there is a chart.
-    public let footnote: String?
 
     /// Builds the page from its parts.
     public init(
         chrome: MainPageChrome,
-        days: [InsightsDay],
-        average: InsightsAverage?,
-        chartCaption: String,
-        chartTitle: String,
+        ranges: [InsightsRangeOption],
+        calendar: InsightsCalendar?,
         figures: [MainStatistic],
-        paceTrend: [Int],
-        places: [InsightsPlace],
-        emptyState: MainEmptyState?,
-        footnote: String?
+        emptyState: MainEmptyState?
     ) {
         self.chrome = chrome
-        self.days = days
-        self.average = average
-        self.chartCaption = chartCaption
-        self.chartTitle = chartTitle
+        self.ranges = ranges
+        self.calendar = calendar
         self.figures = figures
-        self.paceTrend = paceTrend
-        self.places = places
         self.emptyState = emptyState
-        self.footnote = footnote
     }
 }
 
-/// Turns a fortnight of dictations into what can honestly be said; no "time saved" or language card.
+/// Turns the kept dictations into a calendar and the figures that can honestly be given.
 public enum InsightsPresenter {
     /// A week, because a baseline drawn from three days is noise wearing a number's clothes.
     public static let daysBeforeCharting = 7
@@ -152,172 +177,159 @@ public enum InsightsPresenter {
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent
     ) -> InsightsPresentation {
-        let kept = HistoryPresenter.retained(
-            snapshot.entries, days: snapshot.settings.transcriptRetentionDays, now: snapshot.now)
-        let window = snapshot.settings.transcriptRetentionDays
+        let retention = snapshot.settings.transcriptRetentionDays
+        let kept = HistoryPresenter.retained(snapshot.entries, days: retention, now: snapshot.now)
         let spoken = daysSpokenOn(kept, calendar: calendar)
-        let ready = spoken.count >= daysBeforeCharting
-        let days = ready ? bars(for: kept, snapshot: snapshot, calendar: calendar, locale: locale) : []
+        let chrome = MainPageChrome(
+            title: "Insights",
+            caption: "Where the words went, and how fast they arrived. Measured on this Mac.")
 
-        return InsightsPresentation(
-            chrome: MainPageChrome(
-                title: "Insights",
-                caption: "Where the words went, and how fast they arrived.",
-                // A label, not a choice: the window is the retention setting, not this page's to widen.
-                scope: MainScope(
-                    title: "Last \(MainFormatting.count(window, "day", "days"))")),
-            days: days,
-            average: ready ? average(across: days, locale: locale) : nil,
-            chartCaption: ready
-                ? caption(
-                    for: kept, days: days, snapshot: snapshot, calendar: calendar, locale: locale)
-                : "",
-            chartTitle: "Words dictated",
-            figures: ready ? figures(for: kept, locale: locale) : [],
-            paceTrend: ready ? paceTrend(for: kept, calendar: calendar) : [],
-            places: ready ? places(for: kept, locale: locale) : [],
-            emptyState: ready
-                ? nil
-                : emptyState(
+        guard spoken.count >= daysBeforeCharting else {
+            return InsightsPresentation(
+                chrome: chrome, ranges: [], calendar: nil, figures: [],
+                emptyState: emptyState(
                     for: kept, daysSpokenOn: spoken.count, now: snapshot.now, calendar: calendar,
-                    locale: locale),
-            footnote: ready
-                ? """
-                Measured on this Mac over the last \(MainFormatting.count(window, "day", "days")). \
-                Never sent anywhere. There is no “time saved” figure: it would need a guess at \
-                how fast you type, and Uttrflow has never watched you type.
-                """
-                : nil)
+                    locale: locale))
+        }
+
+        let range = chosen(snapshot.range, retention: retention)
+        let inRange = within(range, kept, now: snapshot.now, calendar: calendar)
+        return InsightsPresentation(
+            chrome: chrome,
+            ranges: options(selected: range, retention: retention),
+            calendar: self.calendar(
+                for: inRange, range: range, now: snapshot.now, calendar: calendar, locale: locale),
+            figures: figures(
+                inRange: inRange, kept: kept, now: snapshot.now, calendar: calendar, locale: locale),
+            emptyState: nil)
     }
 
-    // MARK: - What there is to chart
+    // MARK: - The range
+
+    /// Whether history is kept long enough for the range to show anything; a week is always offered.
+    static func reaches(_ range: InsightsRange, retention: Int) -> Bool {
+        range.days <= max(retention, InsightsRange.week.days)
+    }
+
+    /// The range asked for when it is in reach, else the longest in reach up to a month.
+    static func chosen(_ asked: InsightsRange?, retention: Int) -> InsightsRange {
+        if let asked, reaches(asked, retention: retention) { return asked }
+        return reaches(.month, retention: retention) ? .month : .week
+    }
+
+    /// The three segments, a range beyond what is kept saying why it cannot be picked.
+    static func options(selected: InsightsRange, retention: Int) -> [InsightsRangeOption] {
+        InsightsRange.allCases.map { range in
+            InsightsRangeOption(
+                range: range, isSelected: range == selected,
+                unavailableReason: reaches(range, retention: retention)
+                    ? nil
+                    : """
+                    History is kept for \(MainFormatting.count(retention, "day", "days")). \
+                    Keep it longer in Settings to see \(range.title).
+                    """)
+        }
+    }
+
+    /// The first day of the range, today being its last.
+    static func firstDay(of range: InsightsRange, now: Date, calendar: Calendar) -> Date {
+        let today = calendar.startOfDay(for: now)
+        return calendar.date(byAdding: .day, value: -(range.days - 1), to: today) ?? today
+    }
+
+    /// The dictations said on a day of the range.
+    static func within(
+        _ range: InsightsRange, _ entries: [HistoryEntry], now: Date, calendar: Calendar
+    ) -> [HistoryEntry] {
+        let first = firstDay(of: range, now: now, calendar: calendar)
+        return entries.filter { $0.when >= first }
+    }
+
+    // MARK: - The calendar
 
     /// The distinct days the user said something on; fifty dictations in one afternoon is one afternoon.
     static func daysSpokenOn(_ entries: [HistoryEntry], calendar: Calendar) -> Set<Date> {
         Set(entries.map { calendar.startOfDay(for: $0.when) })
     }
 
-    /// One bar per day of the window, oldest first, silent days included.
-    static func bars(
-        for entries: [HistoryEntry], snapshot: InsightsSnapshot, calendar: Calendar, locale: Locale
-    ) -> [InsightsDay] {
-        let today = calendar.startOfDay(for: snapshot.now)
+    /// Words said on each day, keyed by the start of the day.
+    static func wordsByDay(_ entries: [HistoryEntry], calendar: Calendar) -> [Date: Int] {
         var totals: [Date: Int] = [:]
         for entry in entries {
-            let day = calendar.startOfDay(for: entry.when)
-            totals[day, default: 0] += MainFormatting.words(in: entry.text)
+            totals[calendar.startOfDay(for: entry.when), default: 0] += MainFormatting.words(in: entry.text)
         }
-
-        let span = (0..<snapshot.settings.transcriptRetentionDays).reversed().compactMap {
-            calendar.date(byAdding: .day, value: -$0, to: today)
-        }
-        // A floor of one keeps the division safe without a branch for a window this path never asks for.
-        let peak = totals.values.reduce(1, max)
-
-        return span.map { day in
-            let words = totals[day] ?? 0
-            return InsightsDay(
-                label: day.formatted(.dateTime.day().locale(locale)),
-                words: words,
-                fraction: Double(words) / Double(peak),
-                isSilent: words == 0,
-                isToday: day == today)
-        }
+        return totals
     }
 
-    /// "12,410 words · 10–23 August".
-    static func caption(
-        for entries: [HistoryEntry], days: [InsightsDay], snapshot: InsightsSnapshot,
-        calendar: Calendar, locale: Locale
-    ) -> String {
-        let total = MainFormatting.count(entries.totalWords, "word", "words")
-        // A window with no first day is a window of nothing, so the caption is then the total on its own.
-        let range = calendar.date(byAdding: .day, value: -(days.count - 1), to: snapshot.now)
-            .map { first in
-                let from = first.formatted(.dateTime.day().locale(locale))
-                let to = snapshot.now.formatted(.dateTime.day().month(.wide).locale(locale))
-                return "\(from)–\(to)"
+    /// One tile per day of the range, oldest first, after the blanks that line the first up with its weekday.
+    static func calendar(
+        for entries: [HistoryEntry], range: InsightsRange, now: Date, calendar: Calendar,
+        locale: Locale
+    ) -> InsightsCalendar {
+        let today = calendar.startOfDay(for: now)
+        let first = firstDay(of: range, now: now, calendar: calendar)
+        let totals = wordsByDay(entries, calendar: calendar)
+        // A floor of one keeps the division safe for a range with nothing said in it.
+        let peak = totals.values.reduce(1, max)
+        let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+
+        let days = (0..<range.days).compactMap { calendar.date(byAdding: .day, value: $0, to: first) }
+            .map { day in
+                let words = totals[day] ?? 0
+                let date = day.formatted(style.day().month(.abbreviated))
+                return InsightsCalendarDay(
+                    date: day,
+                    number: day.formatted(style.day()),
+                    words: words,
+                    fraction: Double(words) / Double(peak),
+                    isToday: day == today,
+                    detail: words == 0
+                        ? "No dictation · \(date)"
+                        : "\(words.formatted(.number.locale(locale))) \(words == 1 ? "word" : "words") · \(date)"
+                )
             }
-        return [total, range].compactMap(\.self).joined(separator: " · ")
+
+        return InsightsCalendar(
+            title: months(from: first, to: today, style: style),
+            weekdays: weekdays(calendar: calendar),
+            leadingBlanks: blanks(before: first, calendar: calendar),
+            days: days)
+    }
+
+    /// "September", or "August – September" when the range crosses into another month.
+    static func months(from first: Date, to last: Date, style: Date.FormatStyle) -> String {
+        let from = first.formatted(style.month(.wide))
+        let to = last.formatted(style.month(.wide))
+        return from == to ? to : "\(from) – \(to)"
+    }
+
+    /// The weekday initials, turned so the calendar's first weekday leads.
+    static func weekdays(calendar: Calendar) -> [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let start = (calendar.firstWeekday - 1) % symbols.count
+        return Array(symbols[start...] + symbols[..<start])
+    }
+
+    /// How many cells come before the first day in its week.
+    static func blanks(before first: Date, calendar: Calendar) -> Int {
+        (calendar.component(.weekday, from: first) - calendar.firstWeekday + 7) % 7
     }
 
     // MARK: - Figures
 
-    /// Pace and accuracy across the window, each only where measured.
-    static func figures(for entries: [HistoryEntry], locale: Locale) -> [MainStatistic] {
-        var figures: [MainStatistic] = []
-
-        if let pace = DictationPresenter.pace(of: entries) {
-            figures.append(
-                MainStatistic(
-                    value: "\(pace)",
-                    caption: "Words per minute",
-                    comment: "Days you did not dictate are skipped."))
-        }
-
-        if let accuracy = DictationPresenter.accuracy(of: entries) {
-            figures.append(
-                MainStatistic(
-                    value: MainFormatting.percentage(accuracy, locale: locale),
-                    caption: DictationPresenter.accuracyTitle,
-                    // The Dictation page's wording, so the two cannot drift apart.
-                    comment: DictationPresenter.accuracyCaption,
-                    meters: [MainMeter(label: "Now", fraction: accuracy)]))
-        }
-
-        return figures
-    }
-
-    /// The pace on each day that had one, oldest first; untimed days are left out, not plotted as zero.
-    static func paceTrend(for entries: [HistoryEntry], calendar: Calendar) -> [Int] {
-        var byDay: [Date: [HistoryEntry]] = [:]
-        for entry in entries {
-            byDay[calendar.startOfDay(for: entry.when), default: []].append(entry)
-        }
-        return byDay.sorted { $0.key < $1.key }.compactMap {
-            DictationPresenter.pace(of: $0.value)
-        }
-    }
-
-    // MARK: - Where the words went
-
-    /// The mean words a day across the charted window, silent days included.
-    static func average(across days: [InsightsDay], locale: Locale) -> InsightsAverage? {
-        // The tallest day is `fraction == 1`, so the line's height is the mean measured against that day.
-        guard let tallest = days.map(\.words).max(), tallest > 0 else { return nil }
-        let mean = Double(days.reduce(0) { $0 + $1.words }) / Double(days.count)
-        let rounded = Int(mean.rounded())
-        return InsightsAverage(
-            words: rounded,
-            fraction: mean / Double(tallest),
-            label: "\(rounded.formatted(.number.locale(locale))) a day")
-    }
-
-    /// The apps the user dictates into, busiest first; unknown destinations leave the total too.
-    static func places(for entries: [HistoryEntry], locale: Locale) -> [InsightsPlace] {
-        // The application is kept with its tally so it is resolved once and cannot fail on the way out.
-        var counts: [String: (application: HistoryApplication, dictations: Int, words: Int)] = [:]
-        for entry in entries {
-            guard
-                let application = HistoryPresenter.application(for: entry)
-            else { continue }
-            counts[application.name, default: (application, 0, 0)].dictations += 1
-            counts[application.name]?.words += MainFormatting.words(in: entry.text)
-        }
-        let total = counts.values.reduce(0) { $0 + $1.dictations }
-        guard total > 0 else { return [] }
-
-        return counts.values.sorted {
-            ($0.dictations, $1.application.name)
-                > ($1.dictations, $0.application.name)
-        }.map { application, dictations, words in
-            let share = Double(dictations) / Double(total)
-            return InsightsPlace(
-                application: application,
-                share: share,
-                percentage: share.formatted(.percent.precision(.fractionLength(0)).locale(locale)),
-                words: "\(MainFormatting.count(words, "word", "words"))")
-        }
+    /// Words and dictations in the range, the pace across it, and the streak Home counts.
+    static func figures(
+        inRange: [HistoryEntry], kept: [HistoryEntry], now: Date, calendar: Calendar, locale: Locale
+    ) -> [MainStatistic] {
+        let streak = HomeDashboard.streak(in: kept, now: now, calendar: calendar)
+        return [
+            MainStatistic(value: inRange.totalWords.formatted(.number.locale(locale)), caption: "words"),
+            MainStatistic(value: inRange.count.formatted(.number.locale(locale)), caption: "dictations"),
+            MainStatistic(
+                value: DictationPresenter.pace(of: inRange).map { "\($0)" } ?? "—",
+                caption: "words / min"),
+            MainStatistic(value: MainFormatting.count(streak, "day", "days"), caption: "streak"),
+        ]
     }
 
     // MARK: - Not yet
@@ -347,17 +359,19 @@ public enum InsightsPresenter {
             progress: MainProgress(
                 fraction: Double(spoken) / Double(daysBeforeCharting),
                 leading: "\(spoken) of \(daysBeforeCharting) days",
-                trailing: remaining(spoken: spoken, now: now, calendar: calendar, locale: locale)),
+                trailing: remaining(spoken: spoken, now: now, calendar: calendar, locale: locale),
+                steps: daysBeforeCharting),
             footnote: """
                 The figures Uttrflow can honestly give this early are given. The rest waits \
                 rather than guessing.
                 """)
     }
 
-    /// "Charts appear on Tuesday", assuming the remaining days are spoken on, counted in flat days.
+    /// "Charts appear on Tuesday", or "next Tuesday" a week ahead, assuming each day left is spoken on.
     static func remaining(spoken: Int, now: Date, calendar: Calendar, locale: Locale) -> String {
         let left = max(daysBeforeCharting - spoken, 1)
         let day = now.addingTimeInterval(Double(left) * 86_400)
-        return "Charts appear on \(day.formatted(.dateTime.weekday(.wide).locale(locale)))"
+        let weekday = day.formatted(.dateTime.weekday(.wide).locale(locale))
+        return left % 7 == 0 ? "Charts appear next \(weekday)" : "Charts appear on \(weekday)"
     }
 }

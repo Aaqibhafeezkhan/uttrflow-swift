@@ -12,6 +12,9 @@ struct MainWindowView: View {
     var onDraft: () -> Void = {}
     var onToggleSidebar: () -> Void = {}
 
+    /// The question a button is asking before it acts, drawn over the whole window.
+    @State private var confirmations = MainConfirmationCenter()
+
     var body: some View {
         HStack(spacing: 0) {
             SidebarView(
@@ -39,6 +42,7 @@ struct MainWindowView: View {
         .foregroundStyle(Color.mainText, Color.mainMuted, Color.mainDim)
         // One tint at the root, so a control added later cannot arrive in the stock blue.
         .tint(Color.dockAccent)
+        .confirmationSheet(confirmations, onIntent: onIntent)
         // SwiftUI still reserves a safe area for the transparent title bar; the island keeps its own inset.
         .ignoresSafeArea(.container, edges: .top)
     }
@@ -47,8 +51,8 @@ struct MainWindowView: View {
 
     private var pane: some View {
         VStack(spacing: 0) {
-            // The band under the title bar, which the traffic lights and the window's drag own; Home draws its own.
-            if model.page != .home {
+            // The band under the title bar, which the traffic lights and the window's drag own; some pages draw their own.
+            if !drawsOwnHeader {
                 Color.clear.frame(height: MainMetrics.toolbarHeight)
                 if isRedesigned {
                     PageTitleBar(
@@ -62,30 +66,39 @@ struct MainWindowView: View {
                         onSearch: onSearch, onScope: onScope)
                 }
             }
-            if let notice = model.content.notice {
-                MainNoticeBar(notice: notice)
-                    .padding(.horizontal, MainMetrics.contentPadding)
-                    .padding(.top, 12)
-            }
             page
-                // Home sets its own margins; every other page is a document and wants these.
+                // A page with its own header sets its own margins; a redesigned page is set wider than the rest.
                 .padding(.horizontal, horizontalMargin)
-                .padding(.top, model.page == .home ? 0 : (isRedesigned ? 16 : 18))
-                .padding(.bottom, model.page == .home ? 0 : 14)
+                .padding(.top, drawsOwnHeader ? 0 : (isRedesigned ? 16 : 18))
+                .padding(.bottom, drawsOwnHeader ? 0 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        // The notice floats in the corner over the page rather than pushing the page down.
+        .overlay(alignment: .topTrailing) {
+            if let notice = model.content.notice {
+                MainNoticeBar(notice: notice, onIntent: onIntent)
+                    .padding(.top, 20)
+                    .padding(.trailing, 20)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: model.content.notice)
+        .environment(\.dictationKeycaps, model.content.shortcutKeycaps)
         // The field holds what is being typed, so it is only put back in step when the page changes.
         .onChange(of: model.page) { _, _ in
             model.searchQuery = model.chrome.search?.query ?? ""
         }
     }
 
+    /// Whether the page draws its own title, and so its own margins.
+    private var drawsOwnHeader: Bool { [.home, .insights].contains(model.page) }
+
     /// Whether the page draws the redesign's title bar and margins.
     private var isRedesigned: Bool { [.dictionary, .snippets].contains(model.page) }
 
-    /// Home sets its own margins; a redesigned page is set wider than the others.
+    /// A page with its own header sets its own margins; a redesigned page is set wider than the others.
     private var horizontalMargin: CGFloat {
-        if model.page == .home { return 0 }
+        if drawsOwnHeader { return 0 }
         return isRedesigned ? PageMetrics.margin : MainMetrics.contentPadding
     }
 
@@ -107,7 +120,8 @@ struct MainWindowView: View {
         case .corrections:
             CorrectionsPageView(presentation: model.content.corrections, onIntent: onIntent)
         case .insights:
-            InsightsPageView(presentation: model.content.insights, onIntent: onIntent)
+            InsightsPageView(
+                presentation: model.content.insights, onIntent: onIntent, onScope: onScope)
         case .snippets:
             SnippetsPageView(
                 presentation: model.content.snippets, draft: reporting($model.snippetDraft),

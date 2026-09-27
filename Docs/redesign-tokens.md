@@ -38,6 +38,14 @@ translucent card film, hairline, sidebar island and secondary text of the dark a
 | `neutralAccent` | `#A7ACB8` | `#5E6470` |
 | `badgeInk` | `#AFF3EC` | `#0E645D` |
 | `fieldWell` | black at 25% | `#101316` at 4.5% |
+| `primaryFill` | `#FFFFFF` | `#101316` |
+| `primaryInk` | `#0B0C10` | `#FEFEFE` |
+| `destructiveInk` | `#FF8A8C` | `#B0161A` |
+| `quietFill` | white at 8% | `#101316` at 7.2% |
+| `sheetGlass` | `#121020` at 96% | `#FEFEFC` at 93% |
+| `toastGlass` | `#121020` at 90% | `#FEFEFC` at 93% |
+| `scrim` | `#05050A` at 55% | `#F2F1EC` at 55% |
+| `floatShadow` | black at 70% | black at 12% |
 
 Text tones clear 4.5:1 on the page and on a card; accents clear 3:1 there, the bar for marks.
 The floating button's ink clears 4.5:1 on its glass and the meter 3:1, measured over the

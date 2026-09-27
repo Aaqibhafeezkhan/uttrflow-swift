@@ -14,8 +14,8 @@ enum MainMetrics {
     static let contentPadding: CGFloat = 22
     static let cardRadius: CGFloat = 10
     static let rowPadding: CGFloat = 13
-    /// The island as an icon rail: a 44pt target with room either side, and the margin that floats it.
-    static let iconRailWidth: CGFloat = 76
+    /// The island as an icon rail, wide enough that the traffic lights, which end at 79pt, stay inside it.
+    static let iconRailWidth: CGFloat = 88
     /// The sidebar with its names showing: the island and the margin that floats it off the window's edge.
     static let sidebarWidth: CGFloat = 232
     /// The figures rail down the right of a page, wide enough that "Words per minute" and "2.7K" fit.
@@ -136,28 +136,82 @@ struct MainCalloutView: View {
     }
 }
 
-/// The band above a page saying a change it was asked for did not happen.
+/// A glass notice in the window's top-right corner saying what happened, with a way on and a way to put it away.
 struct MainNoticeBar: View {
     let notice: MainNotice
+    var onIntent: (MainIntent) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: notice.symbolName)
-                .font(.system(size: 13))
-                .foregroundStyle(notice.tone.foreground)
-                .padding(.top, 1)
-            Text(notice.message)
-                .font(.system(size: MainMetrics.subheadSize))
-                // In the tone's own colour, not secondary: a refusal has to read unlike a caption.
-                .foregroundStyle(notice.tone.foreground)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+        HStack(alignment: .top, spacing: 12) {
+            MainTintedTile(symbolName: notice.symbolName, color: notice.tone.glow)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(notice.headline)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(PagePalette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button {
+                        onIntent(.dismissNotice)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(PagePalette.text.opacity(0.45))
+                            .frame(width: 16, height: 16)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss")
+                    .accessibilityLabel("Dismiss")
+                }
+                if let detail = notice.detail {
+                    Text(detail)
+                        .font(.system(size: 12))
+                        .lineSpacing(2)
+                        .foregroundStyle(PagePalette.text.opacity(0.65))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 3)
+                }
+                if let action = notice.action {
+                    HStack(spacing: 6) {
+                        Button(action.title) { onIntent(action.intent) }
+                            .buttonStyle(MainPrimaryButtonStyle(size: .compact))
+                        Button("Not now") { onIntent(.dismissNotice) }
+                            .buttonStyle(MainSecondaryButtonStyle(size: .compact))
+                    }
+                    .padding(.top, 10)
+                }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(notice.tone.background, in: .rect(cornerRadius: MainMetrics.cardRadius))
-        .accessibilityElement(children: .combine)
+        .padding(14)
+        .frame(width: 360, alignment: .leading)
+        .background { glass }
+        .clipShape(.rect(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(PagePalette.controlEdge, lineWidth: 1)
+        }
+        .shadow(color: PagePalette.floatShadow, radius: 25, y: 24)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(notice.message)
+    }
+
+    /// Frosted glass with the notice's colour glowing up from behind its tile.
+    private var glass: some View {
+        ZStack(alignment: .topLeading) {
+            Rectangle().fill(.ultraThinMaterial)
+            PagePalette.toastGlass
+            EllipticalGradient(
+                colors: [
+                    notice.tone.glow.opacity(0.3), notice.tone.glow.opacity(0.08),
+                    notice.tone.glow.opacity(0),
+                ],
+                center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5
+            )
+            .frame(width: 220, height: 180)
+            .offset(x: -90, y: -90)
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -285,9 +339,16 @@ struct MainActionButton: View {
     var isProminent = false
     var onIntent: (MainIntent) -> Void
 
+    /// The window's question host, when there is one; an action that asks first asks through it.
+    @Environment(MainConfirmationCenter.self) private var confirmations: MainConfirmationCenter?
+
     var body: some View {
         Button {
-            onIntent(action.intent)
+            if let confirmation = action.confirmation, let confirmations {
+                confirmations.ask(confirmation, before: action.intent)
+            } else {
+                onIntent(action.intent)
+            }
         } label: {
             if let symbol = action.symbolName {
                 Label(action.title, systemImage: symbol)
@@ -326,41 +387,44 @@ struct MainIconButton: View {
     }
 }
 
-/// What a page shows instead of content: a symbol, a sentence, at most one way on, and any figures.
+/// What a page shows instead of content: its colour glowing behind a small scene, a title, a sentence and one way on.
 struct MainEmptyStateView: View {
     let state: MainEmptyState
     var onIntent: (MainIntent) -> Void
 
+    private var accent: Color { state.scene.accent.color }
+
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 12)
-            Image(systemName: state.symbolName)
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(Color.dockAccent)
-                .frame(width: 82, height: 82)
-                .background(Color.dockAccent.opacity(0.14), in: .circle)
-                .overlay(Circle().strokeBorder(Color.dockAccentTint, lineWidth: 1))
-            Text(state.title)
-                .font(.system(size: 17, weight: .semibold))
-                .padding(.top, 18)
-            Text(state.message)
-                .font(.system(size: MainMetrics.bodySize))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 410)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 9)
-            if let progress = state.progress {
-                MainProgressView(progress: progress).padding(.top, 20)
+            VStack(spacing: 12) {
+                MainEmptyStateScene(
+                    scene: state.scene, symbolName: state.symbolName, progress: state.progress
+                )
+                .frame(height: 56)
+                Text(state.title)
+                    .font(BrandFont.display(size: 20, weight: .semibold))
+                    .foregroundStyle(PagePalette.text)
+                    .multilineTextAlignment(.center)
+                Text(state.message)
+                    .font(.system(size: 13.5))
+                    .lineSpacing(3)
+                    .foregroundStyle(PagePalette.text.opacity(0.62))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let progress = state.progress {
+                    MainEmptyStateSteps(progress: progress, color: accent)
+                }
+                if !state.chips.isEmpty {
+                    MainChipsRow(chips: state.chips).padding(.top, 6)
+                }
+                if let action = state.action {
+                    MainEmptyStateButton(action: action, glow: accent, onIntent: onIntent)
+                        .padding(.top, 6)
+                }
             }
-            if !state.chips.isEmpty {
-                MainChipsRow(chips: state.chips).padding(.top, 20)
-            }
-            if let action = state.action {
-                MainActionButton(action: action, isProminent: true, onIntent: onIntent)
-                    .controlSize(.large)
-                    .padding(.top, 18)
-            }
+            .background { glow }
             Spacer(minLength: 12)
             if let footnote = state.footnote {
                 MainFootnote(text: footnote, isCentred: true)
@@ -370,25 +434,17 @@ struct MainEmptyStateView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(state.title). \(state.message)")
     }
-}
 
-/// How far off a page is from having something to draw.
-struct MainProgressView: View {
-    let progress: MainProgress
-
-    var body: some View {
-        VStack(spacing: 8) {
-            MainBar(fraction: progress.fraction, height: 7)
-            HStack {
-                Text(progress.leading)
-                Spacer(minLength: 8)
-                Text(progress.trailing)
-            }
-            .font(.system(size: MainMetrics.footnoteSize))
-            .foregroundStyle(.secondary)
-        }
-        .frame(width: 280)
-        .accessibilityElement(children: .combine)
+    /// The page's colour, soft and wide, centred a little above the words.
+    private var glow: some View {
+        EllipticalGradient(
+            colors: [accent.opacity(0.2), accent.opacity(0.07), accent.opacity(0)],
+            center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5
+        )
+        .frame(width: 560, height: 400)
+        .offset(y: -30)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
