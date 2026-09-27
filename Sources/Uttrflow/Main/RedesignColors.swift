@@ -25,3 +25,28 @@ extension Color {
     /// The window body the redesigned pages sit in.
     static let redesignWindow = Color(nsColor: .orbit(BrandPalette.Redesign.windowGround))
 }
+
+/// The redesigned pages' colours, each following the appearance.
+enum PagePalette {
+    private typealias R = BrandPalette.Redesign
+
+    static let text = Color(nsColor: .orbit(R.textStrong))
+    static let soft = Color(nsColor: .orbit(R.textSoft))
+    static let quiet = Color(nsColor: .orbit(R.textQuiet))
+    static let card = Color(nsColor: .orbit(R.cardFill))
+    static let hero = Color(nsColor: .orbit(R.heroGround))
+    static let waveform = Color(nsColor: .orbit(R.waveformInk))
+    static let controlFill = Color(nsColor: .orbit(R.controlFill))
+    static let controlEdge = Color(nsColor: .orbit(R.controlEdge))
+    static let ringTrack = Color(nsColor: .orbit(R.ringTrack))
+    /// The ring cut around a rail dot, the window's dark ground in both appearances.
+    static let dotRing = Color(rgb: R.windowGround.dark)
+    static let cardEdge = Color(nsColor: .orbit(R.cardEdge))
+    static let dictation = Color(nsColor: .orbit(R.dictationAccent))
+    static let suggestion = Color(nsColor: .orbit(R.suggestionAccent))
+    static let clipboard = Color(nsColor: .orbit(R.clipboardAccent))
+    static let info = Color(nsColor: .orbit(R.infoAccent))
+    /// The aurora's two glow colours in the hero: its violet and its blue.
+    static let glowViolet = Color(rgb: R.auroraStops[0])
+    static let glowBlue = Color(rgb: R.auroraStops[2])
+}

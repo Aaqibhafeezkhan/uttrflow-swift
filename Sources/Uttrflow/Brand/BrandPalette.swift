@@ -166,5 +166,17 @@ enum BrandPalette {
         static let dockMeter = BrandTone(dark: textStrong.dark, light: dictationAccent.light)
         /// The initials on the avatar's lilac-to-teal disc.
         static let avatarInk: UInt32 = 0x08_131A
+        /// The home hero card's ground, under its two aurora glows.
+        static let heroGround = BrandTone(dark: 0x0E_111A, light: 0xFF_FFFF)
+        /// The hero's mono waveform: white in the dark, ink in the light.
+        static let waveformInk = BrandLayer(tone: textStrong, darkOpacity: 0.88, lightOpacity: 0.79)
+        /// A quiet control's fill: a View button, a ⋯ button.
+        static let controlFill = BrandLayer(tone: textStrong, darkOpacity: 0.06, lightOpacity: 0.04)
+        /// A quiet control's edge.
+        static let controlEdge = BrandLayer(tone: textStrong, darkOpacity: 0.14, lightOpacity: 0.14)
+        /// The unfilled track of a stat tile's ring.
+        static let ringTrack = BrandLayer(tone: textStrong, darkOpacity: 0.1, lightOpacity: 0.1)
+        /// The faint rim of a home card or row when dark; none when light, where white on the page is enough.
+        static let cardEdge = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.08, lightOpacity: 0)
     }
 }

@@ -47,9 +47,9 @@ struct MainWindowView: View {
 
     private var pane: some View {
         VStack(spacing: 0) {
-            // The band under the title bar, which the traffic lights and the window's drag own.
-            Color.clear.frame(height: MainMetrics.toolbarHeight)
+            // The band under the title bar, which the traffic lights and the window's drag own; Home draws its own.
             if model.page != .home {
+                Color.clear.frame(height: MainMetrics.toolbarHeight)
                 OrbitPageHeader(
                     chrome: model.chrome, query: $model.searchQuery,
                     searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
@@ -61,7 +61,7 @@ struct MainWindowView: View {
                     .padding(.top, 12)
             }
             page
-                // Home draws its stage edge to edge; every other page is a document and wants a margin.
+                // Home sets its own margins; every other page is a document and wants these.
                 .padding(.horizontal, model.page == .home ? 0 : MainMetrics.contentPadding)
                 .padding(.top, model.page == .home ? 0 : 18)
                 .padding(.bottom, model.page == .home ? 0 : 14)

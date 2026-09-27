@@ -81,3 +81,20 @@ fit between `muted` and the rail, so `Text.ghost` stays a mark rather than a wor
 3:1. `TextToneContrastTests` computes every one of those ratios and fails below the floor.
 Increase Contrast is a separate question, tracked in #522; this floor is what the palette clears
 before that setting is consulted.
+
+## Home
+
+`HomeDashboard` in `UttrflowUX` decides everything the page draws; the views only lay it out.
+
+- **Mood.** The hour picks one of six parts of the day — 05–08 early morning, 08–12 morning,
+  12–17 afternoon, 17–20 evening, 20–23 night, 23–05 late night — and with it the greeting
+  ("Working late" after 23:00) and the picture in `Resources/Mood/` beside the hero.
+- **Tiles.** Words today; the streak, days in a row with a dictation ending today or
+  yesterday, since a day not over yet has not broken it; pace, pooled over every timed
+  dictation kept; and the share left as dictated, the same measure the Dictation page uses:
+  spoken words the clean-up kept as said, over every measured dictation kept. A figure with
+  nothing measured behind it is a dash. The rings fill at 1,000 words, 7 days, 150 words a
+  minute (an ordinary conversational rate) and 100%.
+- **Recent activity.** The three newest dictations. The tag says what the clean-up did —
+  "As dictated" or "N changes", counting corrections still standing and snippets — and a
+  dictation that was never measured has no tag, so nothing is claimed about it.

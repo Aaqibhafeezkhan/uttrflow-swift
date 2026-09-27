@@ -118,6 +118,14 @@ EXCLUDED_FILES = {
     ),
     "Uttrflow/Sidebar/SidebarView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HomePageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/HomeActivityView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/HomeHeroView.swift": (
+        "SwiftUI, drawn from a tested presentation; the waveform's bars and the mood pictures "
+        "it loads are tested in HomeHeroViewTests"
+    ),
+    "Uttrflow/Main/RedesignColors.swift": (
+        "colour values; the layer resolution and the island's fixed inks are tested in RedesignColorsTests"
+    ),
     "Uttrflow/Main/ClipboardDemonstration.swift": (
         "SwiftUI; what it decides is in ClipboardDemonstrationPhase, which says what is drawn "
         "at an instant, ClipboardDemonstrationMoments, which says when to wake, and "
