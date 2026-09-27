@@ -105,11 +105,13 @@ struct SettingsGeneralDesignTests {
     func handsFree() throws {
         let shortcuts = try #require(pane(.general).groups.first)
         #expect(
-            shortcuts.rows.map(\.id).prefix(3) == ["shortcut.dictate", "handsFree", "shortcut.clipboard"])
-        let handsFree = try #require(row("handsFree", in: pane(.general)))
+            shortcuts.rows.map(\.id).prefix(3) == [
+                "shortcut.dictate", "handsFreeEnabled", "shortcut.clipboard",
+            ])
+        let handsFree = try #require(row("handsFreeEnabled", in: pane(.general)))
         #expect(handsFree.badge == "NEW")
         #expect(handsFree.style == .inset)
-        #expect(handsFree.control == .status("On"))
+        #expect(handsFree.control == .toggle(field: .handsFreeEnabled, isOn: true))
         let keys = SettingsShortcut.keycaps(for: Settings.default.hotkey)
         #expect(
             handsFree.keyedExplanation
@@ -118,11 +120,22 @@ struct SettingsGeneralDesignTests {
         #expect(handsFree.accessibilityLabel.contains("Double-tap"))
     }
 
+    @Test("the hands-free switch follows the setting and turns it off")
+    func handsFreeIsASwitch() throws {
+        var settings = Settings.default
+        settings.handsFreeEnabled = false
+        #expect(
+            row("handsFreeEnabled", in: pane(.general, settings))?.control
+                == .toggle(field: .handsFreeEnabled, isOn: false))
+        let off = try SettingsEditor.apply(.toggle(.handsFreeEnabled, isOn: false), to: .default)
+        #expect(!off.handsFreeEnabled)
+    }
+
     @Test("pressing to toggle has no hands-free row, and Dictate says how it works then")
     func toggleHasNoHandsFree() {
         var settings = Settings.default
         settings.hotkeyActivation = .pressToToggle
-        #expect(row("handsFree", in: pane(.general, settings)) == nil)
+        #expect(row("handsFreeEnabled", in: pane(.general, settings)) == nil)
         #expect(
             row("shortcut.dictate", in: pane(.general, settings))?.explanation
                 == "Press ⌃⌥ to start talking, and again to stop")

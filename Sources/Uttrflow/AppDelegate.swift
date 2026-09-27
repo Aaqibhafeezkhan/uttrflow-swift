@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         info: Bundle.main.infoDictionary ?? [:], sdk: LiveCrashReportingSDK())
     /// Keeps the pipeline's stage timings for the session, which is what the diagnostics page reports on.
     private let diagnostics = DiagnosticsRecorder()
-    /// Anonymous counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
+    /// Counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
     private var telemetry: UsageTelemetry?
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
     private let secureInput = SecureInputWatch()
@@ -960,6 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             monitor: ActivationMonitor(),
             cue: cue,
             activation: settings.hotkeyActivation,
+            handsFreeEnabled: settings.handsFreeEnabled,
             clock: ContinuousClock(),
             onAdvice: { [weak self] advice in
                 Task { @MainActor in self?.recordingAdviceChanged(to: advice) }
@@ -2493,6 +2494,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if updated.hotkeyActivation != previous.hotkeyActivation {
             let activation = updated.hotkeyActivation
             Task { [weak self] in await self?.controller?.setActivation(activation) }
+        }
+        if updated.handsFreeEnabled != previous.handsFreeEnabled {
+            let enabled = updated.handsFreeEnabled
+            Task { [weak self] in await self?.controller?.setHandsFreeEnabled(enabled) }
         }
         telemetry?.setEnabled(updated.sharesUsageStatistics)
         // As above: a switch that drew itself and changed nothing.

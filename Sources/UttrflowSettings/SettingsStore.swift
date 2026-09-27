@@ -22,6 +22,9 @@ public struct Settings: Sendable, Equatable, Codable {
     /// Whether the dictation shortcut is held down or pressed twice.
     public var hotkeyActivation: HotkeyActivation
 
+    /// Whether double-tapping the held Dictate keys keeps the microphone open until they are tapped again.
+    public var handsFreeEnabled: Bool
+
     /// Shortcuts that were a modifier held alone and are back to their defaults, until the user chooses again.
     public var shortcutsReturnedToDefault: Set<ShortcutAction>
 
@@ -67,7 +70,7 @@ public struct Settings: Sendable, Equatable, Codable {
     /// Whether a found update installs itself or waits to be asked; `UpdateGate` picks the moment.
     public var installsUpdatesAutomatically: Bool
 
-    /// Whether anonymous counts and timings are sent; never what was dictated. See `Docs/account-telemetry.md`.
+    /// Whether counts and timings are sent, tied to the signed-in account. See `Docs/account-telemetry.md`.
     public var sharesUsageStatistics: Bool
     /// Whether crash and hang reports go to Uttrflow; off until the user turns it on. See `Docs/crash-reporting.md`.
     public var sendsCrashReports: Bool
@@ -92,6 +95,7 @@ public struct Settings: Sendable, Equatable, Codable {
         destinations: DestinationOverrides = .none,
         shortcuts: ShortcutSet = .default,
         hotkeyActivation: HotkeyActivation = .holdToTalk,
+        handsFreeEnabled: Bool = true,
         shortcutsReturnedToDefault: Set<ShortcutAction> = [],
         dictationEnabled: Bool = true,
         clipboardEnabled: Bool = true,
@@ -115,6 +119,7 @@ public struct Settings: Sendable, Equatable, Codable {
         self.destinations = destinations
         self.shortcuts = shortcuts
         self.hotkeyActivation = hotkeyActivation
+        self.handsFreeEnabled = handsFreeEnabled
         self.shortcutsReturnedToDefault = shortcutsReturnedToDefault
         self.dictationEnabled = dictationEnabled
         self.clipboardEnabled = clipboardEnabled
@@ -165,6 +170,7 @@ extension Settings {
         case destinations
         case shortcuts
         case hotkeyActivation
+        case handsFreeEnabled
         case shortcutsReturnedToDefault
         case dictationEnabled
         case clipboardEnabled
@@ -200,6 +206,8 @@ extension Settings {
             hotkeyActivation: container.value(
                 forKey: .hotkeyActivation, default: fallback.hotkeyActivation
             ),
+            handsFreeEnabled: container.value(
+                forKey: .handsFreeEnabled, default: fallback.handsFreeEnabled),
             shortcutsReturnedToDefault: container.value(
                 forKey: .shortcutsReturnedToDefault, default: fallback.shortcutsReturnedToDefault
             ).union(Settings.shortcutsReturned(from: decoder)),
