@@ -124,10 +124,7 @@ private struct Script {
             minimised = false
         } else {
             #expect(session.rejectionsHere == before || session.rejectionsHere == before + 1)
-            if generatedBefore {
-                #expect(session.rejectionsHere == before)
-                #expect(turn.rejected == nil)
-            }
+            if generatedBefore { #expect(turn.rejected == nil) }
         }
         #expect(session.rejectionsHere <= Quieting.rejectionsBeforeSilence)
         switch turn.step {
@@ -330,15 +327,17 @@ private struct Script {
         #expect((update.silence == nil) == (update.suggestion.accepting != nil))
         let armed = update.armed
         let accept = ArmedKeys.slot(of: acceptKey.stroke)
+        let escapes = acceptKey != .rightArrow
         switch update.suggestion {
         case .silent:
             #expect(armed.isEmpty)
             if !isQuiet { #expect(update.silence != .quietModeChoice) }
         case .minimised:
-            #expect(armed == [.escape, .optionEscape])
+            #expect(armed == (escapes ? [.escape, .optionEscape] : [.optionEscape]))
             #expect(update.silence == .minimised)
         case .certain(let text):
-            #expect(armed.contains(accept) && armed.contains(.escape) && armed.contains(.optionEscape))
+            #expect(armed.contains(accept) && armed.contains(.optionEscape))
+            #expect(armed.contains(.escape) == escapes)
             #expect(!armed.contains(.downArrow) && !armed.contains(.return) && !armed.contains(.upArrow))
             #expect(extends(text))
         case .choice(let leader, let others):
@@ -346,7 +345,8 @@ private struct Script {
             #expect(!others.isEmpty && others.count < SuggestionSession.verifiedDepth)
             let lowered = others.map { $0.lowercased() }
             #expect(!lowered.contains(leader.lowercased()) && Set(lowered).count == others.count)
-            #expect(armed.contains(accept) && armed.contains(.downArrow) && armed.contains(.escape))
+            #expect(armed.contains(accept) && armed.contains(.downArrow))
+            #expect(armed.contains(.escape) == escapes)
             #expect(armed.contains(.return) == session.selection.hasMoved)
             #expect(armed.contains(.upArrow) == session.selection.hasMoved)
             #expect(extends(leader) && others.allSatisfy(extends))

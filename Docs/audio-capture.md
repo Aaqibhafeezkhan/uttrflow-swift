@@ -115,6 +115,13 @@ rate would otherwise hold key-up open for as long as it liked.
 A cancelled recording does not drain: its audio is discarded, so waiting for more of it would only
 delay the key coming up.
 
+Not draining gives up the rendezvous with the render thread, so a tap callback already in flight at
+teardown can still run afterwards. Two guards make that harmless. Each recording's sample closure
+runs behind a gate that `stop()` and `cancel()` close under the same lock the closure appends under,
+so once teardown returns nothing more reaches that recording's buffer or file. And the device pins
+each tap to the sink it was opened for, so a late callback from an earlier engine never reaches the
+sink a later recording installed.
+
 Measured at the seam rather than on hardware, with a fake source holding one block back: a drained
 stop returns 1,365 more canonical samples than an undrained one, which is 85.3 ms — one tap period
 at 4096 frames and 48 kHz, resampled to 16 kHz. What the converter keeps back is a separate and much

@@ -667,6 +667,14 @@ struct RichTextPlainFormTests {
         "<p>&amp;amp; stays escaped</p>",
         "<img src=\"shot.png\" alt=\"a screenshot\"><p>after an image</p>",
     ]
+
+    @Test("decodes the joiner entities to the joiners themselves")
+    func joinerEntities() {
+        let family = RichTextPlainForm.plainText(fromHTML: "<p>\u{1F468}&zwj;\u{1F469}&zwj;\u{1F467}</p>")
+        #expect(family == "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}")
+        let word = RichTextPlainForm.plainText(fromHTML: "<p>\u{645}\u{6CC}&zwnj;\u{631}\u{648}\u{645}</p>")
+        #expect(word == "\u{645}\u{6CC}\u{200C}\u{631}\u{648}\u{645}")
+    }
 }
 
 /// Whether anything in the output still looks like a tag to a person reading a commit message.

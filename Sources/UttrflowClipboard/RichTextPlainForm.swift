@@ -329,10 +329,10 @@ private enum HTMLEntities {
         return String(scalar)
     }
 
-    /// The named entities copied text carries; `nbsp` and the invisible joiners decode to plain or nothing.
+    /// The named entities copied text carries; `nbsp` decodes to a plain space and the joiners to themselves.
     private static let named: [String: String] = [
         "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": " ",
-        "ensp": " ", "emsp": " ", "thinsp": " ", "shy": "", "zwnj": "", "zwj": "",
+        "ensp": " ", "emsp": " ", "thinsp": " ", "shy": "", "zwnj": "\u{200C}", "zwj": "\u{200D}",
         "mdash": "\u{2014}", "ndash": "\u{2013}", "hellip": "\u{2026}", "bull": "\u{2022}",
         "lsquo": "\u{2018}", "rsquo": "\u{2019}", "ldquo": "\u{201C}", "rdquo": "\u{201D}",
         "laquo": "\u{00AB}", "raquo": "\u{00BB}", "middot": "\u{00B7}", "sect": "\u{00A7}",

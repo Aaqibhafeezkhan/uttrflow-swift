@@ -110,14 +110,14 @@ public actor Verifier {
             if forGood { await supersession?.recordSupersession(of: text, by: corrected, in: surface) }
             return .corrected(corrected)
         case .rejected:
-            await supersession?.recordRejection(of: text, in: surface)
+            if forGood { await supersession?.recordRejection(of: text, in: surface) }
             return .rejected
         case .attested, .plausible:
             return verdict
         }
     }
 
-    /// Forgets every verdict, which is what leaving a field and the reset in Settings both ask for.
+    /// Forgets every verdict, which forgetting learned suggestions in Settings asks for.
     public func forgetEverything() {
         cache.forgetEverything()
     }

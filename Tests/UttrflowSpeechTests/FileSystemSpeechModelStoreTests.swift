@@ -234,6 +234,20 @@ struct FileSystemSpeechModelStoreTests {
         #expect(!store.isInstalled(.base))
     }
 
+    /// A tokenizer file that exists but holds nothing cannot be parsed, so it is not installed.
+    @Test("does not call a model installed when a tokenizer file is empty")
+    func emptyTokenizerFileIsNotInstalled() throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+        let folder = store.location(of: .base)
+        try writeWeights(into: folder)
+        try writeTokenizer(into: folder)
+        try Data().write(to: folder.appending(path: TokenizerAssets.fileNames[0]))
+
+        #expect(!TokenizerAssets.arePresent(in: folder))
+        #expect(!store.isInstalled(.base))
+    }
+
     /// What a download killed partway leaves in the model's directory is repaired by fetching the weights again.
     @Test("fetches the weights again when a killed download left only some of them")
     func repairsAKilledWeightsDownload() async throws {

@@ -122,6 +122,13 @@ struct ShellPromptTests {
         #expect(ShellPrompt.input(in: #"echo \" 50% done"#) == #"echo \" 50% done"#)
     }
 
+    @Test("An escaped quote inside a double-quoted argument keeps the argument quoted.")
+    func anEscapedQuoteInsideAQuoteStaysQuoted() {
+        let line = #"git commit -m "fixed \"a@b# now\" done" # note"#
+        #expect(ShellPrompt.input(in: line) == line)
+        #expect(ShellPrompt.input(in: #"$ echo 'a\' # note"#) == #"echo 'a\' # note"#)
+    }
+
     @Test("A quote left open swallows the rest of the line rather than guessing at a prompt.")
     func anUnclosedQuoteIsConservative() {
         #expect(ShellPrompt.input(in: "echo 'unclosed % git status") == "echo 'unclosed % git status")

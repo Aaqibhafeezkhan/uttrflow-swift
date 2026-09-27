@@ -376,3 +376,49 @@ struct SettingsChangeWiringTests {
         }
     }
 }
+
+/// Holds each capability probe until the test answers it, so answers can arrive out of order.
+private actor ProbeGate {
+    private var waiting: [CheckedContinuation<SettingsCapabilities, Never>] = []
+
+    func wait() async -> SettingsCapabilities {
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func pending() -> Int { waiting.count }
+
+    func answer(_ index: Int, with capabilities: SettingsCapabilities) {
+        waiting[index].resume(returning: capabilities)
+    }
+}
+
+@Suite("Overlapping capability probes")
+@MainActor
+struct SettingsCapabilityProbeTests {
+    @Test("the newest probe's answer stands even when an older probe answers after it")
+    func newestProbeWins() async throws {
+        let gate = ProbeGate()
+        let controller = SettingsWindowController(
+            store: RecordingStore(), personalisation: EmptyPersonalisation(), capabilities: .everything,
+            probe: { _ in await gate.wait() })
+        let model = try #require(
+            Mirror(reflecting: controller).descendant("model") as? SettingsViewModel)
+        var stale = SettingsCapabilities.everything
+        stale.readyTransformers = [.rules]
+        var fresh = SettingsCapabilities.everything
+        fresh.readyTransformers = [.rules, .foundationModels]
+
+        controller.refreshCapabilities()
+        let first = try #require(controller.capabilityRefresh)
+        controller.refreshCapabilities()
+        let second = try #require(controller.capabilityRefresh)
+        while await gate.pending() < 2 { await Task.yield() }
+
+        await gate.answer(1, with: fresh)
+        await second.value
+        await gate.answer(0, with: stale)
+        await first.value
+
+        #expect(model.session.capabilities.readyTransformers == [.rules, .foundationModels])
+    }
+}

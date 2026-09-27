@@ -16,7 +16,8 @@ struct SecretShapesOracleTests {
         "_", "+", "()", "request.token", "password", "PASSWORD", "Password", "pwd", "passwd",
         "token", "tokens", "api_key",
         "API-KEY", "apikey", "api_keys", "secret", "Secrets", "credential", "credentials",
-        "private_key", "access-key", "auth_token", "client_secret", "clientsecret", "\u{212A}",
+        "private_key", "access-key", "secret_key", "SECRET-KEYS", "auth_token", "client_secret",
+        "clientsecret", "\u{212A}",
         "api_\u{212A}ey", "\u{301}", "é", "e\u{301}", "\"\u{301}", "'\u{301}", ";\u{301}", "\u{37E}",
         "x", "a", "Z", "J", "y", "e", "0", "1", "9", "٣", "½", "4111", "1111 ", "abc123", "hunter2",
         "Qv7RkT2mXeL9pAz4", "\u{0}", "\u{FEFF}", "😀", "🇺🇸", "\u{200D}", "'s", "x.", "rgb(", "(", ")",
@@ -240,7 +241,7 @@ enum BacktrackingPatterns {
         #/
         (?i)
         (?: \b | _ | (?-i:[a-z])(?=(?-i:[A-Z])) )
-        (?: api[_\-]?keys? | secrets? | tokens? | passwords? | passwd | pwd | pass
+        (?: api[_\-]?keys? | secret[_\-]?keys? | secrets? | tokens? | passwords? | passwd | pwd | pass
             | credentials? | private[_\-]?key | access[_\-]?key | auth[_\-]?token
             | client[_\-]?secret )
         \b["']? \s* [:=] \s*

@@ -40,14 +40,25 @@ public actor PredictStore: PredictionStore {
             return database
         } catch {
             guard error == .corrupt else { throw error }
-            try? FileManager.default.removeItem(atPath: path)
-            for suffix in ["-wal", "-shm"] {
-                try? FileManager.default.removeItem(atPath: path + suffix)
-            }
+            setAsideCorrupt(at: path)
             let replacement = try Database(path: path)
             try Schema.migrate(replacement)
             secureFiles(at: path)
             return replacement
+        }
+    }
+
+    /// Moves a corrupt database and its sidecars aside under the JSON stores' convention, deleting only what cannot move.
+    private static func setAsideCorrupt(at path: String) {
+        let now = Date()
+        for suffix in ["", "-wal", "-shm"] {
+            let url = URL(filePath: path + suffix)
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+                continue
+            }
+            if LocalStore.setAside(url, now: now) == nil {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
     }
 
@@ -88,16 +99,7 @@ public actor PredictStore: PredictionStore {
         _ candidates: [Candidate], here: Int64?
     ) throws(PredictStoreError) -> [Candidate] {
         guard let here, !candidates.isEmpty else { return candidates }
-        let texts = Array(Set(candidates.map(\.text)))
-        let placeholders = Array(repeating: "?", count: texts.count).joined(separator: ", ")
-        let retired = Set(
-            try database.rows(
-                "SELECT text FROM entry WHERE surface_id = ? AND superseded_by IS NOT NULL AND text IN (\(placeholders))",
-                { statement in
-                    statement.bind(1, here)
-                    for (offset, text) in texts.enumerated() { statement.bind(Int32(offset + 2), text) }
-                }
-            ) { $0.text(0) })
+        let retired = try retiredTexts(surfaceIdentifier: here)
         return retired.isEmpty ? candidates : candidates.filter { !retired.contains($0.text) }
     }
 
@@ -427,7 +429,7 @@ public actor PredictStore: PredictionStore {
         try database.run("DELETE FROM surface WHERE bundle_id = ?") {
             $0.bind(1, ApplicationKey.of(bundleIdentifier))
         }
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
     /// Forgets one entry, and every succession naming it, wherever the user noticed it.
@@ -445,22 +447,20 @@ public actor PredictStore: PredictionStore {
                 $0.bind(3, text)
             }
         }
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
     /// Forgets every surface, and with it every entry and succession they hold.
     public func forgetEverything() throws(PredictStoreError) {
         try database.execute("DELETE FROM surface")
-        try leaveNothingBehind()
+        leaveNothingBehind()
     }
 
-    /// Empties the write-ahead log, which otherwise holds what was forgotten until the app quits.
-    private func leaveNothingBehind() throws(PredictStoreError) {
-        // The pragma answers in a row rather than an error code, so a checkpoint that was refused reads as success.
-        let refused = try database.rows("PRAGMA wal_checkpoint(TRUNCATE)", { _ in }) {
-            $0.integer(0)
-        }
-        guard refused.first == 0 else { throw .query("the write-ahead log could not be emptied") }
+    /// Empties the write-ahead log when no reader holds it, and reports whether it did; the delete has already committed either way.
+    @discardableResult
+    private func leaveNothingBehind() -> Bool {
+        let refused = try? database.rows("PRAGMA wal_checkpoint(TRUNCATE)", { _ in }) { $0.integer(0) }
+        return refused?.first == 0
     }
 
     /// How many entries each application has taught, keyed by bundle identifier.

@@ -10,18 +10,21 @@ public struct DecodeEffort: Sendable, Equatable {
     public let encoderRuns: Int
     /// Whether a prompted decode returned nothing and the piece was transcribed again unprompted.
     public let retriedWithoutPrompt: Bool
+    /// Whether a decode stopped at the token cap and no point could be found to resume from, so later audio may be missing.
+    public let capUnresolved: Bool
 
     /// One decode, no fallback and no retry, which is what a backend that reports nothing means.
     public static let none = DecodeEffort()
 
     public init(
         fallbacks: Int = 0, fallbackSeconds: Double = 0, encoderRuns: Int = 0,
-        retriedWithoutPrompt: Bool = false
+        retriedWithoutPrompt: Bool = false, capUnresolved: Bool = false
     ) {
         self.fallbacks = fallbacks
         self.fallbackSeconds = fallbackSeconds
         self.encoderRuns = encoderRuns
         self.retriedWithoutPrompt = retriedWithoutPrompt
+        self.capUnresolved = capUnresolved
     }
 
     /// Whether anything happened worth reporting.
@@ -33,7 +36,7 @@ public struct DecodeEffort: Sendable, Equatable {
             fallbacks: fallbacks + retry.fallbacks,
             fallbackSeconds: fallbackSeconds + retry.fallbackSeconds,
             encoderRuns: encoderRuns + retry.encoderRuns,
-            retriedWithoutPrompt: true)
+            retriedWithoutPrompt: true, capUnresolved: capUnresolved || retry.capUnresolved)
     }
 
     /// One decode's effort with another's, with flags OR'd, since a tail retry decodes a different slice at the same vocabulary.
@@ -42,6 +45,14 @@ public struct DecodeEffort: Sendable, Equatable {
             fallbacks: fallbacks + other.fallbacks,
             fallbackSeconds: fallbackSeconds + other.fallbackSeconds,
             encoderRuns: encoderRuns + other.encoderRuns,
-            retriedWithoutPrompt: retriedWithoutPrompt || other.retriedWithoutPrompt)
+            retriedWithoutPrompt: retriedWithoutPrompt || other.retriedWithoutPrompt,
+            capUnresolved: capUnresolved || other.capUnresolved)
+    }
+
+    /// This effort marked as having stopped at the cap with no resume point.
+    public func markingCapUnresolved() -> DecodeEffort {
+        DecodeEffort(
+            fallbacks: fallbacks, fallbackSeconds: fallbackSeconds, encoderRuns: encoderRuns,
+            retriedWithoutPrompt: retriedWithoutPrompt, capUnresolved: true)
     }
 }

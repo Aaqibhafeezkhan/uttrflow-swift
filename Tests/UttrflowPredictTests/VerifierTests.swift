@@ -84,6 +84,25 @@ struct VerifierTests {
         #expect(verdict == .rejected)
     }
 
+    @Test("A rejected branch is not condemned for good, since it may be fetched tomorrow.")
+    func openVocabularyRejectionIsNotRecorded() async {
+        let store = RecordingSupersession()
+        let verdict = await decided(
+            "git checkout zqxjw", typed: "git checkout z", machine: [.branch: ["main"]],
+            scoring: ScriptedScoring(disliked), supersession: store)
+        #expect(verdict == .rejected)
+        #expect(await store.rejected.isEmpty)
+    }
+
+    @Test("A rejected subcommand is condemned for good, since its vocabulary is closed.")
+    func closedVocabularyRejectionIsRecorded() async {
+        let store = RecordingSupersession()
+        _ = await decided(
+            "git zqxjw", typed: "git z", machine: [.subcommand(of: "git"): ["commit"]],
+            scoring: ScriptedScoring(disliked), supersession: store)
+        #expect(await store.rejected == ["git zqxjw"])
+    }
+
     @Test("A candidate the model likes stands even where the machine cannot place it.")
     func keepsWhatTheModelLikes() async {
         let verdict = await decided(
@@ -116,18 +135,15 @@ struct VerifierTests {
         // On a clock the scorer itself pushes past the budget, so the deadline needs no real time to win the race.
         let budgetClock = ManualClock()
         let index = EnvironmentIndex(reader: StubEnvironment([:]))
-        let scoring = NoncooperativeScoring(
-            liked, holdingThreadForMilliseconds: 8_000, advancing: budgetClock)
+        let holding = ThreadHold()
+        let scoring = NoncooperativeScoring(liked, holding: holding, advancing: budgetClock)
         let verifier = Verifier(index: index, scoring: scoring, budgetInMilliseconds: 200, clock: budgetClock)
-        let wall = ContinuousClock()
-        let start = wall.now
         let verdict = await verifier.verdict(
             for: Candidate(text: "git zqxjw", source: .personal), in: terminal, typed: "git z", now: moment)
-        let elapsed = start.duration(to: wall.now)
+        let scorerStillHeld = !holding.hasEnded
+        holding.release()
         #expect(verdict == .rejected)
-        #expect(
-            elapsed < .seconds(4),
-            "the verdict must return once the deadline wins, not wait out an 8-second noncooperative scorer")
+        #expect(scorerStillHeld, "the verdict must return while the scorer still holds its thread")
     }
 
     @Test("A cancelled turn stops `verified` between candidates, not just after the whole loop.")

@@ -116,4 +116,19 @@ struct SystemKeyboardConsumeTests {
         delivery.setConsumeKeyDown(false)
         #expect(delivery.send(keyDown) == false)
     }
+
+    @Test("a second disable inside the window gives the tap up")
+    func secondDisableGivesUp() {
+        let delivery = Delivery()
+        #expect(delivery.shouldReEnable())
+        #expect(!delivery.shouldReEnable())
+    }
+
+    @Test("a restarted keyboard re-enables its new tap on that tap's first disable")
+    func restartForgetsThePreviousTapsDisables() {
+        let keyboard = SystemKeyboard()
+        #expect(keyboard.delivery.shouldReEnable())
+        keyboard.stop()
+        #expect(keyboard.delivery.shouldReEnable())
+    }
 }

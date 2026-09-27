@@ -30,9 +30,11 @@ public enum CappedDecodeRetry {
         var totalTokensUsed = 0
         var remaining = samples
         var sliceStartSeconds = 0.0
+        var stillCapped = false
 
         for _ in 0..<maxRetries {
             guard !remaining.isEmpty else { break }
+            stillCapped = false
             let result = try await backend.transcribe(
                 remaining, languageHint: languageHint, biasedTowards: vocabulary)
             languageIdentifier = result.languageIdentifier ?? languageIdentifier
@@ -77,13 +79,24 @@ public enum CappedDecodeRetry {
             } else {
                 guard hitCap else { break }
                 // The recogniser may stretch the final fragment word to the audio end; trust the last *normal* word as where it actually stopped.
-                guard let capped = cappedCutoffSeconds(in: result.segments) else { break }
+                guard let capped = cappedCutoffSeconds(in: result.segments) else {
+                    totalEffort = totalEffort.markingCapUnresolved()
+                    break
+                }
                 cutoff = capped
             }
             let consumedSamples = Int((cutoff * sampleRate).rounded(.down))
-            guard consumedSamples > 0, consumedSamples < remaining.count else { break }
+            guard consumedSamples > 0, consumedSamples < remaining.count else {
+                totalEffort = totalEffort.markingCapUnresolved()
+                break
+            }
             remaining = Array(remaining[consumedSamples...])
             sliceStartSeconds += cutoff
+            stillCapped = true
+        }
+        // Out of retries with audio still undecoded after a cap is as incomplete as a cap with no resume point.
+        if stillCapped, !remaining.isEmpty {
+            totalEffort = totalEffort.markingCapUnresolved()
         }
 
         return RawTranscript(

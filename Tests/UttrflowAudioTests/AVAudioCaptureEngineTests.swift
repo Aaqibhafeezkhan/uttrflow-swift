@@ -134,6 +134,25 @@ struct AVAudioCaptureEngineTests {
         #expect(audio.samples.count == 32)
     }
 
+    @Test("an interruption from a finished recording that arrives late cannot mark the next one")
+    func aLateInterruptionBelongsToItsOwnRecording() async throws {
+        let source = FakeMicrophoneSource()
+        let engine = AVAudioCaptureEngine(source: source)
+        try await engine.start()
+        let earlier = try #require(source.interruptionHandler)
+        source.emit(Array(repeating: 0.25, count: 16))
+        _ = try await engine.stop()
+
+        try await engine.start()
+        source.emit(Array(repeating: 0.25, count: 32))
+        earlier(.began)
+        earlier(.ended(.engineFailed(description: "gone")))
+        try await settle(engine, handling: 2)
+
+        let audio = try await engine.stop()
+        #expect(audio.samples.count == 32)
+    }
+
     /// What the tap holds at key-up is up to one block, which is the tail of whatever was last said.
     @Test("keeps the block the hardware was still holding when the key came up")
     func stopDrainsBeforeTearingTheTapDown() async throws {
@@ -213,6 +232,22 @@ struct AVAudioCaptureEngineTests {
         #expect(source.stopCount == 1)
     }
 
+    @Test("drops a block from a cancelled recording that lands after the next one starts")
+    func lateBlockFromCancelledRecordingIsDropped() async throws {
+        let source = FakeMicrophoneSource()
+        let engine = AVAudioCaptureEngine(source: source)
+        try await engine.start()
+        source.emit([0.9, 0.9])
+        await engine.cancel()
+        try await engine.start()
+        source.emitLate([0.9, 0.9, 0.9], toStart: 0)
+        source.emit([0.1])
+
+        let audio = try await engine.stop()
+
+        #expect(audio.samples == [0.1])
+    }
+
     @Test("does nothing when cancelled while idle")
     func cancelWhenIdleIsSafe() async {
         let source = FakeMicrophoneSource()
@@ -286,6 +321,24 @@ struct AVAudioCaptureEngineSnapshotTests {
     func nothingWhileIdle() async {
         let engine = AVAudioCaptureEngine(source: FakeMicrophoneSource())
         #expect(await engine.capturedSoFar() == .empty)
+    }
+
+    @Test("shares only what arrived after an offset, and the stop still returns every sample")
+    func sharesFromOffsetWithoutLoss() async throws {
+        let source = FakeMicrophoneSource()
+        let engine = AVAudioCaptureEngine(source: source)
+        try await engine.start()
+        source.emit([0.1, 0.2, 0.3])
+
+        let early = await engine.capturedSoFar(from: 2)
+        source.emit([0.4])
+        let later = await engine.capturedSoFar(from: 3)
+        let all = try await engine.stop()
+
+        #expect(early.samples == [0.3])
+        #expect(later.samples == [0.4])
+        #expect(all.samples == [0.1, 0.2, 0.3, 0.4])
+        #expect(await engine.capturedSoFar(from: 0) == .empty)
     }
 }
 
