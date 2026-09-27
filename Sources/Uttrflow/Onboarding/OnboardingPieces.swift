@@ -119,7 +119,8 @@ struct OnboardingBadgeView: View {
                 )
                 .modifier(OnboardingShake(travel: shaken))
                 .onAppear {
-                    guard tone == .failure else { return }
+                    // No shake under Reduce Motion; the failure's colour and words still say it.
+                    guard tone == .failure, !MotionBudget.current().reducesMotion else { return }
                     withAnimation(.easeInOut(duration: 0.5)) { shaken = 1 }
                 }
         }
@@ -275,7 +276,7 @@ struct OnboardingKeycaps: View {
                     .offset(y: isHeld ? 4 : 0)
             }
         }
-        .animation(.easeOut(duration: 0.12), value: isHeld)
+        .animation(MotionBudget.current().allowing(.easeOut(duration: 0.12)), value: isHeld)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(keys.joined(separator: " "))
     }
@@ -303,7 +304,7 @@ struct OnboardingDownloadRing: View {
                     style: StrokeStyle(lineWidth: 7, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.easeOut(duration: 0.25), value: share)
+                .animation(MotionBudget.current().allowing(.easeOut(duration: 0.25)), value: share)
             center(share)
         }
         .frame(width: 104, height: 104)

@@ -71,3 +71,13 @@ struct MotionBudgetTests {
         #expect(current.energy == EnergyConditions.current())
     }
 }
+
+@Suite("A one-off animation under Reduce Motion")
+struct MotionBudgetAllowingTests {
+    @Test("runs when the Mac asks for nothing and lands in place under Reduce Motion")
+    func allowing() {
+        #expect(MotionBudget().allowing(.easeOut) == .easeOut)
+        #expect(MotionBudget(reducesMotion: true).allowing(.easeOut) == nil)
+        #expect(MotionBudget(energy: EnergyConditions(isLowPowerMode: true)).allowing(.easeOut) == .easeOut)
+    }
+}

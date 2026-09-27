@@ -31,7 +31,9 @@ struct SettingsSwitchStyle: ToggleStyle {
                     color: configuration.isOn ? PagePalette.dictation.opacity(0.6) : .clear,
                     radius: 6
                 )
-                .animation(.snappy(duration: 0.18), value: configuration.isOn)
+                .animation(
+                    MotionBudget.current().allowing(.snappy(duration: 0.18)), value: configuration.isOn
+                )
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
