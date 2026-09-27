@@ -441,4 +441,20 @@ struct SurroundingsTests {
             around: compose, in: FakeTree(root: window), windowTitle: nil, deadline: unhurried)
         #expect(read.text?.contains("on my w") != true)
     }
+
+    @Test("In a browser the walk stays inside the page, so other tabs' titles and infobars are never read")
+    func aBrowserWalkStaysInsideThePage() {
+        let tabStrip = Node(
+            id: 70, role: "AXTabGroup",
+            children: [label(71, "Quarterly plan – 2 Tabs"), label(72, "Holiday photos")])
+        let infobar = Node(id: 73, children: [label(74, "Infobar Container")])
+        let page = Node(
+            id: 80, role: "AXWebArea", text: "Sign in",
+            children: [Node(id: 81, children: [label(82, "Email"), compose])])
+        let window = Node(
+            id: 0, role: "AXWindow", children: [tabStrip, infobar, Node(id: 90, children: [page])])
+        let read = Surroundings.collect(
+            around: compose, in: FakeTree(root: window), windowTitle: "Sign in", deadline: unhurried)
+        #expect(lines(read) == ["Email"])
+    }
 }

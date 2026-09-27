@@ -38,7 +38,8 @@ milliseconds, not hundreds.
    thread beside a compose box before the sidebar — taking the text of labels, messages,
    headings, links, cells and other fields. Each ring is gathered nearest the field first and
    put back into reading order afterwards, so when a thread outruns the allowance it is the
-   newest messages that survive, not the oldest. An element is read only where its frame meets
+   newest messages that survive, not the oldest. In a browser the walk never climbs past the page
+   (`AXWebArea`), so the tab strip, toolbar and infobars are never read. An element is read only where its frame meets
    the window's: no frame is trusted, zero size is hidden, off-window is pruned with its whole
    subtree; a label a container already carries is not read again from its children. A field
    that declares itself secure — the secure role or subrole, or a name `SecureField` recognises —
