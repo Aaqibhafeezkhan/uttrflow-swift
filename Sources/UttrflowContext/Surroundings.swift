@@ -88,10 +88,28 @@ public struct Surroundings: Sendable, Equatable {
             child = parent
         }
         // Farthest first and nearest last, so the tail of the text is what sits closest to the field.
-        let joined = levels.reversed().flatMap { $0 }.joined(separator: "\n")
+        let raw = levels.reversed().flatMap { $0 }
+        // A subtree the ring walk reaches from two ancestor levels produces the same text twice; drop the later
+        // occurrence so a mirrored nav or a web view that lists its own contents does not halve the prompt budget.
+        // A web view that mirrors the focused textarea's value back into a sibling likewise lands the user's own
+        // draft, so the focused element's text is dropped too.
+        let focusedText = Self.trimmed(tree.text(of: focused))
+        let joined = Self.deduplicated(raw, dropping: focusedText).joined(separator: "\n")
         return Surroundings(
             windowTitle: windowTitle, text: joined.isEmpty ? nil : joined,
             timedTurnLines: walk.clockOnlyElements)
+    }
+
+    /// The first occurrence of every line wins; later repeats are dropped. A text the focused element already holds is dropped too, so a mirror of the field's value cannot land in the prompt.
+    static func deduplicated(_ lines: [String], dropping duplicate: String?) -> [String] {
+        var seen: Set<String> = []
+        var kept: [String] = []
+        for line in lines {
+            if let duplicate, !duplicate.isEmpty, line == duplicate { continue }
+            guard seen.insert(line).inserted else { continue }
+            kept.append(line)
+        }
+        return kept
     }
 
     /// One read's running state: how much it has visited and gathered, and when it has to stop.
