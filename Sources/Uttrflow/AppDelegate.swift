@@ -2022,8 +2022,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             knownWords = await dictionary.allEntries()
             knownSnippets = await snippets.snippets()
             readAccount()
-            await refreshPicture()
             await refreshPermissions()
+            // The picture may need a round trip, so it follows the paint rather than holding it back.
+            defer { Task { [weak self] in await self?.refreshPictureThenRedraw() } }
             // A later refresh has newer state, and painting over it would leave the older reading up.
             guard reading == refreshGeneration else { return }
             // Read even out of sight, since the menu's Recent list comes from this reading too.
@@ -2198,6 +2199,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The last answer each gate gave; absent means unchecked, which the pages draw as silence.
     private var knownPermissions: [PermissionKind: PermissionStatus] = [:]
+
+    /// Reads the account picture and redraws only when it changed.
+    private func refreshPictureThenRedraw() async {
+        let before = knownPicture?.path
+        await refreshPicture()
+        if knownPicture?.path != before { redrawMainWindow() }
+    }
 
     private func refreshPicture() async {
         guard let path = account.profiles.load()?.account.avatarPath else {
