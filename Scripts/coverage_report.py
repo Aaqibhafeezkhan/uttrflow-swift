@@ -122,6 +122,9 @@ EXCLUDED_FILES = {
         "SwiftUI; the geometry it draws is UttrflowMark, which is tested"
     ),
     "Uttrflow/Sidebar/SidebarView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Sidebar/SidebarAvatar.swift": (
+        "SwiftUI; the picture it shows is decoded by AccountPictures, which HomeHeroViewTests tests"
+    ),
     "Uttrflow/Main/HomePageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HomeActivityView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/HomeHeroView.swift": (

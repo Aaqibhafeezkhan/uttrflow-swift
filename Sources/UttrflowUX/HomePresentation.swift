@@ -47,6 +47,8 @@ public struct HomePresentation: Sendable, Equatable {
     public let canSearch: Bool
     /// The whole page below the greeting before the first dictation, when nothing stops one starting.
     public let emptyState: MainEmptyState?
+    /// Whether the history has not been read yet, so the figures below the hero are held back rather than shown as zero.
+    public let isReading: Bool
 
     /// Builds a page from its parts.
     public init(
@@ -69,7 +71,8 @@ public struct HomePresentation: Sendable, Equatable {
         viewAll: MainAction?,
         search: MainAction,
         canSearch: Bool,
-        emptyState: MainEmptyState? = nil
+        emptyState: MainEmptyState? = nil,
+        isReading: Bool = false
     ) {
         self.greeting = greeting
         self.subtitle = subtitle
@@ -91,6 +94,7 @@ public struct HomePresentation: Sendable, Equatable {
         self.search = search
         self.canSearch = canSearch
         self.emptyState = emptyState
+        self.isReading = isReading
     }
 }
 
@@ -256,6 +260,8 @@ public struct HomeSnapshot: Sendable, Equatable {
     public let speechDownload: Double?
     /// The speech model's download size, said beside a missing model; `nil` when it is not known.
     public let speechModelBytes: Int64?
+    /// Whether ``entries`` has been read from the store yet; false only before the first reading.
+    public let hasReadHistory: Bool
 
     /// Builds a snapshot; everything but the shortcut and the clock defaults to empty.
     public init(
@@ -268,7 +274,8 @@ public struct HomeSnapshot: Sendable, Equatable {
         now: Date,
         speechModel: SpeechModelLoad? = nil,
         speechDownload: Double? = nil,
-        speechModelBytes: Int64? = nil
+        speechModelBytes: Int64? = nil,
+        hasReadHistory: Bool = true
     ) {
         self.permissions = permissions
         self.entries = entries
@@ -280,6 +287,7 @@ public struct HomeSnapshot: Sendable, Equatable {
         self.speechModel = speechModel
         self.speechDownload = speechDownload
         self.speechModelBytes = speechModelBytes
+        self.hasReadHistory = hasReadHistory
     }
 
     /// What the hero says about the speech model, the download first; `nil` once it can transcribe.
@@ -352,8 +360,10 @@ public enum HomePresenter {
             viewAll: kept.isEmpty ? nil : MainAction(title: "View all", intent: .show(.history)),
             search: HomeDashboard.search,
             canSearch: !kept.isEmpty,
-            emptyState: kept.isEmpty && blocked == nil && modelStatus == nil
-                ? HomeDashboard.emptyState(activation: snapshot.settings.hotkeyActivation) : nil)
+            // Not before the first reading, or a returning user sees the first-run page flash past.
+            emptyState: snapshot.hasReadHistory && kept.isEmpty && blocked == nil && modelStatus == nil
+                ? HomeDashboard.emptyState(activation: snapshot.settings.hotkeyActivation) : nil,
+            isReading: !snapshot.hasReadHistory)
     }
 
     // MARK: - Showing the clipboard rather than mentioning it

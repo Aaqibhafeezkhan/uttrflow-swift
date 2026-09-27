@@ -100,6 +100,11 @@ person using it. That holds for a word the user typed in as much as one Uttrflow
 sighting path does not care how a word first arrived, only whether it is on disk and refused. The
 refusal binds only inference — typing the word in again adds it as before.
 
+The refusals are written to `<dictionary name>.refused.json` beside the dictionary, oldest first
+and capped at the ledger's 512, so a relaunch still refuses a word deleted before it. They are
+words the user already had in the dictionary and chose to remove, not terms read off the screen,
+and both resets delete the record with the rest.
+
 **Everything.** `removeEverything()` is the blunt instrument and takes the user's own words too.
 `removeLearned()` is almost always the one they wanted.
 

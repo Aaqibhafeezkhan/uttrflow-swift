@@ -54,8 +54,8 @@ copy of 2026.9.14 is offered this release like any other.
 - **Uttrflow now shares usage statistics linked to your account, and this is on by default**, also
   for copies updated from an earlier release. It sends counts and timings, such as how many
   dictations ran and how long they took, with your dictation language and the app and macOS
-  versions, never your words or audio. Turn it off in Settings › Privacy › "Share anonymous usage
-  statistics" (#1810).
+  versions, never your words or audio. Turn it off in Settings › Privacy › "Share usage statistics"
+  (#1810).
 
 ### Changed
 - **A new install dictates with ⌃⌥ held.** Hold Control and Option, talk, and let go. Installs

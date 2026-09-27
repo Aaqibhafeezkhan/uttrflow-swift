@@ -865,3 +865,69 @@ struct GeneratedSuggestionTests {
         #expect(update == .quiet(because: .overBudget))
     }
 }
+
+@Suite("Typing through a drawn ghost")
+struct SuggestionTypeThroughTests {
+    @Test("Five keys that each type the ghost's next letter keep it drawn, armed and takeable.")
+    func typingTheGhostKeepsIt() throws {
+        var session = SuggestionSession()
+        _ = try draw(&session, typing: "git c")
+        for letter in ["o", "m", "m", "i", "t"] {
+            let through = session.typedThrough(letter)
+            let update = try #require(through)
+            #expect(update.suggestion == .certain("git commit -m"))
+            #expect(!update.armed.isEmpty)
+            #expect(session.isCurrent)
+        }
+        #expect(session.typed == "git commit")
+        #expect(session.route(KeyStroke(.tab)) == .accept("git commit -m"))
+    }
+
+    @Test("A key that is not the ghost's next letter leaves the ghost to be withdrawn.")
+    func anotherKeyIsNotTypedThrough() throws {
+        var session = SuggestionSession()
+        _ = try draw(&session, typing: "git c")
+        #expect(session.typedThrough("x") == nil)
+        #expect(session.typedThrough("O") == nil)
+        #expect(session.typedThrough("") == nil)
+        #expect(session.typed == "git c")
+    }
+
+    @Test("The key that finishes the ghost, or one past it, is not typed through.")
+    func finishingTheGhostIsNotTypedThrough() throws {
+        var session = SuggestionSession()
+        _ = try draw(&session, typing: "git commit -")
+        #expect(session.typedThrough("m") == nil)
+        #expect(session.typedThrough("-m ") == nil)
+    }
+
+    @Test(
+        "An answer worked out before a typed-through key is dropped, and one after a stale read is refused.")
+    func anAnswerInFlightIsDropped() throws {
+        var session = SuggestionSession()
+        _ = try draw(&session, typing: "git c")
+        let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
+        _ = session.typedThrough("o")
+        #expect(session.resolve(lone(), for: asked, now: moment, elapsedMilliseconds: 0) == nil)
+        session.keystrokeArrived()
+        #expect(session.typedThrough("m") == nil)
+    }
+
+    @Test(
+        "A list keeps only the lines the typing still leads to, and a moved highlight is never typed through."
+    )
+    func aListFollowsTheTyping() throws {
+        var session = SuggestionSession()
+        let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
+        _ = session.resolveGenerated(
+            ["git commit -m", "git checkout", "git cherry-pick"], for: asked, elapsedMilliseconds: 0)
+        let through = session.typedThrough("o")
+        #expect(through?.suggestion == .certain("git commit -m"))
+
+        var moved = SuggestionSession()
+        let again = try query(moved.turn(in: field, at: PredictionContext(typed: "git c")))
+        _ = moved.resolveGenerated(["git commit -m", "git checkout"], for: again, elapsedMilliseconds: 0)
+        _ = moved.route(KeyStroke(.downArrow))
+        #expect(moved.typedThrough("o") == nil)
+    }
+}

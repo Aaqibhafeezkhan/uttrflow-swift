@@ -111,7 +111,8 @@ public final class OnboardingFlow {
     public var page: OnboardingPage {
         let settings = settingsStore.load()
         return OnboardingPresenter.page(
-            for: state, hotkey: settings.hotkey, activation: settings.hotkeyActivation)
+            for: state, hotkey: settings.hotkey, activation: settings.hotkeyActivation,
+            signsInAsStandIn: authentication.signsInAsStandIn)
     }
 
     // MARK: Driving
@@ -373,8 +374,11 @@ public final class OnboardingFlow {
                 if case .code(let userCode, _) = challenge.method {
                     set(detail: .signIn(.enterCode(provider, code: userCode)))
                 }
-                authorisationURL = challenge.authorisationURL
-                openBrowser(challenge.authorisationURL)
+                // A stand-in has no provider page, so nothing opens and Reopen has nowhere to go.
+                if challenge.method != .standIn {
+                    authorisationURL = challenge.authorisationURL
+                    openBrowser(challenge.authorisationURL)
+                }
 
                 let profile = try await authentication.completeSignIn(challenge)
                 try profiles.save(profile)

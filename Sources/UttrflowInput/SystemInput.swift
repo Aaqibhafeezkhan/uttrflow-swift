@@ -290,7 +290,7 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
     public func precedingText(_ count: Int) -> String? {
         guard
             count > 0, let element = focusedElement(),
-            let value = stringAttribute(kAXValueAttribute, of: element),
+            let value = readableValue(of: element),
             let range = rangeAttribute(kAXSelectedTextRangeAttribute, of: element)
         else { return nil }
         return BackwardSelection.text(in: value, endingAt: range.location, exactly: count)
@@ -300,7 +300,7 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
     public func tail(upTo count: Int) -> FieldTail {
         guard
             count > 0, let element = focusedElement(),
-            let value = stringAttribute(kAXValueAttribute, of: element),
+            let value = readableValue(of: element),
             let range = rangeAttribute(kAXSelectedTextRangeAttribute, of: element),
             let tail = BackwardSelection.tail(in: value, endingAt: range.location, upTo: count)
         else { return .unreadable }
@@ -327,7 +327,7 @@ private struct AXSelectionAttributes: SelectionAttributes, @unchecked Sendable {
     let element: AXUIElement
 
     func value() -> String? {
-        stringAttribute(kAXValueAttribute, of: element)
+        readableValue(of: element)
     }
 
     func selectedRange() -> CFRange? {
@@ -344,6 +344,17 @@ private struct AXSelectionAttributes: SelectionAttributes, @unchecked Sendable {
         guard let value = AXValueCreate(.cfRange, &range) else { return .illegalArgument }
         return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value)
     }
+}
+
+/// The element's value, or `nil` for a secure field, whose value is never asked for.
+private func readableValue(of element: AXUIElement) -> String? {
+    SecureField.readableValue(
+        role: stringAttribute(kAXRoleAttribute, of: element),
+        subrole: stringAttribute(kAXSubroleAttribute, of: element),
+        identifier: stringAttribute(kAXIdentifierAttribute, of: element),
+        placeholder: stringAttribute(kAXPlaceholderValueAttribute, of: element),
+        description: stringAttribute(kAXDescriptionAttribute, of: element),
+        value: { stringAttribute(kAXValueAttribute, of: element) })
 }
 
 /// The string an Accessibility attribute holds, or `nil` when the element will not say.

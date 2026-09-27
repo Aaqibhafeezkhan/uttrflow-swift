@@ -11,11 +11,15 @@ public import class Foundation.JSONEncoder
 public import typealias Foundation.TimeInterval
 
 private import Synchronization
+private import os
 
 /// Signs in and stays signed in against the HTTP backend by the rules in `Docs/account-session.md`.
 public final class HTTPAuthenticationService: AuthenticationService {
     /// This build's registered client identifier; not a credential, PKCE covers what an app cannot hide.
     public static let defaultClientID = "uttrflow-mac"
+
+    /// Each step of a sign-in and a session by status code and port alone; never a token, code or address.
+    private static let log = Logger(subsystem: "com.uttrflow.Uttrflow", category: "account")
 
     /// Renews the access token this long before expiry, so no request carries a token that dies in flight.
     private static let renewalMargin: TimeInterval = 60
@@ -146,8 +150,10 @@ public final class HTTPAuthenticationService: AuthenticationService {
             redirectURI = try await listener.bind(expecting: state)
         } catch {
             await listener.close()
+            Self.log.notice("sign-in: no loopback port, signing in by code instead")
             return try await beginDeviceSignIn(with: provider)
         }
+        Self.log.notice("sign-in: waiting on loopback port \(redirectURI.port ?? 0, privacy: .public)")
 
         var components = URLComponents(url: url("v1/auth/authorize"), resolvingAgainstBaseURL: false)
         components?.queryItems = [
@@ -235,6 +241,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
         defer { Task { await listener.close() } }
 
         let callback = try await listener.awaitCallback()
+        Self.log.notice("sign-in: the browser came back, exchanging the code")
 
         // Checked here as well as by the backend: an answer naming another attempt is not ours to spend.
         guard callback.state == challenge.state else {
@@ -251,6 +258,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
                     codeVerifier: pkce.verifier,
                     redirectURI: redirectURI.absoluteString,
                     device: device?.registration())))
+        Self.log.notice("sign-in: token exchange answered \(response.status, privacy: .public)")
 
         guard response.isSuccess else { throw refusal(response) }
         return try await beginSession(issuedBy: response)
@@ -314,6 +322,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
         case .noCredential: return .noCredential
         case .token(let token):
             let response = try await send(profileRequest(token, ifNoneMatch: cached?.validator))
+            Self.log.notice("session: profile answered \(response.status, privacy: .public)")
 
             if response.status == 304 { return .unchanged }
 
@@ -395,6 +404,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
     public func signOut() async {
         let refreshToken = tokens.refreshToken()
         forgetSession()
+        Self.log.notice("session: signed out on this Mac")
 
         guard let refreshToken else { return }
         _ = try? await transport.perform(post("v1/auth/sign-out", SignOutBody(refreshToken: refreshToken)))
@@ -480,6 +490,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
                         device: device?.registration())
                 ))
         } catch {
+            Self.log.notice("session: refresh did not reach the server")
             if case .serverUnreachable = error {
                 session.withLock { state in
                     guard state.generation == generation else { return }
@@ -489,6 +500,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
             return .failure(error)
         }
 
+        Self.log.notice("session: refresh answered \(response.status, privacy: .public)")
         let ambiguous = session.withLock { state in state.ambiguousRefresh == attempt }
         if response.status == 401 {
             if ambiguous {
@@ -534,14 +546,21 @@ public final class HTTPAuthenticationService: AuthenticationService {
     /// Keeps the session a sign-in was answered with, then reads the profile it unlocks.
     private func beginSession(issuedBy response: BackendResponse) async throws(AccountError) -> Profile {
         guard let issued = decode(IssuedSession.self, from: response.body) else {
+            Self.log.error("sign-in: the issued session could not be read")
             throw .providerRefused(description: "the server issued a session we could not read")
         }
-        try session.withLock { state throws(AccountError) in
-            state.generation += 1
-            state.renewal = nil
-            state.ambiguousRefresh = nil
-            try adopt(issued)
+        do throws(AccountError) {
+            try session.withLock { state throws(AccountError) in
+                state.generation += 1
+                state.renewal = nil
+                state.ambiguousRefresh = nil
+                try adopt(issued)
+            }
+        } catch {
+            Self.log.error("sign-in: the Keychain refused the session")
+            throw error
         }
+        Self.log.notice("sign-in: session kept, reading the profile")
         return try await readProfile(validator: nil)
     }
 
@@ -578,6 +597,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
             throw .providerRefused(description: "that session was already over")
         case .token(let token):
             let response = try await send(profileRequest(token, ifNoneMatch: validator))
+            Self.log.notice("sign-in: profile answered \(response.status, privacy: .public)")
             guard response.isSuccess else { throw refusal(response) }
             return try believe(response)
         }
@@ -589,6 +609,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
             throw .sessionMalformed
         }
         guard verifier.isAuthentic(profile.entitlement), profile.isInternallyConsistent else {
+            Self.log.error("profile refused: unsigned, wrongly signed or inconsistent")
             throw .sessionMalformed
         }
         return profile.remembering(validator: response.header("ETag"))
