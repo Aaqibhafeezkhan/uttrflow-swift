@@ -100,6 +100,8 @@ final class SuggestionCoordinator {
     private var isStopped = false
     /// Set while a dictation is under way, when no turn may start.
     private var isDictating = DictationInProgress.shared.isDictating
+    /// The accepted lines still being written to the corpus, which a held key never waits on.
+    private let acceptances = AcceptanceQueue()
     /// Set when a paste or a dictation put text in the field that capture has not yet been told was never typed.
     private var insertionPending = false
     private var again: SuggestionReason?
@@ -267,9 +269,18 @@ final class SuggestionCoordinator {
         return key == .tab || key == .escape || modifiers.contains(.command)
     }
 
-    /// Whether a key-down is ⌘V under any layout, which pastes text rather than typing it.
+    /// Whether a key-down is ⌘V under the selected layout, matched by the key its ⌘ table puts V on.
     nonisolated static func isPaste(_ event: NSEvent) -> Bool {
-        event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers?.lowercased() == "v"
+        isPaste(
+            keyCode: event.keyCode, modifiers: event.modifierFlags,
+            pasteKeyCode: CGEventKeystrokeSender.pasteKeyCode)
+    }
+
+    /// Whether a key with `modifiers` held is the layout's ⌘V, whatever letter the key types without ⌘.
+    nonisolated static func isPaste(
+        keyCode: UInt16, modifiers: NSEvent.ModifierFlags, pasteKeyCode: UInt16
+    ) -> Bool {
+        modifiers.contains(.command) && keyCode == pasteKeyCode
     }
 
     /// Withdraws the ghost and holds every turn while a dictation is under way, so its models have the GPU.
@@ -801,6 +812,8 @@ final class SuggestionCoordinator {
         _ snapshot: FocusedFieldSnapshot, as reading: FieldReading, because reason: SuggestionReason,
         at moment: Date
     ) async {
+        // The acceptance is recorded off the key path, and capture still hears of it before this event.
+        await acceptances.drained()
         if case .applicationChanged = reason, let leaving = lastReading, leaving != reading {
             _ = try? await capture.handle(.applicationDeactivated(at: moment), in: leaving)
         }
@@ -967,7 +980,7 @@ final class SuggestionCoordinator {
         }
     }
 
-    /// Puts the tail into the field and hands the taken line to capture, answering false when the field refused it unwritten.
+    /// Puts the tail into the field and queues the taken line for capture, answering false when the field refused it unwritten.
     private func take(_ text: String, after typed: String, in reading: FieldReading?) async -> Bool {
         // What the gates left is a whole line, so taking it may replace characters as well as add.
         var via = "nothing"
@@ -990,11 +1003,15 @@ final class SuggestionCoordinator {
             "\(SuggestionLog.accept(text: text, typed: typed, via: via), privacy: .public)"
         )
         guard let reading else { return true }
-        do {
-            _ = try await capture.accepted(text, in: reading, at: Date())
-        } catch {
-            // The session holds the acceptance and retries it before the next event.
-            Self.log.error("An accepted suggestion's corpus write failed and is held for a retry")
+        let moment = Date()
+        let log = Self.log
+        acceptances.enqueue { [capture] in
+            do {
+                _ = try await capture.accepted(text, in: reading, at: moment)
+            } catch {
+                // The session holds the acceptance and retries it before the next event.
+                log.error("An accepted suggestion's corpus write failed and is held for a retry")
+            }
         }
         return true
     }

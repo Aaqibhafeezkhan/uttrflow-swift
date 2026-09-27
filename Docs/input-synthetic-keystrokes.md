@@ -56,7 +56,8 @@ A key code is a key's *position*, but an application matches a ⌘ shortcut agai
 *character* the current layout gives that position. On US QWERTY those agree, so posting
 key code 9 has always looked like posting V — but on Dvorak the same position types `k`,
 so the same event fires ⌘K instead. `PasteKeyLayout` reads the selected layout's table
-with `UCKeyTranslate` and caches the key code that produces `v` under it, falling back to
+with `UCKeyTranslate`, ⌘ held so a layout with a separate ⌘ map (Dvorak – QWERTY ⌘) is read
+from that map, and caches the key code that produces `v` under it, falling back to
 the system's ASCII-capable layout when the selected one has no Latin letters, and to key
 code 9 when neither layout can be read. The cache fills on `startObserving()` and follows
 `kTISNotifySelectedKeyboardInputSourceChanged`, on the main queue, the way

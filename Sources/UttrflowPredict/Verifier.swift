@@ -89,12 +89,13 @@ public actor Verifier {
             of: candidate.text, following: typed, before: deadline)
         guard plausibility != .overBudget else { return .rejected }
 
+        // Only a machine that answered can condemn a line for good; the model alone refuses it this time only.
         let verdict = await reported(
             Verification.verdict(
                 word: judged?.word ?? token.token, known: judged?.known ?? [],
                 modelObjects: Verification.objects(to: plausibility)),
             on: candidate.text, leading: token.leading + (judged?.prefix ?? ""), in: surface,
-            forGood: Verification.isClosedVocabulary(for: token))
+            forGood: judged != nil && Verification.isClosedVocabulary(for: token))
         cache.remember(verdict, for: key, now: now)
         return verdict
     }
@@ -200,17 +201,24 @@ public actor Verifier {
         return standing
     }
 
-    /// Whether every word the model added is one the machine names, or one no listing could deny.
+    /// Whether every word the model added is one the machine names, or one no listing could deny; a listing not yet answered vouches for nothing.
     private func stands(
         _ completion: String, after typed: String, in surface: Surface, now: Date
     ) async -> Bool {
         guard await admits(completion, in: surface, now: now) else { return false }
+        // A field that is not a directory has no listings, so nothing it holds is looked up.
+        guard EnvironmentSource.workingDirectory(of: surface) != nil else { return true }
         for token in Verification.words(of: completion, addedAfter: typed) {
             guard let attestation = Verification.attestation(for: token) else { continue }
             var vouched = false
             for lookup in attestation.lookups where !vouched {
-                let known = await known(of: lookup.kinds, in: surface, now: now)
-                vouched = Verification.stands(lookup.word, known: known)
+                let answer = await knownAndComplete(of: lookup.kinds, in: surface, now: now)
+                if let answer, Verification.attests(lookup.word, answer.known) {
+                    vouched = true
+                } else if answer?.complete != true {
+                    // A listing still out is no proof either way, so only the disk itself may vouch meanwhile.
+                    vouched = lines.confirms(lookup, in: surface.scope)
+                }
             }
             guard vouched else { return false }
         }

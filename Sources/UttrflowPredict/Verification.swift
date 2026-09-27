@@ -104,14 +104,15 @@ public enum Verification {
         return best
     }
 
-    /// Whether the kinds name everything there is, as programs and their verbs do and paths and branches never do.
+    /// Whether the kinds name everything there is, as programs and their verbs do and paths, branches and no kinds at all never do.
     static func isClosedVocabulary(_ kinds: [EnvironmentKind]) -> Bool {
-        !kinds.contains { kind in
-            switch kind {
-            case .branch, .entries, .directories: true
-            case .executable, .alias, .subcommand, .gitAlias: false
+        !kinds.isEmpty
+            && !kinds.contains { kind in
+                switch kind {
+                case .branch, .entries, .directories: true
+                case .executable, .alias, .subcommand, .gitAlias: false
+                }
             }
-        }
     }
 
     /// One name to look up among some kinds, and what stands before it in the word when the word is a path.
