@@ -64,7 +64,11 @@ public enum ShellPrompt {
             if escaped {
                 escaped = false
             } else if let open = quote {
-                if character == open { quote = nil }
+                if character == open {
+                    quote = nil
+                } else if open == "\"", character == "\\" {
+                    escaped = true
+                }
             } else if character == "'" || character == "\"" {
                 quote = character
             } else if character == "\\" {

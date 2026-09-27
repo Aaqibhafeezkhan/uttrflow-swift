@@ -54,6 +54,8 @@ public final class CachedFileSystem: FileSystemProbing {
     private let kinds = Mutex<[String: Held<PathKind>]>([:])
     /// What each small file last held.
     private let texts = Mutex<[String: Held<String?>]>([:])
+    /// What each directory last listed.
+    private let listings = Mutex<[String: Held<[String]?>]>([:])
 
     /// A cache over one filesystem, on the given clock.
     public init(_ inner: any FileSystemProbing, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -83,7 +85,12 @@ public final class CachedFileSystem: FileSystemProbing {
     }
 
     public func names(inDirectory path: String, limit: Int) -> [String]? {
-        inner.names(inDirectory: path, limit: limit)
+        let key = "\(limit)\u{0}\(path)"
+        let moment = now()
+        if let held = listings.withLock({ $0[key] }), held.expires > moment { return held.value }
+        let names = inner.names(inDirectory: path, limit: limit)
+        listings.withLock { Self.store(names, for: key, in: &$0, at: moment) }
+        return names
     }
 
     /// Holds one answer, emptying the table first when it is full, since a full table is a burst that is over.

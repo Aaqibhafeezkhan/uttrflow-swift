@@ -7,6 +7,7 @@ import UttrflowAudio
 import UttrflowClipboard
 import UttrflowContext
 import UttrflowCore
+import UttrflowDiagnostics
 import UttrflowDictionary
 import UttrflowHistory
 import UttrflowInput
@@ -52,8 +53,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Held, because the menu asks whether the model is ready every time it is drawn.
     private let modelStore = FileSystemSpeechModelStore.whisperKit()
 
+    /// Crash and hang reports, sent only while the user has them switched on.
+    private let crashReports = CrashReporter(
+        info: Bundle.main.infoDictionary ?? [:], sdk: LiveCrashReportingSDK())
     /// Keeps the pipeline's stage timings for the session, which is what the diagnostics page reports on.
     private let diagnostics = DiagnosticsRecorder()
+    /// Anonymous counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
+    private var telemetry: UsageTelemetry?
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
     private let secureInput = SecureInputWatch()
     private var secureInputObserver: (any NSObjectProtocol)?
@@ -188,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var clipboardWatchTask: Task<Void, Never>?
 
     /// F7, F9 — the clip a delete removed, held by the app because the undo outlives the panel.
-    private var undoable: Clip?
+    private var undoOffer = PanelUndoOffer()
     private var undoTask: Task<Void, Never>?
     private let noticeLinger = NoticeLinger()
     /// Puts the floating button back once a panel paste's report has been read.
@@ -242,7 +248,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         settings = settingsStore.load()
         // Reconciled at launch too: the login item can be removed without telling the app.
         applyAppearance()
+        _ = BrandFont.isAvailable
         applyLaunchAtLogin()
+        startTelemetry()
+        crashReports.follow(isEnabled: settings.sendsCrashReports)
         buildPipeline()
         seedTheDictionary()
         sweepExpired()
@@ -262,6 +271,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Configured last, from the setting; the automatic check itself waits for `modelLoadingSettled()`.
         updates.onProgressChanged = { [weak self] in self?.refreshMenuBar() }
         updates.begin(automatically: settings.installsUpdatesAutomatically)
+    }
+
+    /// Builds the telemetry service from the saved switch and starts its hourly flush.
+    private func startTelemetry() {
+        let usage = UsageTelemetry(
+            isEnabled: settings.sharesUsageStatistics, sender: account.telemetry,
+            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        usage.start()
+        telemetry = usage
     }
 
     /// Deletes recordings and transcripts past their retention, with or without a window. See `Docs/recordings.md`.
@@ -546,7 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Finishes the dictation in flight before letting the process die, but not for ever.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        Task { [weak self, pipeline, clipboard] in
+        Task { [weak self, pipeline, clipboard, telemetry] in
             let controller = self?.controller
             let quittingPipeline = pipeline.map { pipeline in
                 AppQuitCoordinator.Pipeline(
@@ -561,6 +579,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 flushClipboard: { await clipboard.flushUse() },
                 stopController: { await controller?.stop() },
                 reply: {
+                    // After the dictation has landed, so a quit's last report never holds one up.
+                    await telemetry?.flushBeforeQuitting()
                     // On every path: an unanswered `terminateLater` is an app that cannot be quit.
                     await MainActor.run {
                         NSApplication.shared.reply(toApplicationShouldTerminate: true)
@@ -792,7 +812,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             snippets: StoredSnippets(store: snippets),
             learner: StoreCounters(dictionary: dictionary, snippets: snippets),
             vocabulary: LearnedVocabulary(dictionary: dictionary),
-            metrics: diagnostics,
+            metrics: telemetry.map { MetricsFanOut([diagnostics, $0.recorder]) } ?? diagnostics,
             cleaningRecorder: diagnostics,
             destinationOverrides: settings.destinations,
             recordings: recordings,
@@ -1208,14 +1228,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             _ = try await clipboard.setCategory(category, of: id, keeping: retention)
         case .delete(let id):
             // F7, F9 — kept in hand, because the store forgets it the moment this returns.
-            undoable = panel?.clips.first { $0.id == id }
-            panel?.canUndoDelete = undoable != nil
+            let held = panel?.clips.first { $0.id == id }
+            let ticket = undoOffer.offer(held)
+            // The earlier delete's timer must not expire this one's offer before its own starts.
+            undoTask?.cancel()
+            panel?.canUndoDelete = held != nil
             Self.log.info(
-                "delete: undoable=\(self.undoable != nil, privacy: .public) flag=\(self.panel?.canUndoDelete == true, privacy: .public)"
+                "delete: undoable=\(held != nil, privacy: .public) flag=\(self.panel?.canUndoDelete == true, privacy: .public)"
             )
             // Only the latest delete can be undone, so an earlier one's picture is let go first.
             await clipboard.forgetHeldPictures()
-            _ = try await clipboard.delete(id, keeping: retention, holdingPicture: undoable != nil)
+            _ = try await clipboard.delete(id, keeping: retention, holdingPicture: held != nil)
+            // A later delete owns the offer and its timer, so a superseded one leaves both alone.
+            guard undoOffer.isLatest(ticket) else { return }
             await startForgettingTheUndo()
         case .create(let text):
             // Detected here, off the main actor: the panel knows what was typed, not what a string is.
@@ -1240,7 +1265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .restore(let clip):
             _ = try await clipboard.record(clip, keeping: retention)
             await clipboard.forgetHeldPictures()
-            undoable = nil
+            undoOffer.withdraw()
             panel?.canUndoDelete = false
         }
     }
@@ -1252,7 +1277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             try? await Task.sleep(for: AppDelegate.undoWindow)
             guard !Task.isCancelled else { return }
             await self?.clipboard.forgetHeldPictures()
-            self?.undoable = nil
+            self?.undoOffer.withdraw()
             self?.panel?.canUndoDelete = false
             await self?.refreshPanelIfOpen()
         }
@@ -1286,8 +1311,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             closeQuickPanel()
             Task { await openSettingsPane(.accessibility) }
         case .undoDelete:
-            Self.log.info("undo requested: have=\(self.undoable != nil, privacy: .public)")
-            guard let clip = undoable else { return }
+            Self.log.info("undo requested: have=\(self.undoOffer.clip != nil, privacy: .public)")
+            guard let clip = undoOffer.clip else { return }
             undoTask?.cancel()
             apply(.restore(clip))
         case .format(let id):
@@ -1297,7 +1322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             closeQuickPanel()
             show(.settings(.general))
         case .insert, .reveal, .alias, .move, .delete, .renameCategory, .deleteCategory,
-            .reindent, .makeNote, .tickBox, .scope:
+            .reindent, .makeNote, .scope:
             // Answered above, by `intent.key`.
             break
         }
@@ -1506,6 +1531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Internal so a test can end a dictation without a microphone.
     func render(_ state: DictationState) {
         getOutOfTheWay(for: state)
+        telemetry?.observe(state, language: settings.profile.preferredLanguages.first)
         // Recorded before the menu is drawn, and kept even when insertion failed. §19.
         switch state {
         case .inserted(let outcome):
@@ -2234,9 +2260,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let activation = updated.hotkeyActivation
             Task { [weak self] in await self?.controller?.setActivation(activation) }
         }
+        telemetry?.setEnabled(updated.sharesUsageStatistics)
         // As above: a switch that drew itself and changed nothing.
         if updated.installsUpdatesAutomatically != previous.installsUpdatesAutomatically {
             updates.setInstallsAutomatically(updated.installsUpdatesAutomatically)
+        }
+        if updated.sendsCrashReports != previous.sendsCrashReports {
+            crashReports.follow(isEnabled: updated.sendsCrashReports)
         }
         // A freshly built cleaner, so the next dictation runs the choices just made.
         if updated.cleaning != previous.cleaning || updated.destinations != previous.destinations

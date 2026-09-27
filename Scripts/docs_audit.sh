@@ -672,11 +672,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. The worktree cleanup recipe must keep the remote branch.
+# 4. The worktree cleanup recipe must keep the pull request's remote branch.
 # ---------------------------------------------------------------------------
 #
-# The remote branch is the pull request's source ref, so the recipe never deletes it, and
-# local cleanup comes only after `gh pr create`.
+# The remote branch is the pull request's source ref, open or merged, and it is never
+# deleted. The local worktree and branch are disposable once the branch is pushed and the
+# pull request exists, so the recipe may clean them up then — but only after both, and it
+# must never carry a command that deletes the remote branch.
 printf '\nWorktree cleanup order\n'
 
 read -r -d '' CLEANUP_PROGRAM <<'PYTHON' || true
@@ -691,9 +693,11 @@ if start == -1 or end == -1:
 
 section = text[start:end]
 required = [
+    ("branch push", r"^git push -u origin"),
     ("pull request creation", r"^gh pr create --base main"),
     ("worktree removal", r"^git worktree remove"),
     ("local branch deletion", r"^git branch -[dD]"),
+    ("the never-delete rule", r"Remote branches are never deleted"),
 ]
 
 positions = {}
@@ -704,24 +708,26 @@ for name, pattern in required:
     else:
         positions[name] = match.start()
 
-if re.search(r"^git push origin --delete", section, re.MULTILINE):
-    print("AGENTS.md  deletes a remote branch, which is the pull request's source ref")
-
 create = positions.get("pull request creation")
-if create is not None:
-    for name in ("worktree removal", "local branch deletion"):
-        where = positions.get(name)
-        if where is not None and where < create:
-            print(f"AGENTS.md  {name} appears before pull request creation")
+push = positions.get("branch push")
+for name in ("worktree removal", "local branch deletion"):
+    where = positions.get(name)
+    for before, label in ((push, "branch push"), (create, "pull request creation")):
+        if where is not None and before is not None and where < before:
+            print(f"AGENTS.md  {name} appears before {label}")
+
+if re.search(r"^git push origin --delete", section, re.MULTILINE):
+    print("AGENTS.md  the recipe deletes the remote branch, which is the pull request's source ref")
 PYTHON
 cleanup_order="$(python3 -c "$CLEANUP_PROGRAM")"
 
 if [[ -n "${cleanup_order//[[:space:]]/}" ]]; then
     fail "the worktree cleanup recipe can lose a pull request's branch" \
-        "Never delete the remote branch, and clean up locally only after gh pr create." \
+        "Push the branch and open the pull request before removing the local worktree and branch," \
+        "and never delete the remote branch: it is the pull request's source ref, open or merged." \
         "" $'\n'"$cleanup_order"
 else
-    pass "branch cleanup keeps the remote branch and follows gh pr create in AGENTS.md"
+    pass "the cleanup recipe keeps the remote branch and cleans up only after the pull request exists"
 fi
 
 # ---------------------------------------------------------------------------

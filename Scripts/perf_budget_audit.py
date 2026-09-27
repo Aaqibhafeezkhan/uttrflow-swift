@@ -71,6 +71,7 @@ WAKEUPS_ALLOWED = {
 # Loops whose interval is a stored value, checked against the constant that supplies it.
 WAKEUPS_BOUND_BY = {
     ("Sources/UttrflowClipboard/PasteboardWatcher.swift", "interval"): "PasteboardWatcher.pollInterval",
+    ("Sources/Uttrflow/UsageTelemetry.swift", "interval"): "UsageTelemetry.flushInterval",
 }
 
 # Known breaches of the budget, each open under the issue that fixes it; a listed breach that is gone fails as stale.
@@ -747,7 +748,7 @@ INJECTIONS = (
     ),
     (
         "Sources/Uttrflow/Dock/DockView.swift",
-        "paused: !motion.workingDotsMove", "paused: false", "motion",
+        "paused: !motion.workingBarsMove", "paused: false", "motion",
     ),
     (
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",

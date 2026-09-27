@@ -198,14 +198,16 @@ struct NamedSecretScan {
         breaks = WordBreaks(text)
     }
 
-    /// The spellings `(?:api[_-]?keys?|secrets?|…|pass)\b` accepts, lowercase, as bytes.
+    /// The spellings `(?:api[_-]?keys?|secret[_-]?keys?|secrets?|…|pass)\b` accepts, lowercase, as bytes.
     static let keywords: [[UInt8]] = {
         func joined(_ first: String, _ second: String) -> [String] {
             ["", "_", "-"].map { first + $0 + second }
         }
-        let plurals = (joined("api", "key") + ["secret", "token", "password", "credential"]).flatMap {
-            [$0, $0 + "s"]
-        }
+        let plurals =
+            (joined("api", "key") + joined("secret", "key") + ["secret", "token", "password", "credential"])
+            .flatMap {
+                [$0, $0 + "s"]
+            }
         let singulars =
             ["passwd", "pwd", "pass"] + joined("private", "key") + joined("access", "key")
             + joined("auth", "token")

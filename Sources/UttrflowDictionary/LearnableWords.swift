@@ -69,9 +69,9 @@ enum LearnableWords {
 
     // MARK: - Reading words out of a screen
 
-    /// The words in a piece of text, split on anything that is not a letter, at most `limit` of them.
+    /// The words in a piece of text, split on anything that is neither a letter nor a digit, at most `limit` of them.
     static func words(in text: String, atMost limit: Int) -> [String] {
-        text.split { !$0.isLetter }.prefix(limit).map(String.init)
+        text.split { !$0.isLetter && !$0.isNumber }.prefix(limit).map(String.init)
     }
 }
 

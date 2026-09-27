@@ -52,9 +52,16 @@ struct PromptAlignedSegmentSeeker: SegmentSeeking {
             lastSpeechTimestamp: lastSpeechTimestamp, options: options, timings: timings)
     }
 
+    /// Weights that are not one row per token and one column per frame, which this seeker refuses rather than misreads.
+    struct UnexpectedRank: Error, Equatable {
+        /// The dimensions the weights arrived with.
+        let shape: [Int]
+    }
+
     /// The weights with their first `first` rows removed and zero rows appended, so the shape is unchanged.
     static func rows(of weights: MLMultiArray, from first: Int) throws -> MLMultiArray {
-        guard first > 0, weights.shape.count == 2 else { return weights }
+        guard first > 0 else { return weights }
+        guard weights.shape.count == 2 else { throw UnexpectedRank(shape: weights.shape.map(\.intValue)) }
         let rowCount = weights.shape[0].intValue
         let columnCount = weights.shape[1].intValue
         let shifted = try MLMultiArray(shape: weights.shape, dataType: weights.dataType)

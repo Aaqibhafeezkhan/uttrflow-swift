@@ -57,12 +57,10 @@ final class SuggestionCoordinator {
     private let verifier: Verifier
     /// The model that invents a suggestion when the corpus has none, absent until the app hands one over.
     private let generator: (any CandidateGenerating)?
-    /// The model's last answer, reused for as long as the line still begins one of its lines, so typing on or back costs no pass.
-    private var lastGenerated: (surface: Surface, typed: String, completions: [String])?
+    /// What the model last answered or had nothing for, which decides whether it is asked again.
+    private var modelPass = ModelPass()
     /// The model pass in flight, cancelled by the next keystroke so a burst never queues one pass per key.
     private var generating: Task<[String], any Error>?
-    /// The line the model last had nothing for, or failed on, so a tick does not ask the same question again until the line changes.
-    private var lastEmpty: (surface: Surface, typed: String)?
     /// A turn booked for the moment a rule stops refusing, so a prose pause is answered then, not at the next tick.
     private var pendingWake: Task<Void, Never>?
     /// The restart booked after macOS disabled the tap, cancelled by `stop()` so a turned-off tap stays off.
@@ -71,10 +69,6 @@ final class SuggestionCoordinator {
     private var running: Task<Void, Never>?
     /// How long a burst of keystrokes must pause before the model is asked about its last prefix.
     nonisolated static let generationDebounceInMilliseconds = 120
-    /// How much of the text before the caret's line the model is shown, enough for the sentence or command before it.
-    private static let precedingContextLength = 400
-    /// How many of this person's recent lines in the field the model is shown, enough to hear their voice in it.
-    private static let recentLinesShown = 6
 
     private var session = SuggestionSession()
     private var monitors: [Any] = []
@@ -92,6 +86,8 @@ final class SuggestionCoordinator {
     private var handed: (line: String, reading: FieldReading)?
     /// The last field read, so the highlight can move without reading anything again.
     private var lastSnapshot: FocusedFieldSnapshot?
+    /// The line the accept key takes as last armed by a draw, so a later answer never inherits that claim.
+    private var armedOffer: String?
     private var lastKeystroke = Date.distantPast
     /// One turn at a time, with a turn that never returns left behind so the loop cannot die with it.
     private var turns = TurnGate()
@@ -173,8 +169,7 @@ final class SuggestionCoordinator {
     /// Drops the verdicts and model answers this loop keeps, which may name a forgotten line.
     private func forgetWhatThisLoopRemembers() async {
         await verifier.forgetEverything()
-        lastGenerated = nil
-        lastEmpty = nil
+        modelPass.freshStart(surfaceChanged: true, lineIsEmpty: true)
     }
 
     /// Arms the tap and starts watching, or says why it cannot.
@@ -258,6 +253,7 @@ final class SuggestionCoordinator {
         self.isDictating = isDictating
         guard isDictating else { return }
         again = nil
+        turns.abandon()
         withdraw()
     }
 
@@ -413,10 +409,8 @@ final class SuggestionCoordinator {
             interceptor.arm([])
             panel.hide()
         }
-        if reading.surface != session.surface || snapshot.currentLine.isEmpty {
-            lastGenerated = nil
-            lastEmpty = nil
-        }
+        modelPass.freshStart(
+            surfaceChanged: reading.surface != session.surface, lineIsEmpty: snapshot.currentLine.isEmpty)
         // A password field is refused here, before its value has been passed to anything at all.
         if !snapshot.isSecure { await remember(snapshot, as: reading, because: reason, at: started) }
         guard turns.isCurrent(number) else { return }
@@ -445,7 +439,8 @@ final class SuggestionCoordinator {
                 turns.isCurrent(number)
             else { return }
             // When nothing remembered can be drawn — nothing held, the line itself, or a line the gates refused — the model invents the suggestion instead.
-            guard update.suggestion.accepting == nil, update.silence != .overBudget, let generator, ready
+            guard ModelPass.shouldAsk(after: update, hasGenerator: generator != nil, isReady: ready),
+                let generator
             else {
                 return settle(update, in: snapshot, since: started)
             }
@@ -455,7 +450,7 @@ final class SuggestionCoordinator {
             switch options {
             case .none:
                 Self.log.debug("\(SuggestionLog.optionsNone(typed: query.typed), privacy: .public)")
-                lastEmpty = (query.surface, query.typed)
+                modelPass.rememberEmpty(query)
                 guard
                     let quiet = session.resolveGenerated(
                         [], for: query, elapsedMilliseconds: since(started), whenEmpty: .notOnThisMachine)
@@ -504,12 +499,26 @@ final class SuggestionCoordinator {
         _ update: SuggestionUpdate, for snapshot: FocusedFieldSnapshot, turn number: Int
     ) async {
         let keystrokesSeen = session.keystrokes
+        // The session already holds this answer, so the key armed for the drawn one is let go until this one is drawn.
+        if !Self.keepsClaimWhileReading(armed: armedOffer, next: update.suggestion) {
+            interceptor.arm([])
+            panel.hide()
+            armedOffer = nil
+        }
         guard let fresh = await FocusedFieldReader.read(), turns.isCurrent(number),
-            session.keystrokes == keystrokesSeen, session.isCurrent,
-            reading(of: fresh) == reading(of: snapshot), fresh.currentLine == snapshot.currentLine
+            ModelPass.isFresh(
+                keystrokesBefore: keystrokesSeen, keystrokesNow: session.keystrokes,
+                isCurrent: session.isCurrent,
+                sameReading: reading(of: fresh) == reading(of: snapshot),
+                sameLine: fresh.currentLine == snapshot.currentLine)
         else { return }
         lastSnapshot = fresh
         draw(update, in: fresh)
+    }
+
+    /// Whether the key armed for the drawn line may stay armed while an answer offering `next` waits for its field read.
+    nonisolated static func keepsClaimWhileReading(armed: String?, next: Suggestion) -> Bool {
+        armed == next.accepting
     }
 
     /// Asks the model for a suggestion the corpus never held, from the field read live, held to the machine's values where it has them, and draws it.
@@ -520,17 +529,12 @@ final class SuggestionCoordinator {
         let completions: [String]
         // Whether the model wrote lines and the machine denied every one, which is a silence with its own name.
         var invented = false
-        let lowered = query.typed.lowercased()
-        // What the model already said about this line still holds while the line begins one of its answers.
-        let kept =
-            (lastGenerated?.surface == query.surface ? lastGenerated?.completions : nil)?
-            .filter { $0.lowercased().hasPrefix(lowered) && $0 != query.typed } ?? []
-        if !kept.isEmpty {
+        switch modelPass.plan(for: query) {
+        case .reuse(let kept):
             completions = kept
-        } else if let lastEmpty, lastEmpty.surface == query.surface, lastEmpty.typed == query.typed {
-            // The model's last word on this exact line was nothing, and a tick changes nothing about the line.
+        case .skip:
             return
-        } else {
+        case .ask:
             // Measured from the key, not from here, so a pause already long enough waits no second time.
             let quiet = Self.remainingDebounce(sinceKeystroke: lastKeystroke, now: Date())
             let pass = Task { [generator, store, contextCache] in
@@ -551,7 +555,7 @@ final class SuggestionCoordinator {
             switch answer {
             case .failure(let error):
                 // A failed pass is remembered like an empty one, so a tick never re-runs the failure, but it is never logged as one.
-                lastEmpty = (query.surface, query.typed)
+                modelPass.rememberEmpty(query)
                 Self.log.error(
                     "\(SuggestionLog.generateFailed(typed: query.typed, error: error), privacy: .public)")
                 return
@@ -559,12 +563,7 @@ final class SuggestionCoordinator {
                 let standing = await attested(lines, for: query)
                 guard turns.isCurrent(number) else { return }
                 invented = !lines.isEmpty && standing.isEmpty
-                // An empty answer is remembered against this exact line only, so the next keystroke asks afresh.
-                if standing.isEmpty {
-                    lastEmpty = (query.surface, query.typed)
-                } else {
-                    lastGenerated = (query.surface, query.typed, standing)
-                }
+                modelPass.remember(standing, for: query)
                 completions = standing
             }
         }
@@ -582,14 +581,15 @@ final class SuggestionCoordinator {
         // With the one line on screen, the others are fetched behind it, so Down has a list and the person never waited for it.
         guard completions.count == 1, let leader = completions.first, turns.isCurrent(number) else { return }
         // Where the machine gave the values, the other values are the alternatives, and no pass is spent on them.
-        if !choices.isEmpty {
-            let listed = Verification.completed(query.typed, with: choices).filter { $0 != leader }
+        if case .values(let listed) = ModelPass.alternativesSource(
+            typed: query.typed, choices: choices, leader: leader)
+        {
             // The machine's values still pass the gate, since a listed name can be destructive or stale by now.
             let others = await attested(listed, for: query)
             guard turns.isCurrent(number), !others.isEmpty,
                 let expanded = session.expandGenerated(others, for: query)
             else { return }
-            lastGenerated = (query.surface, query.typed, [leader] + others)
+            modelPass.remember([leader] + others, for: query)
             return await drawFresh(expanded, for: snapshot, turn: number)
         }
         // Quiet never shows the list, so no model pass is spent building one.
@@ -615,7 +615,7 @@ final class SuggestionCoordinator {
         guard turns.isCurrent(number), !standing.isEmpty,
             let expanded = session.expandGenerated(standing, for: query)
         else { return }
-        lastGenerated = (query.surface, query.typed, [leader] + standing)
+        modelPass.remember([leader] + standing, for: query)
         Self.log.debug(
             "\(SuggestionLog.alternatives(typed: query.typed, got: others.count, elapsedMilliseconds: self.since(started)), privacy: .public)"
         )
@@ -741,6 +741,7 @@ final class SuggestionCoordinator {
     private func draw(_ step: SuggestionStep) {
         guard !isStopped, case .settled(let update) = step else { return }
         interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
         panel.hide()
         lastReading = nil
         lastSnapshot = nil
@@ -755,6 +756,7 @@ final class SuggestionCoordinator {
             return
         }
         interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
         // Nothing is drawn off the caret's line, so a field that reports no inline placement is left alone.
         guard update.suggestion != .silent, let snapshot, snapshot.placement == .inlineGhost,
             let caret = snapshot.caret

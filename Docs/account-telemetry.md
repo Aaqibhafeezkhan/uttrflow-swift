@@ -1,16 +1,40 @@
-# Telemetry: what would leave the Mac, and why a dictation never waits for it
+# Telemetry: what leaves the Mac, and why a dictation never waits for it
 
 Three types carry Uttrflow's usage reporting: `TelemetryCollector` accumulates counters,
 `TelemetryReport` is the value that goes on the wire, and `TelemetryService` sends it and
 remembers what it sent. The code says what each does; this page says what the shapes
 guarantee and where the numbers come from.
 
-**None of it runs in the shipping app.** Nothing outside `UttrflowAccount` builds a
-`TelemetryService` — `grep -rn 'TelemetryService\|TelemetryCollector' Sources --include='*.swift'`
-answers nowhere else — so nothing is collected and nothing is sent. There is no opt-out
-switch because there is nothing yet to opt out of, which is what `README.md` says too. Read
-every sentence below as the design that sits in the tree, ready for the day it is wired up,
-rather than as behaviour a user has today.
+## What is sent, when, and how to turn it off
+
+**It is on by default, and one switch turns it off.** Settings → Privacy → "Share anonymous
+usage statistics" is `Settings.sharesUsageStatistics`, `true` unless the user has said
+otherwise. Turning it off stops collection at once and drops every report still waiting to
+be sent; turning it back on starts from an empty window.
+
+**What is sent** is one `TelemetryReport` per window, and nothing else: how many
+dictations started, were cancelled and failed; how long the microphone was open and how
+long the user waited, in total; how many characters were inserted, as a count; end-to-end
+latency percentiles; how many dictations were in each language on a closed list; per-stage
+failure counts and latency percentiles; the app version as three numbers and the macOS
+major version. Every field is below; none of them can hold text.
+
+**When:** `UsageTelemetry` in the app target flushes the service once an hour and once more
+while the app quits, after any dictation in flight has landed and for at most three
+seconds. A flush closes the window, queues its report and posts everything queued. A window
+with no dictation in it produces no report, so an idle Mac sends nothing.
+
+**Where:** `HTTPTelemetrySender` posts the report's `encodedForIngest()` bytes to
+`POST /v1/telemetry` on the same API host the account uses, through the same
+`BackendTransport`. It carries the signed-in bearer token when there is one and posts
+anonymously otherwise; a development build, which has no backend configured, gets a
+`RecordingTelemetrySender` and sends nothing anywhere. The server answers `202`; anything
+else is a `TelemetryError`, and the report stays queued for the next flush.
+
+**What feeds it:** the pipeline's stage timings reach the collector through `MetricsFanOut`,
+beside the diagnostics recorder, and `UsageTelemetry.observe` counts each dictation when it
+is inserted or fails, reading only its length, how long it was spoken for and the first
+language in Settings.
 
 ## There is no `String` anywhere in a report
 
@@ -133,7 +157,7 @@ The percentile index is `count * fraction`, which at `0.5` is `count / 2`, the s
 zero: a stage nothing timed is not a stage that was instant, and the server's column is
 nullable so the difference survives.
 
-## Opting out would forget everything
+## Opting out forgets everything
 
 Switching collection off discards everything gathered so far in the same call, and
 `TelemetryService.setEnabled` empties the outbox too. Reports waiting for a connection
@@ -154,10 +178,9 @@ overflows the earliest report is dropped, because a report describes a window th
 already closed: the recent ones say what Uttrflow is like now.
 
 The ledger of sent reports holds 64 entries, and each entry is the very value that was
-encoded and posted, not a description written separately. It is there so that whatever
-screen eventually shows a user their reports can show the same bytes that were posted;
-nothing reads `sentReports` today except `TelemetryServiceTests`, and there is no such
-screen. `TelemetryReport.encodedForIngest()` exists so that page and the sender would look
+encoded and posted, not a description written separately. It is there so that a
+screen showing a user their reports can show the same bytes that were posted; nothing reads
+`sentReports` today except the tests, and there is no such screen yet. `TelemetryReport.encodedForIngest()` exists so that page and the sender would look
 at the same bytes rather than at two descriptions of them.
 
 `flush` cannot throw and cannot report a problem. No caller should do anything differently
