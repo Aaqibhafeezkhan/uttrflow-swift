@@ -17,6 +17,34 @@ public struct DockPresentation: Sendable, Equatable {
     public let action: RecoveryAction?
     /// Read aloud by VoiceOver. Never abbreviated, never an icon name.
     public let accessibilityLabel: String
+    /// The speech model's setup, drawn in its own form while the button rests; absent once it can transcribe.
+    public var setup: DockModelSetup? = nil
+}
+
+/// The speech model's state as the resting button draws it.
+public enum DockModelSetup: Sendable, Equatable {
+    /// Downloading, at a share from 0 to 1.
+    case downloading(Double)
+    /// On disk and loading into memory.
+    case loading
+    /// The load ended without a model that can transcribe.
+    case failed
+    /// Not on disk.
+    case missing
+
+    /// The words on the form's one button, or `nil` for a form with nothing to press.
+    public var actionTitle: String? {
+        switch self {
+        case .downloading, .loading: nil
+        case .failed: "Retry"
+        case .missing: "Download"
+        }
+    }
+
+    /// A share as a whole percentage, clamped to 0 through 100.
+    public static func percentage(of fraction: Double) -> Int {
+        Int((min(max(fraction, 0), 1) * 100).rounded())
+    }
 }
 
 /// What the user has to do, or does not, to end a recording that is already under way.
@@ -149,22 +177,18 @@ public enum DictationPresenter {
         }
     }
 
-    /// The button with the speech model's load drawn in where it would otherwise rest or fall silent.
+    /// The button with the speech model's download or load drawn in where it would otherwise rest or fall silent.
     public static func dock(
         for state: DictationState, advice: DictationAdvice = .keepGoing, speechModel: SpeechModelLoad?,
-        stopGesture: StopGesture = .letGo
+        download: Double? = nil, stopGesture: StopGesture = .letGo
     ) -> DockPresentation {
         let drawn = dock(for: state, advice: advice, stopGesture: stopGesture)
-        // A missing model is setup's to fetch, and the button stays out of the way while setup runs.
-        guard let load = speechModel, load != .missing else { return drawn }
+        if case .idle = state, let download { return resting(downloading: download) }
+        guard let load = speechModel else { return drawn }
         switch state {
         case .idle:
-            return DockPresentation(
-                symbolName: load.isLoading ? "hourglass" : "exclamationmark.triangle",
-                primaryLine: load.line, secondaryLine: load.detail,
-                showsWaveform: false, showsProgress: false, isRecording: false,
-                action: load.recovery, accessibilityLabel: load.accessibilityLabel)
-        case .failed(let failure) where failure.transcript == nil:
+            return resting(load)
+        case .failed(let failure) where failure.transcript == nil && load != .missing:
             // The failure keeps its own line and button; the second line says why dictation cannot start.
             return DockPresentation(
                 symbolName: drawn.symbolName, primaryLine: drawn.primaryLine,
@@ -174,6 +198,42 @@ public enum DictationPresenter {
                     ? load.accessibilityLabel : "\(drawn.accessibilityLabel) \(load.accessibilityLabel)")
         case .recording, .transcribing, .tidying, .inserting, .inserted, .failed:
             return drawn
+        }
+    }
+
+    /// Resting while the speech model downloads: a ring filling to the share done.
+    static func resting(downloading fraction: Double) -> DockPresentation {
+        let percent = DockModelSetup.percentage(of: fraction)
+        return DockPresentation(
+            symbolName: "arrow.down.circle", primaryLine: "Setting up", secondaryLine: "\(percent)%",
+            showsWaveform: false, showsProgress: false, isRecording: false, action: nil,
+            accessibilityLabel: "Setting up. Downloading the speech model, \(percent) percent.",
+            setup: .downloading(min(max(fraction, 0), 1)))
+    }
+
+    /// Resting while the speech model loads, after it failed to, or while it is not on disk.
+    static func resting(_ load: SpeechModelLoad) -> DockPresentation {
+        switch load {
+        case .loading:
+            // The estimate stays in the words read aloud and under the pointer; the capsule says only this.
+            DockPresentation(
+                symbolName: "hourglass", primaryLine: "Getting ready…",
+                secondaryLine: load.showsEstimate ? load.detail : nil,
+                showsWaveform: false, showsProgress: false, isRecording: false, action: nil,
+                accessibilityLabel: load.accessibilityLabel, setup: .loading)
+        case .failed:
+            DockPresentation(
+                symbolName: "exclamationmark.triangle", primaryLine: load.line, secondaryLine: load.detail,
+                showsWaveform: false, showsProgress: false, isRecording: false, action: .retry,
+                accessibilityLabel:
+                    "The speech model didn’t load. Dictation can’t start without it. Try loading it again.",
+                setup: .failed)
+        case .missing:
+            DockPresentation(
+                symbolName: "exclamationmark.triangle", primaryLine: "Speech model needed",
+                secondaryLine: load.detail, showsWaveform: false, showsProgress: false,
+                isRecording: false, action: .downloadSpeechModel,
+                accessibilityLabel: load.accessibilityLabel, setup: .missing)
         }
     }
 
