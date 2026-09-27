@@ -274,8 +274,14 @@ public actor DictationPipeline {
 
     /// Stops listening and runs the rest: transcribe, tidy, insert.
     public func finishRecording() async {
+        await stopListening()?.value
+    }
+
+    /// Closes the microphone and returns, leaving the rest to the task it hands back. See Docs/pipeline-gestures.md.
+    @discardableResult
+    public func stopListening() async -> Task<Void, Never>? {
         // A second stop while the microphone drains is refused here, not sent to a microphone already closed.
-        guard state == .recording, !hasTurn else { return }
+        guard state == .recording, !hasTurn else { return nil }
         hasTurn = true
 
         // Carried through every stage below, so a later dictation cannot revive this one.
@@ -301,16 +307,18 @@ public actor DictationPipeline {
             // The capture writes the recording before it refuses it, so the audio is claimed here too (#604).
             await claimRecording(mine)
             // A cancel during the drain leaves the pipeline at rest, so no failure is published over it.
-            guard !wasCancelled(mine) else { return }
+            guard !wasCancelled(mine) else { return nil }
             // Through `fail`, so a refused capture reaches the same rule as every other lost dictation.
             await fail(DictationFailure(error))
-            return
+            return nil
         }
 
         await claimRecording(mine)
-        // Released with no await before `process` moves the state on, so nothing can enter between.
         hasTurn = false
-        await process(audio, mine, delivery: .insert)
+        guard !wasCancelled(mine) else { return nil }
+        // Moved on before returning, so a gesture handled next sees the microphone closed and the pipeline busy.
+        transition(to: .transcribing)
+        return Task { await process(audio, mine, delivery: .insert) }
     }
 
     /// Runs a kept recording through the same stages to the clipboard; false when it never ran or was abandoned.
@@ -505,7 +513,7 @@ public actor DictationPipeline {
     private func process(_ audio: AudioSamples, _ mine: Int, delivery: Delivery) async {
         // Checked before the state moves, so an abandoned run never overwrites the rest a cancel sets.
         guard !wasCancelled(mine) else { return }
-        transition(to: .transcribing)
+        if state != .transcribing { transition(to: .transcribing) }
 
         // A piece under way is finished, not thrown away: its words are needed either way.
         earlyWork?.cancel()
@@ -645,13 +653,15 @@ public actor DictationPipeline {
                 toWrite, cleanedBy: whole.cleaned.producedBy, changes: changes,
                 delivery: delivery, generation: mine)
         else { return }
+        // Read before the next await, since the next dictation may start once these words are on screen.
+        let wasSecure = destinationIsSecure
 
         // An unconfirmed paste is not proof the words reached the user, so nothing is learnt from it yet.
         guard arrival != .unconfirmed else { return }
         // Both run after the words are on screen, and neither can fail the dictation. §19.
         await count(changes)
         // A secret is not a word to learn.
-        guard !destinationIsSecure else { return }
+        guard !wasSecure else { return }
         await learnWords(heard: whole.heard.text, wrote: toWrite, seeing: appContext ?? AppContext())
     }
 

@@ -53,6 +53,19 @@ struct PanelAliasSheetPresentationTests {
         #expect(sheet?.isConfirmEnabled == false)
     }
 
+    @Test("the conflict never names a masked secret by its text, and does once it is revealed")
+    func theConflictHidesAMaskedHolder() {
+        let secret = PanelFixture.clip("Zx9kLmQ2rT7p", kind: .secret, minutesAgo: 2, alias: "db")
+        func conflict(revealed: Set<Clip.ID>) -> String? {
+            let panel = PanelFixture.panel([Self.plain, secret], revealed: revealed)
+                .applying([.alias(Self.plain.id), .draft("db")]).state
+            return PanelPresenter.present(panel).sheet?.conflict
+        }
+
+        #expect(conflict(revealed: []) == "“db” already belongs to a hidden credential")
+        #expect(conflict(revealed: [secret.id])?.contains("Zx9kLmQ2rT7p") == true)
+    }
+
     /// F5 — the button must agree with what Return does, or it looks broken.
     @Test("the button is enabled exactly when Return would save something")
     func theButtonMatchesReturn() {
