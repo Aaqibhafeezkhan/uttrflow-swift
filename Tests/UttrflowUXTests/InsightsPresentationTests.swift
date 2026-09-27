@@ -153,17 +153,25 @@ struct InsightsCalendarShadeTests {
         #expect(!quiet.usesDeepInk)
     }
 
-    /// Past a 0.6 shade the page's white ink falls below the deep ink's contrast on the teal in dark.
-    @Test("the deep ink starts where the tile's shade passes 0.6")
+    /// Between the two inks' limits neither clears 4.5:1 in dark, so a tile steps over that band.
+    @Test("no tile is shaded between the page ink's ceiling and the deep ink's floor")
     func deepInk() {
         let day = { (fraction: Double) in
             InsightsCalendarDay(
                 date: HistoryFixture.now, number: "1", words: 1, fraction: fraction, isToday: false,
                 detail: "")
         }
-        #expect(!day(0.52).usesDeepInk)
-        #expect(day(0.53).usesDeepInk)
-        #expect(day(1).usesDeepInk)
+        let shades = (0...100).map { day(Double($0) / 100) }
+        #expect(
+            shades.allSatisfy {
+                $0.shade <= InsightsCalendarDay.inkCeiling || $0.shade >= InsightsCalendarDay.deepInkFloor
+            })
+        #expect(shades.allSatisfy { $0.usesDeepInk == ($0.shade >= InsightsCalendarDay.deepInkFloor) })
+        #expect(zip(shades, shades.dropFirst()).allSatisfy { $0.shade <= $1.shade })
+        #expect(day(0.42).shade == InsightsCalendarDay.inkCeiling)
+        #expect(day(0.6).shade == InsightsCalendarDay.deepInkFloor)
+        #expect(!day(0.42).usesDeepInk)
+        #expect(day(0.6).usesDeepInk)
     }
 
     @Test("a tile's share and a calendar's blanks are kept in range")
@@ -328,9 +336,9 @@ struct InsightsFiguresTests {
     @Test("the daily average divides by every day of the range, to the nearest word")
     func dailyAverage() {
         let entries = HistoryFixture.aWeek(words: 1_000, days: 3)
-        #expect(InsightsPresenter.dailyAverage(of: entries, over: .week) == 429)
-        #expect(InsightsPresenter.dailyAverage(of: entries, over: .month) == 100)
-        #expect(InsightsPresenter.dailyAverage(of: [], over: .quarter) == 0)
+        #expect(InsightsPresenter.dailyAverage(of: entries.totalWords, over: .week) == 429)
+        #expect(InsightsPresenter.dailyAverage(of: entries.totalWords, over: .month) == 100)
+        #expect(InsightsPresenter.dailyAverage(of: 0, over: .quarter) == 0)
     }
 
     /// Words per minute is a dash until something is timed.
@@ -372,6 +380,15 @@ struct InsightsFiguresTests {
 
 @Suite("Insights before there is enough to show")
 struct InsightsWaitingTests {
+    @Test("before the history is read, there is no empty state and no range switch")
+    func beforeTheFirstReading() {
+        let page = InsightsPresenter.page(
+            for: InsightsSnapshot(now: HistoryFixture.now, hasReadHistory: false))
+        #expect(page.emptyState == nil)
+        #expect(page.ranges.isEmpty && page.calendar == nil && page.figures.isEmpty)
+        #expect(page.chrome.title == "Insights")
+    }
+
     /// A baseline drawn from three days is noise wearing a number's clothes, so the page waits.
     @Test("fewer than seven days of speaking means the calendar waits")
     func waits() {

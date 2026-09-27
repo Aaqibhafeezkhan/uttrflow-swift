@@ -27,6 +27,9 @@ CACHE_CAP = 256 * 1_048_576
 
 # Wakeups below the floor that are allowed, keyed by file and interval expression, each with its reason printed on every run.
 WAKEUPS_ALLOWED = {
+    ("Sources/Uttrflow/Settings/SettingsPageView.swift", ".seconds(wait)"): (
+        "the suggestion pause countdown, at most once a minute and only while a pause runs with Settings open"
+    ),
     ("Sources/UttrflowPipeline/DictationController.swift", "start.advanced(by:elapsed)"): (
         "the recording cap's countdown, every ten seconds in a recording's last minute and never at rest"
     ),

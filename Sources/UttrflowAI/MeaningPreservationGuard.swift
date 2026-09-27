@@ -283,8 +283,18 @@ public struct MeaningPreservationGuard: Sendable {
         /// Whether the word opens the text or follows a sentence-closing mark.
         let startsSentence: Bool
 
-        /// Whether the checks can read the word at all; Devanagari and the like are left to the base checks.
-        var isPlain: Bool { matching.allSatisfy(\.isASCII) }
+        /// Whether the checks can read the word at all: Latin script, accents included; Devanagari and the like are left to the base checks.
+        var isPlain: Bool { matching.unicodeScalars.allSatisfy(Self.isLatin) }
+
+        /// Whether a scalar is ASCII, a Latin letter with or without its accent, or an accent written apart.
+        static func isLatin(_ scalar: Unicode.Scalar) -> Bool {
+            switch scalar.value {
+            case 0x00...0x7F: true
+            case 0x00C0...0x024F, 0x1E00...0x1EFF: scalar.properties.isAlphabetic
+            case 0x0300...0x036F: true
+            default: false
+            }
+        }
     }
 
     /// A repair may change a word's form, never which content words are there, either way round, or the order they came in. See `Docs/cleanup.md`.

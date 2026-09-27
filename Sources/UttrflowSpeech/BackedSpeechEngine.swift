@@ -130,7 +130,9 @@ public actor BackedSpeechEngine: SpeechEngine {
             languageHint: options.languageHint, biasedTowards: options.vocabulary)
         touched()
         // The original duration, not the trimmed one: it is what the user spoke for.
-        return raw.transcription(audioDuration: audio.duration, startingAt: speech.start)
+        let heard = raw.transcription(audioDuration: audio.duration, startingAt: speech.start)
+        // Judged against the speech alone, since a loop is words the speech was too short to hold.
+        return RecognitionLoop.undone(heard, speechDuration: speech.audio.duration)
     }
 
     /// The samples with silence appended up to `minimum`, so a word shorter than the recogniser's floor still decodes.
