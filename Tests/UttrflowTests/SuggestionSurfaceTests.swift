@@ -66,18 +66,37 @@ struct SuggestionSurfaceTests {
         #expect(!panel.window.isVisible)
     }
 
-    @Test("A long suggestion at a caret near the edge stays inside the field and the screen")
-    func aLongSuggestionStaysOnScreen() throws {
+    @Test(
+        "A suggestion too long for the room to the field's edge is not drawn at all, so Tab cannot insert unseen words"
+    )
+    func aLongSuggestionIsNotDrawn() throws {
         let screen = try #require(NSScreen.screens.first).visibleFrame
         let caret = CGRect(x: screen.maxX - 300, y: screen.midY, width: 0, height: 17)
         let field = CGRect(x: screen.maxX - 500, y: screen.midY - 5, width: 400, height: 28)
         let panel = SuggestionPanelController.shared
-        panel.show(.certain(longLine), placement: .inlineGhost, caret: caret, field: field)
         defer { panel.hide() }
+        let drawn = panel.show(.certain(longLine), placement: .inlineGhost, caret: caret, field: field)
+        #expect(!drawn)
+        #expect(!panel.isShowing)
+        #expect(!panel.window.isVisible)
+        #expect(panel.drawn.inline == nil)
+    }
+
+    @Test("A suggestion that fits the room is drawn whole, inside the field and the screen")
+    func aFittingSuggestionIsDrawnWhole() throws {
+        let screen = try #require(NSScreen.screens.first).visibleFrame
+        let caret = CGRect(x: screen.maxX - 300, y: screen.midY, width: 0, height: 17)
+        let field = CGRect(x: screen.maxX - 500, y: screen.midY - 5, width: 400, height: 28)
+        let panel = SuggestionPanelController.shared
+        defer { panel.hide() }
+        let drawn = panel.show(
+            .certain("meet at noon"), typed: "meet", placement: .inlineGhost, caret: caret, field: field)
+        #expect(drawn)
         #expect(panel.window.isVisible)
         #expect(panel.window.frame.minX == caret.maxX)
         #expect(panel.window.frame.maxX <= field.maxX)
         #expect(screen.contains(panel.window.frame))
+        #expect(panel.drawn.inline?.ghost == " at noon")
         #expect(panel.drawn.maximumWidth == field.maxX - caret.maxX)
     }
 

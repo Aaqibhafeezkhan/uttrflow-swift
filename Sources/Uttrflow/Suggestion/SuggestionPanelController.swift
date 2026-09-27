@@ -39,6 +39,8 @@ final class SuggestionPanelController {
 
     private let panel: SuggestionPanel
     private let hostingView: NSHostingView<SuggestionView>
+    /// Lays out the ghost line alone at its full width, which is how a ghost too long for its room is caught.
+    private var measurer: NSHostingView<SuggestionGhostLine>?
     private var request = SuggestionRequest()
     private var panelSize = CGSize(width: 1, height: 1)
     private var appearanceObserver: (any NSObjectProtocol)?
@@ -64,7 +66,8 @@ final class SuggestionPanelController {
         NSWorkspace.shared.notificationCenter.removeObserver(appearanceObserver)
     }
 
-    /// Says what to draw and what to draw it against; `.silent` takes the surface away.
+    /// Says what to draw and what to draw it against, answering whether the offer is on screen whole; `.silent` takes the surface away.
+    @discardableResult
     func show(
         _ suggestion: Suggestion,
         typed: String = "",
@@ -77,12 +80,13 @@ final class SuggestionPanelController {
         acceptKey: AcceptKey = .tab,
         fontFamily: String? = nil,
         textColor: TextColor? = nil
-    ) {
-        request = SuggestionRequest(
+    ) -> Bool {
+        let next = SuggestionRequest(
             suggestion: suggestion, typed: typed, placement: placement, caret: caret,
             window: window, field: field, fieldPointSize: fieldPointSize, selection: selection,
             acceptKey: acceptKey, fontFamily: fontFamily, textColor: textColor)
-        render()
+        request = next
+        return render()
     }
 
     func hide() {
@@ -104,8 +108,29 @@ final class SuggestionPanelController {
     /// How many times the view has been replaced, so a test can see that a redundant hide changes nothing.
     private(set) var renders = 0
 
+    /// The ghost line's full width in this presentation's face, as the view would draw it with no room limit.
+    private func width(of row: SuggestionPresentation.Row, in presentation: SuggestionPresentation) -> CGFloat
+    {
+        let line = SuggestionGhostLine(presentation: presentation, row: row)
+        guard let measurer else {
+            let made = NSHostingView(rootView: line)
+            measurer = made
+            return made.fittingSize.width
+        }
+        measurer.rootView = line
+        return measurer.fittingSize.width
+    }
+
+    /// Takes the panel off screen, and says so to VoiceOver.
+    private func withdraw() {
+        announcer.surfaceWithdrawn()
+        isActuallyShowing = false
+        panel.orderOut(nil)
+    }
+
     /// Redraws from the last request, measuring the new content before the panel is placed so old and new are never on screen together.
-    private func render() {
+    @discardableResult
+    private func render() -> Bool {
         // Nothing to place means no screen to look up.
         let room =
             request.suggestion == .silent
@@ -114,36 +139,39 @@ final class SuggestionPanelController {
                 SuggestionGeometry.availableWidth(
                     caret: $0, field: request.field, window: request.window, screen: screenFrame)
             }
-        let presentation = SuggestionPresentation(
+        var presentation = SuggestionPresentation(
             request.suggestion, typed: request.typed, selection: request.selection,
             fieldPointSize: request.fieldPointSize, appearance: Self.appearance(),
             acceptKey: request.acceptKey, fontFamily: request.fontFamily,
             fieldTextColor: request.textColor, maximumWidth: room)
+        // A ghost cut short would hide words Tab inserts, so one that does not fit its room is not drawn at all.
+        if let inline = presentation.inline, let room = presentation.maximumWidth,
+            !SuggestionGeometry.fits(width(of: inline, in: presentation), in: room)
+        {
+            presentation = SuggestionPresentation(.silent)
+        }
         hostingView.rootView = SuggestionView(
             presentation: presentation,
             onDesiredSize: { [weak self] size in self?.resize(to: size) })
         renders += 1
         guard presentation.style != .hidden else {
-            announcer.surfaceWithdrawn()
-            isActuallyShowing = false
-            panel.orderOut(nil)
-            return
+            withdraw()
+            return false
         }
         let measured = hostingView.fittingSize
         if measured.width > 0, measured.height > 0 {
             panelSize = CGSize(width: measured.width.rounded(.up), height: measured.height.rounded(.up))
         }
         guard reposition() else {
-            announcer.surfaceWithdrawn()
-            isActuallyShowing = false
-            panel.orderOut(nil)
-            return
+            withdraw()
+            return false
         }
         // `orderFrontRegardless`, never `makeKeyAndOrderFront`: no keyboard is taken.
         panel.orderFrontRegardless()
         isActuallyShowing = true
         // The panel is out of VoiceOver's reach, so the offer and its accept key are spoken once as it appears.
         if let text = announcer.announcement(for: presentation) { announce(text) }
+        return true
     }
 
     /// Asks VoiceOver to speak at low priority, so the echo of the user's own typing is not cut off.
@@ -171,7 +199,7 @@ final class SuggestionPanelController {
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.render() }
+            MainActor.assumeIsolated { _ = self?.render() }
         }
     }
 
@@ -184,10 +212,7 @@ final class SuggestionPanelController {
             isActuallyShowing = false
             return
         }
-        guard reposition() else {
-            isActuallyShowing = false
-            return panel.orderOut(nil)
-        }
+        guard reposition() else { return withdraw() }
         panel.orderFrontRegardless()
         isActuallyShowing = true
     }

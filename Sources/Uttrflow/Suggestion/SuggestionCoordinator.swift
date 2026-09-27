@@ -803,12 +803,18 @@ final class SuggestionCoordinator {
             panel.hide()
             return
         }
-        panel.show(
+        let shown = panel.show(
             update.suggestion, typed: session.typed, placement: .inlineGhost, caret: caret,
             window: snapshot.window, field: snapshot.ghostField, fieldPointSize: snapshot.pointSize,
             selection: session.selection,
             acceptKey: preferences.acceptKeys.key(forBundleIdentifier: snapshot.bundleIdentifier),
             fontFamily: snapshot.fontFamily, textColor: snapshot.textColor)
+        // An offer the panel could not show whole claims no key, so Tab never inserts what was not drawn.
+        guard shown else {
+            interceptor.arm([])
+            armedOffer = nil
+            return
+        }
         watchScrolls()
     }
 
