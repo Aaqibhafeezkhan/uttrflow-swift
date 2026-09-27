@@ -316,7 +316,11 @@ public actor PredictStore: PredictionStore {
                     query: queryMask, candidate: FuzzyMatch.mask(units.prefix(width)), within: budget)
             else { return nil }
             let distance = FuzzyMatch.prefixDistance(needle, units, within: budget)
-            guard distance <= budget else { return nil }
+            // A near miss that would add, drop or change a typed digit writes a different number, never a fixed typo.
+            guard distance <= budget, FuzzyMatch.keepsDigits(of: needle, in: units, atDistance: distance)
+            else {
+                return nil
+            }
             return Candidate(
                 text: text, source: .personal,
                 evidence: Entry(

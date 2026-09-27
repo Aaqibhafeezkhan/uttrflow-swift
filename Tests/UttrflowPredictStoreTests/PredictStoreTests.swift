@@ -283,6 +283,19 @@ struct StoreMatchingTests {
         #expect(found.first?.editDistance == 1)
     }
 
+    @Test(
+        "A typed amount is never matched to a different learned amount.",
+        arguments: [
+            ("12.60", "12.50"), ("1,250", "1,350.00"), ("$130", "$120"),
+        ])
+    func amountsAreNotCorrected(typed: String, learned: String) async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record(learned, in: terminal, at: moment)
+        #expect(try await store.candidates(for: terminal, matching: typed).isEmpty)
+        #expect(try await store.candidates(for: terminal, matching: String(learned.prefix(3))).count == 1)
+    }
+
     @Test("A query that matches exactly never reaches the fuzzy tier, so its neighbours stay out.")
     func exactSuppressesFuzzy() async throws {
         let corpus = Corpus()
