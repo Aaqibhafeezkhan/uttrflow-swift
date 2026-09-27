@@ -9,8 +9,6 @@ public final class SystemKeyboard: KeyboardEventSource {
     /// The sink the tap reads; internal so tests can see a restart forget the old tap's disables.
     let delivery = Delivery()
     private let running = Mutex<RunningTap?>(nil)
-    /// Set for the duration of `stop()`, so a release it triggers cannot call back into it. See `Docs/shortcuts.md`.
-    private let stopping = Atomic<Bool>(false)
 
     public init() {}
 
@@ -28,15 +26,14 @@ public final class SystemKeyboard: KeyboardEventSource {
     }
 
     public func stop() {
-        guard stopping.compareExchange(expected: false, desired: true, ordering: .relaxed).exchanged
-        else { return }
-        defer { stopping.store(false, ordering: .relaxed) }
-        running.withLock { current in
-            current?.stop()
-            current = nil
+        TeardownGuard.once(for: self) {
+            running.withLock { current in
+                current?.stop()
+                current = nil
+            }
+            delivery.set(nil)
+            delivery.forgetDisables()
         }
-        delivery.set(nil)
-        delivery.forgetDisables()
     }
 
     deinit { stop() }

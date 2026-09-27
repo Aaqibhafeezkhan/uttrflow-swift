@@ -20,8 +20,6 @@ public final class ActivationMonitor: HotkeyMonitoring {
     private let reconciliation = Mutex<(any DispatchSourceTimer)?>(nil)
     /// How often that comparison runs, in milliseconds. See `Docs/stuck-recording.md`.
     private static let reconciliationMilliseconds = 250
-    /// Set for the duration of `stop()`, so a release it triggers cannot call back into it.
-    private let stopping = Atomic<Bool>(false)
 
     /// Takes the source it listens through, so a test can hand it strokes instead of a keyboard.
     public convenience init(source: any KeyboardEventSource = SystemKeyboard()) {
@@ -79,17 +77,16 @@ public final class ActivationMonitor: HotkeyMonitoring {
     }
 
     public func stop() {
-        guard stopping.compareExchange(expected: false, desired: true, ordering: .relaxed).exchanged
-        else { return }
-        defer { stopping.store(false, ordering: .relaxed) }
-        let began = recogniser.withLock { _ in generation.load(ordering: .relaxed) }
-        source.stop()
-        stopReconciling()
-        // A hold interrupted by stopping is a release, or the microphone stays open.
-        recogniser.withLock { current in
-            guard generation.load(ordering: .relaxed) == began else { return }
-            if let owed = current?.finish() { continuation.yield(owed) }
-            current = nil
+        TeardownGuard.once(for: self) {
+            let began = recogniser.withLock { _ in generation.load(ordering: .relaxed) }
+            source.stop()
+            stopReconciling()
+            // A hold interrupted by stopping is a release, or the microphone stays open.
+            recogniser.withLock { current in
+                guard generation.load(ordering: .relaxed) == began else { return }
+                if let owed = current?.finish() { continuation.yield(owed) }
+                current = nil
+            }
         }
     }
 

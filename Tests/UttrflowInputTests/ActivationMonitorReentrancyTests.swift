@@ -1,11 +1,12 @@
-// Tests that a stop reached again from inside itself returns at once instead of recursing.
+// Tests that a stop reached again from inside itself returns at once, while a stop from another thread still runs.
+import Foundation
 import Synchronization
 import Testing
 
 @testable import UttrflowCore
 @testable import UttrflowInput
 
-/// A source whose own `stop()` calls back into whatever it is told to, mimicking a deinit reaching through the witness mid-`stop()` — the shape of issue #140's recursive deinit cascade.
+/// A source whose own `stop()` runs whatever it is told to, the way a release inside a teardown reaches back.
 private final class ReentrantSource: KeyboardEventSource {
     let calls = Atomic<Int>(0)
     private let reenter = Mutex<(@Sendable () -> Void)?>(nil)
@@ -15,7 +16,8 @@ private final class ReentrantSource: KeyboardEventSource {
     ) throws(KeyboardSourceError) {}
 
     func stop() {
-        calls.wrappingAdd(1, ordering: .relaxed)
+        let call = calls.wrappingAdd(1, ordering: .relaxed).newValue
+        guard call == 1 else { return }
         reenter.withLock { $0 }?()
     }
 
@@ -36,5 +38,24 @@ struct ActivationMonitorReentrancyTests {
         monitor.stop()
 
         #expect(source.calls.load(ordering: .relaxed) == 1)
+    }
+
+    @Test("a stop from another thread while one is running still stops the source")
+    @MainActor
+    func stopFromAnotherThreadStillRuns() {
+        let source = ReentrantSource()
+        let monitor = ActivationMonitor(source: source, strokeLeftLock: {})
+        source.onStop {
+            let done = DispatchSemaphore(value: 0)
+            Thread {
+                monitor.stop()
+                done.signal()
+            }.start()
+            _ = done.wait(timeout: .now() + 5)
+        }
+
+        monitor.stop()
+
+        #expect(source.calls.load(ordering: .relaxed) == 2)
     }
 }
