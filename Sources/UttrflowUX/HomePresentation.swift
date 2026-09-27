@@ -255,6 +255,8 @@ public struct HomeSnapshot: Sendable, Equatable {
     public let speechModel: SpeechModelLoad?
     /// How far the speech model's download has got, from 0 to 1; `nil` when nothing is downloading.
     public let speechDownload: Double?
+    /// The speech model's download size, said beside a missing model; `nil` when it is not known.
+    public let speechModelBytes: Int64?
 
     /// Builds a snapshot; everything but the shortcut and the clock defaults to empty.
     public init(
@@ -267,7 +269,8 @@ public struct HomeSnapshot: Sendable, Equatable {
         settings: Settings = .default,
         now: Date,
         speechModel: SpeechModelLoad? = nil,
-        speechDownload: Double? = nil
+        speechDownload: Double? = nil,
+        speechModelBytes: Int64? = nil
     ) {
         self.permissions = permissions
         self.entries = entries
@@ -279,11 +282,13 @@ public struct HomeSnapshot: Sendable, Equatable {
         self.now = now
         self.speechModel = speechModel
         self.speechDownload = speechDownload
+        self.speechModelBytes = speechModelBytes
     }
 
     /// What the hero says about the speech model, the download first; `nil` once it can transcribe.
     var modelStatus: HomeModelStatus? {
         if let speechDownload { return .downloading(speechDownload) }
+        if speechModel == .missing { return .missing(bytes: speechModelBytes) }
         return speechModel.map(HomeModelStatus.load)
     }
 }

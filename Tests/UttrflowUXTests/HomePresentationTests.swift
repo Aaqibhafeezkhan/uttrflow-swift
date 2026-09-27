@@ -510,3 +510,30 @@ struct HomeSubtitleCountTests {
         #expect(page.subtitle == "2 dictations today, 5 words.")
     }
 }
+
+@Suite("Home's missing speech model")
+struct HomeMissingModelSizeTests {
+    private func status(bytes: Int64?) -> HomeModelStatus? {
+        HomePresenter.page(
+            for: HomeSnapshot(
+                shortcut: "⌥Space", now: HistoryFixture.now, speechModel: .missing,
+                speechModelBytes: bytes),
+            calendar: HistoryFixture.calendar, locale: HistoryFixture.locale
+        ).hero.modelStatus
+    }
+
+    @Test("the not-installed line says how big the download is when the size is known")
+    func namesTheSize() {
+        let known = status(bytes: 646_000_000)
+        #expect(known?.subtitle == "Dictation needs it · 646 MB · works offline after")
+        #expect(known?.accessibilityLabel.contains("646 MB") == true)
+    }
+
+    @Test("the not-installed line leaves the size out when it is not known")
+    func omitsAnUnknownSize() {
+        let unknown = status(bytes: nil)
+        #expect(unknown?.subtitle == "Dictation needs it · works offline after")
+        #expect(unknown?.accessibilityLabel.contains("MB") == false)
+        #expect(unknown == HomeModelStatus.load(.missing))
+    }
+}
