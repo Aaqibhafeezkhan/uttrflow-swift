@@ -225,3 +225,48 @@ enum BrandPalette {
         }
     }
 }
+
+extension BrandPalette.Redesign {
+    /// The menu bar popover's tokens, each as the design draws it dark and light.
+    enum MenuBar {
+        private typealias R = BrandPalette.Redesign
+
+        /// The glass over the system material: violet-black when dark, frosted white when light.
+        static let glass = BrandLayer(
+            tone: BrandTone(dark: 0x10_0D1E, light: 0xFF_FFFF), darkOpacity: 0.62, lightOpacity: 0.85)
+        /// The hairline round the glass.
+        static let glassEdge = BrandLayer(tone: R.textStrong, darkOpacity: 0.13, lightOpacity: 0.14)
+        /// The drop shadow, violet-tinted on a light desktop.
+        static let shadow = BrandLayer(
+            tone: BrandTone(dark: 0x00_0000, light: 0x28_1E50), darkOpacity: 0.7, lightOpacity: 0.28)
+        /// The tile the mark sits on.
+        static let tile = BrandTone(dark: 0x0B_0C10, light: 0xFF_FFFF)
+        /// Ink on a filled disc or pill.
+        static let fillInk = BrandTone(dark: 0x0B_0C10, light: 0xFE_FEFE)
+        /// The talk hint.
+        static let hint = BrandLayer(tone: R.textStrong, darkOpacity: 0.7, lightOpacity: 0.63)
+        /// A round button's label.
+        static let buttonLabel = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x5C_6866), darkOpacity: 0.7, lightOpacity: 1)
+        /// The line under a status title.
+        static let detail = BrandLayer(tone: R.textStrong, darkOpacity: 0.55, lightOpacity: 0.495)
+        /// A row's words.
+        static let row = BrandLayer(tone: R.textStrong, darkOpacity: 0.85, lightOpacity: 0.765)
+        /// A section label and a row's glyph.
+        static let quiet = BrandLayer(tone: R.textStrong, darkOpacity: 0.45, lightOpacity: 0.405)
+        /// The progress track and the tile's edge.
+        static let track = BrandLayer(tone: R.textStrong, darkOpacity: 0.12, lightOpacity: 0.108)
+        /// The rule between sections.
+        static let rule = BrandLayer(tone: R.textStrong, darkOpacity: 0.1, lightOpacity: 0.09)
+        /// A quiet round button's disc.
+        static let buttonFill = BrandLayer(tone: R.textStrong, darkOpacity: 0.1, lightOpacity: 0.06)
+        /// A round button's edge.
+        static let buttonEdge = BrandLayer(tone: R.textStrong, darkOpacity: 0.14, lightOpacity: 0.1)
+        /// The keycap behind the shortcut.
+        static let keycap = BrandLayer(tone: R.textStrong, darkOpacity: 0.12, lightOpacity: 0.07)
+        /// A row under the pointer.
+        static let hover = BrandLayer(tone: R.textStrong, darkOpacity: 0.07, lightOpacity: 0.05)
+        /// The aurora glow's strength behind the header.
+        static let glowOpacity = (dark: 0.55, light: 0.22)
+    }
+}

@@ -1,3 +1,4 @@
+public import UttrflowClipboard
 public import UttrflowCore
 
 // MARK: - What the menu needs to know
@@ -121,8 +122,8 @@ public struct MenuBarState: Sendable, Equatable {
     public var recordingAdvice: DictationAdvice
     /// Newest first.
     public var recents: [MenuBarRecent]
-    /// Whether this build has a feed to ask, so no item is enabled that could do nothing.
-    public var canCheckForUpdates: Bool
+    /// The clipboard's kept copies, newest first; the popover shows the first few.
+    public var clips: [Clip]
     /// How far along an update is, if one is under way.
     public var updateProgress: UpdateProgress
 
@@ -139,6 +140,10 @@ public struct MenuBarState: Sendable, Equatable {
     public var shortcutUnheard: String?
     /// How far along the AI suggestion model is, so a switch that is on but waiting says so.
     public var suggestionModel: SuggestionModelReadiness
+    /// Whether the dictation shortcut is held or pressed, so the hint uses the right verb.
+    public var activation: HotkeyActivation
+    /// What the speech model costs to download, for the line that offers it.
+    public var speechModelBytes: Int64?
 
     public init(
         activity: DictationActivity = .idle,
@@ -146,26 +151,30 @@ public struct MenuBarState: Sendable, Equatable {
         speechModel: SpeechModelReadiness = .ready,
         recordingAdvice: DictationAdvice = .keepGoing,
         recents: [MenuBarRecent] = [],
-        canCheckForUpdates: Bool = false,
+        clips: [Clip] = [],
         updateProgress: UpdateProgress = .idle,
         features: MenuBarFeatures = MenuBarFeatures(),
         shortcuts: ShortcutSet = .default,
         unarmedShortcuts: Set<ShortcutAction> = [],
         shortcutUnheard: String? = nil,
-        suggestionModel: SuggestionModelReadiness = .notAsked
+        suggestionModel: SuggestionModelReadiness = .notAsked,
+        activation: HotkeyActivation = .holdToTalk,
+        speechModelBytes: Int64? = nil
     ) {
         self.activity = activity
         self.failure = failure
         self.speechModel = speechModel
         self.recordingAdvice = recordingAdvice
         self.recents = recents
-        self.canCheckForUpdates = canCheckForUpdates
+        self.clips = clips
         self.updateProgress = updateProgress
         self.features = features
         self.shortcuts = shortcuts
         self.unarmedShortcuts = unarmedShortcuts
         self.shortcutUnheard = shortcutUnheard
         self.suggestionModel = suggestionModel
+        self.activation = activation
+        self.speechModelBytes = speechModelBytes
     }
 }
 
@@ -181,11 +190,12 @@ public enum MenuBarIntent: Sendable, Equatable {
     /// A position into ``MenuBarState/recents``, so no text travels back to the app that has it.
     case insertRecent(index: Int)
     case copyRecent(index: Int)
+    /// A position into ``MenuBarState/clips``, for the same reason.
+    case insertClip(index: Int)
+    case copyClip(index: Int)
     case open(Destination)
     /// Opens the clipboard panel, which is otherwise reachable only by a shortcut nothing mentions.
     case openClipboard
-    /// Ask the feed now, and the one path allowed to put an update window on screen.
-    case checkForUpdates
     /// Move one of the three switches, naming the one it moves so the other two cannot follow.
     case setFeature(MenuBarFeature, isOn: Bool)
     case quit
@@ -266,8 +276,6 @@ public struct MenuBarCommand: Sendable, Equatable {
     public let shortcut: MenuBarShortcut?
     /// Decided here and nowhere else: an enabled item that does nothing reads as a broken app.
     public let isEnabled: Bool
-    /// Shown in place of the row above it while Option is held.
-    public let isAlternate: Bool
     /// The whole of a title that had to be shortened.
     public let tooltip: String?
     /// Whether the item wears a tick, which only a switch ever does.
@@ -275,14 +283,13 @@ public struct MenuBarCommand: Sendable, Equatable {
 
     public init(
         title: String, intent: MenuBarIntent, shortcut: MenuBarShortcut? = nil,
-        isEnabled: Bool = true, isAlternate: Bool = false, tooltip: String? = nil,
+        isEnabled: Bool = true, tooltip: String? = nil,
         isChecked: Bool = false
     ) {
         self.title = title
         self.intent = intent
         self.shortcut = shortcut
         self.isEnabled = isEnabled
-        self.isAlternate = isAlternate
         self.tooltip = tooltip
         self.isChecked = isChecked
     }
@@ -314,7 +321,7 @@ public enum MenuBarIcon: Sendable, Hashable {
     case symbol(String)
 }
 
-/// What the menu bar item shows: its icon, and the menu behind it.
+/// What the menu bar item shows: its icon, the popover behind it, and its right-click menu.
 public struct MenuBarPresentation: Sendable, Equatable {
     /// What the slot draws — the mark at rest, a symbol for everything else.
     public let icon: MenuBarIcon
@@ -322,25 +329,43 @@ public struct MenuBarPresentation: Sendable, Equatable {
     public let emphasis: MenuBarEmphasis
     /// Read aloud by VoiceOver, for whom the icon is often the only part of Uttrflow on screen.
     public let accessibilityLabel: String
+    /// The popover's top line: the talk hint at rest, or what is happening instead.
+    public let header: MenuBarHeader
+    /// The popover's round buttons, left to right.
+    public let buttons: [MenuBarButton]
+    /// The newest dictation, or nothing when there is none to show.
+    public let lastDictation: MenuBarRow?
+    /// The newest clips, empty when there are none or the clipboard is switched off.
+    public let clips: [MenuBarRow]
+    /// The right-click menu, in the order it shows them.
     public let items: [MenuBarItem]
 
     public init(
         icon: MenuBarIcon, statusLine: String, emphasis: MenuBarEmphasis,
-        accessibilityLabel: String, items: [MenuBarItem]
+        accessibilityLabel: String, header: MenuBarHeader, buttons: [MenuBarButton],
+        lastDictation: MenuBarRow?, clips: [MenuBarRow], items: [MenuBarItem]
     ) {
         self.icon = icon
         self.statusLine = statusLine
         self.emphasis = emphasis
         self.accessibilityLabel = accessibilityLabel
+        self.header = header
+        self.buttons = buttons
+        self.lastDictation = lastDictation
+        self.clips = clips
         self.items = items
     }
 
     /// Whether the icon is tinted, derived so it cannot disagree with the status line.
     public var isAttentionNeeded: Bool { emphasis == .attention }
 
-    /// Every command in order, so a caller need not walk past separators and headers.
+    /// Every command the popover and its menu offer, header first, so a caller can find one by intent.
     public var commands: [MenuBarCommand] {
-        items.compactMap { if case .command(let command) = $0 { command } else { nil } }
+        let action: [MenuBarCommand] =
+            if case .status(let status) = header, let command = status.action { [command] } else { [] }
+        let rows = ([lastDictation].compactMap(\.self) + clips).flatMap { [$0.insert, $0.copy] }
+        let menu = items.compactMap { if case .command(let command) = $0 { command } else { nil } }
+        return action + buttons.map(\.command) + rows + menu
     }
 }
 
@@ -366,6 +391,10 @@ public enum MenuBarPresenter {
             statusLine: statusLine,
             emphasis: emphasis,
             accessibilityLabel: spokenForm(of: statusLine),
+            header: header(for: state, statusLine: statusLine),
+            buttons: buttons(for: state),
+            lastDictation: lastDictation(for: state),
+            clips: clipRows(for: state),
             items: items(for: state, statusLine: statusLine, emphasis: emphasis)
         )
     }
@@ -441,46 +470,13 @@ public enum MenuBarPresenter {
         return "Uttrflow. \(spoken)\(stop)"
     }
 
-    // MARK: The menu
+    // MARK: The right-click menu
 
+    /// What a right-click on the icon or the popover offers: the switches, the windows, and Quit.
     static func items(
         for state: MenuBarState, statusLine: String, emphasis: MenuBarEmphasis
     ) -> [MenuBarItem] {
-        var items: [MenuBarItem] = [.status(text: statusLine, emphasis: emphasis)]
-        // Under the status line, so the reason the shortcut does nothing sits above the item that still works.
-        if let unheard = state.shortcutUnheard, state.features.dictation {
-            items.append(.status(text: unheard, emphasis: .attention))
-        }
-
-        // The problem and its fix together at the top, with nothing between them.
-        if let action = state.failure?.action ?? setupAction(for: state.speechModel) {
-            items.append(
-                .command(MenuBarCommand(title: menuTitle(for: action), intent: .recover(action.recovery))))
-        }
-        items.append(.separator)
-
-        // A toggle, so a dictation begun here has a way to end here.
-        items.append(
-            .command(
-                MenuBarCommand(
-                    title: isDictating(in: state) ? "Stop Dictation" : "Start Dictation",
-                    intent: isDictating(in: state) ? .stopDictation : .startDictation,
-                    shortcut: MenuBarShortcut.forBinding(state.shortcuts.first(for: .dictate)),
-                    isEnabled: isDictating(in: state) || canStartDictation(in: state))))
-
-        // Directly under dictation: the app's two halves, and this is where a forgotten shortcut is looked up.
-        items.append(
-            .command(
-                MenuBarCommand(
-                    title: "Clipboard", intent: .openClipboard,
-                    shortcut: state.unarmedShortcuts.contains(.clipboard)
-                        ? nil
-                        : MenuBarShortcut.forBinding(state.shortcuts.first(for: .clipboard)),
-                    isEnabled: state.features.clipboard)))
-
-        items.append(contentsOf: recentItems(for: state))
-
-        items.append(.separator)
+        var items: [MenuBarItem] = [.status(text: statusLine, emphasis: emphasis), .separator]
         items.append(contentsOf: featureItems(for: state.features, suggestionModel: state.suggestionModel))
 
         items.append(.separator)
@@ -488,19 +484,13 @@ public enum MenuBarPresenter {
         items.append(
             .command(
                 MenuBarCommand(
-                    title: "Open Uttrflow", intent: .open(.main(.dictation)),
+                    title: "Open Uttrflow", intent: .open(.main(.home)),
                     shortcut: MenuBarShortcut(key: "0", modifiers: .command))))
         items.append(
             .command(
                 MenuBarCommand(
                     title: "Settings…", intent: .open(.settings(.general)),
                     shortcut: MenuBarShortcut(key: ",", modifiers: .command))))
-        // Only in a build that can update, since neither an enabled nor a greyed item would read well.
-        if state.canCheckForUpdates {
-            items.append(
-                .command(
-                    MenuBarCommand(title: "Check for Updates…", intent: .checkForUpdates)))
-        }
 
         items.append(.separator)
         items.append(
@@ -556,30 +546,6 @@ public enum MenuBarPresenter {
         case .idle, .finished: true
         case .listening, .working: false
         }
-    }
-
-    /// The Recent section, absent rather than empty, since a greyed row says nothing.
-    static func recentItems(for state: MenuBarState) -> [MenuBarItem] {
-        guard !state.recents.isEmpty else { return [] }
-
-        // Reaching in while the pipeline runs would race the insertion already on its way.
-        let isEnabled = !isBusy(state.activity)
-        var items: [MenuBarItem] = [.sectionHeader("Recent")]
-        for (index, recent) in state.recents.enumerated() {
-            items.append(
-                .command(
-                    MenuBarCommand(
-                        title: recent.title, intent: .insertRecent(index: index),
-                        isEnabled: isEnabled, tooltip: recent.fullText)))
-            // Copying hides behind Option rather than doubling the section's length.
-            items.append(
-                .command(
-                    MenuBarCommand(
-                        title: "Copy “\(recent.title)”", intent: .copyRecent(index: index),
-                        shortcut: MenuBarShortcut(key: "", modifiers: .option),
-                        isEnabled: isEnabled, isAlternate: true, tooltip: recent.fullText)))
-        }
-        return items
     }
 
     /// The download a missing or broken speech model needs, offered wherever no failure brings its own fix.
