@@ -242,6 +242,18 @@ tap, the panel, and the corpus. It reads the field off the main thread, and a tu
 takes longer than `SuggestionSession.turnBudgetInMilliseconds` draws nothing at all —
 answering a moment that has passed is worse than answering nothing.
 
+**The field read has a budget of its own.** Each Accessibility message gives up after
+`FocusedFieldReader.elementTimeoutInSeconds`, but giving up only stops the waiting: the other
+application still does the work for every message that was sent, on the thread that also
+handles the user's typing. So one read asks each question once — the field's names in one
+batched message, the caret, the window and the frames once each — and the whole read stops
+at the next question once `FieldReadBudget.allowanceInNanoseconds` (40 ms) has passed. A
+field whose read ran over is then asked nothing at all for a rest that starts at 10 s and
+doubles on each further overrun up to 5 minutes (`SlowFields`); a read that keeps to the
+budget ends the rest. A very long web text area, whose caret questions each run into the
+timeout, therefore costs its application one read per rest rather than one per turn, and
+draws no suggestion.
+
 ### One ghost, and only while it is true
 
 **There is one panel for the process** (`SuggestionPanelController.shared`), so a loop
