@@ -97,6 +97,11 @@ struct SettingsControlView: View {
                 .foregroundStyle(SettingsPalette.ink(0.7))
                 .textSelection(.enabled)
 
+        case .placeholder(let value):
+            Text(value)
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsPalette.ink(0.5))
+
         case .status(let value):
             SettingsStatusView(text: value)
 

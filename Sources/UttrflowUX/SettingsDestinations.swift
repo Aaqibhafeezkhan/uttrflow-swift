@@ -79,7 +79,7 @@ public enum SettingsDestinations {
                 explanation:
                     "Dictate somewhere once and it appears here, so you can say what kind of "
                     + "place it is.",
-                control: .text("Nothing yet"),
+                control: .placeholder("Nothing yet"),
                 icon: .symbol("macbook", .neutral))
         }
 

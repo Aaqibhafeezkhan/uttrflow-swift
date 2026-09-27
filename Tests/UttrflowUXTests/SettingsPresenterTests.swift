@@ -48,7 +48,7 @@ extension SettingsPane {
                 ].compactMap(\.self)
             case .action(let title, _):
                 strings += [title]
-            case .text(let value), .status(let value):
+            case .text(let value), .placeholder(let value), .status(let value):
                 strings += [value]
             case .languages(let chips, let add):
                 strings += chips.map(\.title) + add.map(\.title)
@@ -115,7 +115,7 @@ struct SettingsWindowTests {
                         options.map(\.id).contains(selected),
                         "\(row.id) has selected something it does not offer")
                     #expect(Set(options.map(\.id)).count == options.count)
-                case .toggle, .shortcut, .tick, .removal, .action, .text, .status, .languages,
+                case .toggle, .shortcut, .tick, .removal, .action, .text, .placeholder, .status, .languages,
                     .applicationSwitch:
                     break
                 }

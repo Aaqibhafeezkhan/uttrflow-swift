@@ -227,7 +227,7 @@ public struct MainConfirmation: Sendable, Equatable {
     public static let signOut = MainConfirmation(
         title: "Sign out of Uttrflow?",
         message: "Your dictations stay on this Mac. You’ll need to sign in again to keep using Uttrflow.",
-        confirmTitle: "Sign Out", symbolName: "rectangle.portrait.and.arrow.right", tone: .warning,
+        confirmTitle: "Sign out", symbolName: "rectangle.portrait.and.arrow.forward", tone: .warning,
         isDestructive: true)
 
     /// What pressing a button for this intent asks first, or `nil` when it acts at once.

@@ -14,6 +14,8 @@ struct MainConfirmationTests {
         #expect(MainConfirmation.before(.dismissNotice) == nil)
         #expect(MainConfirmation.signOut.isDestructive)
         #expect(MainConfirmation.signOut.cancelTitle == "Cancel")
+        #expect(MainConfirmation.signOut.confirmTitle == "Sign out")
+        #expect(MainConfirmation.signOut.symbolName == "rectangle.portrait.and.arrow.forward")
     }
 
     /// Settings' question keeps its words and is drawn as the destructive sheet it always is.

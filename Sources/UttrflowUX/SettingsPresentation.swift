@@ -244,6 +244,9 @@ public enum SettingsControl: Sendable, Equatable {
     /// A value with nothing to press — a version number, a count, a date.
     case text(String)
 
+    /// Words standing in for a value not known yet, drawn in the body font: "Nothing yet".
+    case placeholder(String)
+
     /// A fact that is fine, drawn with a green dot: "On-device".
     case status(String)
 
