@@ -267,7 +267,13 @@ struct MenuBarContentsTests {
     func shortcuts() {
         let shown = MenuBarPresenter.present(MenuBarState())
         let menu = shown.items.compactMap { if case .command(let command) = $0 { command } else { nil } }
-        #expect(shown.command(.startDictation)?.shortcut == MenuBarShortcut(key: " ", modifiers: .option))
+        // ⌃⌥ held has no key to print, so only an earlier install's ⌥Space shows beside Start.
+        #expect(shown.command(.startDictation)?.shortcut == nil)
+        var earlier = MenuBarState()
+        earlier.shortcuts = .earlierDefault
+        #expect(
+            MenuBarPresenter.present(earlier).command(.startDictation)?.shortcut
+                == MenuBarShortcut(key: " ", modifiers: .option))
         #expect(
             menu.first { $0.intent == .open(.main(.home)) }?.shortcut
                 == MenuBarShortcut(key: "0", modifiers: .command))
@@ -305,7 +311,7 @@ struct MenuBarHeaderTests {
     @Test("says press when the shortcut toggles")
     func pressWhenToggling() {
         let shown = MenuBarPresenter.present(MenuBarState(activation: .pressToToggle))
-        #expect(shown.header == .hint(MenuBarHint(verb: "press", keys: "⌥Space")))
+        #expect(shown.header == .hint(MenuBarHint(verb: "press", keys: "⌃⌥")))
     }
 
     @Test("falls back to fn when nothing is bound")

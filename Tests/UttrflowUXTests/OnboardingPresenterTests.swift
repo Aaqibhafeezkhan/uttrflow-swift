@@ -46,7 +46,7 @@ private let forbiddenWords = [
 
 /// The page for a state, with the default shortcut unless given one.
 private func page(
-    _ state: OnboardingState, hotkey: HotkeyBinding = .optionSpace,
+    _ state: OnboardingState, hotkey: HotkeyBinding = Settings.default.hotkey,
     activation: HotkeyActivation = .holdToTalk
 ) -> OnboardingPage {
     OnboardingPresenter.page(for: state, hotkey: hotkey, activation: activation)
@@ -326,10 +326,9 @@ struct OnboardingPresenterTests {
 
     // MARK: The last page
 
-    @Test("asks for a first try with the keys the settings hold, and a way straight to the app")
+    @Test("asks a new install for a first try with ⌃⌥ held, and a way straight to the app")
     func theFirstTry() {
-        let chord = HotkeyBinding(keyCode: 59, modifiers: [.control, .option])
-        let trying = page(OnboardingState(step: .ready, detail: .finishing(.ready)), hotkey: chord)
+        let trying = page(OnboardingState(step: .ready, detail: .finishing(.ready)))
         #expect(trying.title == "Hold ⌃ ⌥ and talk.")
         #expect(
             trying.picture == .keys(["⌃", "⌥"], isHeld: false, field: .placeholder("Your words appear here")))
@@ -338,7 +337,11 @@ struct OnboardingPresenterTests {
 
         let pressed = page(
             OnboardingState(step: .ready, detail: .finishing(.ready)), activation: .pressToToggle)
-        #expect(pressed.title == "Press ⌥ Space and talk.")
+        #expect(pressed.title == "Press ⌃ ⌥ and talk.")
+
+        let earlier = page(
+            OnboardingState(step: .ready, detail: .finishing(.ready)), hotkey: Settings.earlierInstall.hotkey)
+        #expect(earlier.title == "Hold ⌥ Space and talk.")
     }
 
     @Test("holds the keys down while listening, and shows the words that came back")
@@ -359,7 +362,7 @@ struct OnboardingPresenterTests {
         let heard = page(
             OnboardingState(step: .ready, detail: .finishing(.ready, trial: .heard("Hi there."))))
         #expect(heard.title == "That’s it.")
-        #expect(heard.picture == .keys(["⌥", "Space"], isHeld: false, field: .filled("Hi there.")))
+        #expect(heard.picture == .keys(["⌃", "⌥"], isHeld: false, field: .filled("Hi there.")))
     }
 
     @Test("says that words will be copied when Accessibility is missing")

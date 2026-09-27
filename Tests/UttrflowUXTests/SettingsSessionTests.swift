@@ -165,7 +165,7 @@ struct SettingsSessionTests {
         // 0x80 is past the 7-bit virtual key range, so no modifier combination can rescue it.
         stored.hotkey = HotkeyBinding(keyCode: 0x80, modifiers: [.option])
         let session = SettingsSession(settings: stored)
-        #expect(session.recorder.binding == .optionSpace)
+        #expect(session.recorder.binding == Settings.default.hotkey)
     }
 
     @Test("shows whichever tab it is switched to, without losing the settings")

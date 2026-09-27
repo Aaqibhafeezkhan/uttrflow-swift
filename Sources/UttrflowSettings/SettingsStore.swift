@@ -144,6 +144,9 @@ public struct Settings: Sendable, Equatable, Codable {
 
     /// What a user gets before they configure anything.
     public static let `default` = Settings()
+
+    /// The defaults an install onboarded before ⌃⌥ held became the dictation shortcut keeps, with ⌥Space.
+    public static let earlierInstall = Settings(shortcuts: .earlierDefault)
 }
 
 extension Settings {
@@ -191,7 +194,8 @@ extension Settings {
             profile: container.value(forKey: .profile, default: fallback.profile),
             cleaning: container.value(forKey: .cleaning, default: fallback.cleaning),
             destinations: container.value(forKey: .destinations, default: fallback.destinations),
-            shortcuts: Settings.shortcuts(from: decoder, default: fallback.shortcuts),
+            // A saved file with no dictation shortcut predates ⌃⌥ held, so it keeps ⌥Space.
+            shortcuts: Settings.shortcuts(from: decoder, default: .earlierDefault),
             hotkeyActivation: container.value(
                 forKey: .hotkeyActivation, default: fallback.hotkeyActivation
             ),

@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private nonisolated static let log = Logger(
         subsystem: "com.uttrflow.Uttrflow", category: "insertion")
 
-    private let settingsStore: any SettingsStore = UserDefaultsSettingsStore()
+    private let settingsStore = UserDefaultsSettingsStore()
     private var settings = Settings()
     /// The pipeline's recording cue, told when the sound setting changes.
     private var recordingSounds: RecordingSounds?
@@ -247,6 +247,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     static let failureLingers = Duration.seconds(10)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Before the first read, so an install onboarded under ⌥Space keeps it. See `Docs/shortcuts.md`.
+        settingsStore.pinDefaults(onboarded: UserDefaultsOnboardingRecordStore().hasFinished)
         settings = settingsStore.load()
         // Reconciled at launch too: the login item can be removed without telling the app.
         applyAppearance()
