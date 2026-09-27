@@ -676,8 +676,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Releases the suggestion model when memory is pressed, and loads it again once calm has lasted. See `Docs/performance.md`.
     func memoryPressureChanged(to level: MemoryPressureLevel) {
-        pressureReload?.cancel()
-        pressureReload = nil
         switch level {
         case .warning, .critical:
             releaseSpeechModelIfIdle()
@@ -686,7 +684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             releaseTheModel()
             suggestionModel = .releasedForMemory
         case .normal:
-            guard memoryPressure.isReleased else { return }
+            guard memoryPressure.isReleased, pressureReload == nil else { return }  // a repeated calm keeps the countdown already running
             let wait = memoryPressure.wait
             pressureReload = Task { [weak self] in
                 try? await Task.sleep(for: wait)
@@ -729,6 +727,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             completions = nil
             memoryPressure.forget()
             pressureReload?.cancel()
+            pressureReload = nil
             releaseTheModel()
             return
         }
