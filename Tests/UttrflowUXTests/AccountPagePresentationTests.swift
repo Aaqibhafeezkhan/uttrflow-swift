@@ -56,7 +56,7 @@ struct MacAccountPageTests {
         let page = HistoryFixture.macAccountPage()
         #expect(page.emptyState == nil)
         #expect(page.identity?.name == "Naveen Bhatt")
-        #expect(page.identity?.initials == "NB")
+        #expect(page.identity?.initials == "N")
         #expect(page.identity?.provider == "This Mac")
         #expect(page.identity?.providerID == nil, "nobody signed this person in")
         #expect(page.identity?.emailAddress == nil, "no provider means no address to show")
@@ -138,8 +138,8 @@ struct AccountIdentityTests {
     /// A stock silhouette tells the user nothing about which of their accounts this is.
     @Test("the circle carries the initials of the name")
     func initials() {
-        #expect(HistoryFixture.accountPage().identity?.initials == "NB")
-        #expect(AccountPagePresenter.initials(of: "Ada Byron Lovelace") == "AB")
+        #expect(HistoryFixture.accountPage().identity?.initials == "N")
+        #expect(AccountPagePresenter.initials(of: "Ada Byron Lovelace") == "A")
         // "PR" would read as a company; one name gives one initial.
         #expect(AccountPagePresenter.initials(of: "Prince") == "P")
     }
