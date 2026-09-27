@@ -82,7 +82,7 @@ struct QuickPanelView: View {
             logo
             HStack(spacing: 9) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.panelLabelDim)
                     .accessibilityHidden(true)
                 field
@@ -96,7 +96,7 @@ struct QuickPanelView: View {
                 onIntent(.dictate)
             } label: {
                 Image(systemName: presentation.microphone.symbolName)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(
                         presentation.microphone.isEnabled
                             ? Color.panelLabelSoft : Color.panelLabelDim
@@ -374,7 +374,7 @@ struct QuickPanelView: View {
 
     private func groupHeading(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 9.5, weight: .semibold))
             .kerning(0.6)
             .foregroundStyle(Color.panelLabelDim)
             .padding(.horizontal, 10)
@@ -423,7 +423,8 @@ struct QuickPanelView: View {
                     .font(
                         .system(
                             size: row.isMasked ? 12 : 12.5,
-                            design: row.isMonospaced ? .monospaced : .default)
+                            // The mask is drawn in the text face, whose bullets are the design's size.
+                            design: row.isMonospaced && !row.isMasked ? .monospaced : .default)
                     )
                     .foregroundStyle(row.isMasked ? Color.panelLabelDim : Color.panelLabel)
                     .lineLimit(1)
@@ -487,14 +488,14 @@ struct QuickPanelView: View {
         let colour = tint(for: row.kind)
         if QuickPanelSpeech.hasTile(row.kind) {
             glyph
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(colour)
                 .frame(width: 22, height: 22)
                 .background(colour.opacity(0.15), in: .rect(cornerRadius: 6))
         } else {
             // Small and dim: four rows in five carry this glyph, so it must read as texture, not signal.
             glyph
-                .font(.system(size: 11, weight: .regular))
+                .font(.system(size: 10, weight: .regular))
                 .foregroundStyle(colour.opacity(0.62))
                 .frame(width: 17)
         }
@@ -537,8 +538,8 @@ struct QuickPanelView: View {
         HStack(spacing: 6) {
             // Only state that belongs to this clip: a pin. Time and actions live in the ⋯ menu.
             if row.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 10))
+                Image(systemName: "pin")
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Color.panelAccentBright)
             }
             Button {
@@ -707,13 +708,13 @@ struct QuickPanelView: View {
         .overlay(alignment: .top) { hairline }
     }
 
-    /// A tab's glyph: a symbol, or the mark at 13 points so it sits level with 15-point symbols.
+    /// A tab's glyph: a symbol, or the mark at 13 points so it sits level with the 13-point symbols.
     @ViewBuilder
     private func tabGlyph(_ glyph: PanelTabGlyph) -> some View {
         switch glyph {
         case .symbol(let name):
             Image(systemName: name)
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 13, weight: .regular))
         case .brandMark:
             UttrflowMarkView(height: 13)
         }

@@ -440,7 +440,7 @@ public enum PanelPresenter {
         case .text: "text.alignleft"
         case .link: "link"
         case .code: "chevron.left.forwardslash.chevron.right"
-        case .secret: "key.fill"
+        case .secret: "key"
         case .colour: "paintpalette"
         case .filePath: "folder"
         case .image: "photo"
