@@ -18,6 +18,9 @@ struct SettingsControlView: View {
             view(for: control)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(label)
+        case .action, .removal:
+            // A button names itself, so the row it acts on is the hint: "Resume, button. Pause for a while".
+            view(for: control).accessibilityHint(label)
         default:
             view(for: control).accessibilityLabel(label)
         }
