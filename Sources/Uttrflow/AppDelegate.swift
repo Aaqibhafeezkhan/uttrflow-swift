@@ -2186,6 +2186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 ApplicationPicker.choose(given: settings.suggestions) { [weak self] identifier in
                     self?.settingsWindow.apply(.suggestionsHere(application: identifier, isOn: false))
                 }
+            case .openPage(let page): show(.main(page))
             default: break
             }
             return

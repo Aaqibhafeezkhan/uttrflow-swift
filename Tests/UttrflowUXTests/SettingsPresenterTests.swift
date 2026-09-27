@@ -385,6 +385,18 @@ struct SettingsDictationPaneTests {
     func carriesTheOfflineNote() {
         #expect(dictation().callout?.message.contains("internet") == true)
     }
+
+    @Test("opens the pages the sidebar does not list: Style, Corrections and Diagnostics")
+    func opensThePagesWithoutASidebarRow() {
+        let pages: [MainTab] = [.style, .corrections, .diagnostics]
+        for page in pages {
+            let row = dictation().row("page.\(page.rawValue)")
+            #expect(row?.label == SidebarPresenter.title(for: page))
+            #expect(row?.control == .action(title: "Open", change: .openPage(page)))
+            #expect(row?.isEnabled == true)
+        }
+        #expect(SettingsChange.openPage(.style).isRequestToAct)
+    }
 }
 
 // MARK: - Privacy

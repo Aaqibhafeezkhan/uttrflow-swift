@@ -244,11 +244,12 @@ private func name(of change: SettingsChange) -> String {
     case .pauseSuggestions: "pauseSuggestions"
     case .checkForUpdatesNow: "checkForUpdatesNow"
     case .chooseApplicationToTurnOffSuggestions: "chooseApplicationToTurnOffSuggestions"
+    case .openPage: "openPage"
     }
 }
 
 /// How many cases ``SettingsChange`` has, bumped deliberately when one is added.
-private let settingsChangeCaseCount = 17
+private let settingsChangeCaseCount = 18
 
 /// Applies a change, or answers the settings unchanged when the editor refused it.
 private func applying(_ change: SettingsChange, to settings: Settings) -> Settings {
@@ -318,6 +319,7 @@ private let samples: [Sample] = [
     Sample(.pauseSuggestions(isOn: true), from: suggesting),
     Sample(.checkForUpdatesNow),
     Sample(.chooseApplicationToTurnOffSuggestions, from: suggesting),
+    Sample(.openPage(.style)),
 ]
 
 /// Settings that start from whatever a sample needs, so a change is applied to ground it alters.
