@@ -69,6 +69,7 @@ enum MenuBarColour {
     static let rule = Color(nsColor: .orbit(M.rule))
     static let buttonFill = Color(nsColor: .orbit(M.buttonFill))
     static let buttonEdge = Color(nsColor: .orbit(M.buttonEdge))
+    static let talkOff = Color(nsColor: .orbit(M.talkOff))
     static let keycap = Color(nsColor: .orbit(M.keycap))
     static let hover = Color(nsColor: .orbit(M.hover))
     static let dictation = Color(nsColor: .orbit(R.dictationAccent))
@@ -77,6 +78,12 @@ enum MenuBarColour {
     /// The progress fill, aurora blue into dictation teal.
     static let progress = LinearGradient(
         colors: [Color(rgb: R.auroraStops[2]), dictation], startPoint: .leading, endPoint: .trailing)
+
+    /// A round button's disc: the filled primary, Talk's fixed grey while it cannot listen, or the quiet fill.
+    static func disc(isPrimary: Bool, isEnabled: Bool) -> Color {
+        guard isPrimary else { return buttonFill }
+        return isEnabled ? text : talkOff
+    }
 
     /// A status dot or pill: teal at work, red while listening, amber when the user is needed.
     static func dot(_ emphasis: MenuBarEmphasis) -> Color {

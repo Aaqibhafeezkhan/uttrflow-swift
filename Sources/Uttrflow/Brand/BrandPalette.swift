@@ -357,6 +357,9 @@ extension BrandPalette.Redesign {
         static let rule = BrandLayer(tone: R.textStrong, darkOpacity: 0.1, lightOpacity: 0.09)
         /// A quiet round button's disc.
         static let buttonFill = BrandLayer(tone: R.textStrong, darkOpacity: 0.1, lightOpacity: 0.06)
+        /// Talk's disc while it cannot listen: a fixed mid-grey under a white mic when light, faded white when dark.
+        static let talkOff = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x8B_90A0), darkOpacity: 0.35, lightOpacity: 1)
         /// A round button's edge.
         static let buttonEdge = BrandLayer(tone: R.textStrong, darkOpacity: 0.14, lightOpacity: 0.1)
         /// The keycap behind the shortcut.

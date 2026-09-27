@@ -270,7 +270,9 @@ private struct MenuBarRoundButton: View {
         } label: {
             VStack(spacing: 6) {
                 Circle()
-                    .fill(button.isPrimary ? MenuBarColour.text : MenuBarColour.buttonFill)
+                    .fill(
+                        MenuBarColour.disc(isPrimary: button.isPrimary, isEnabled: button.command.isEnabled)
+                    )
                     .overlay(Circle().strokeBorder(MenuBarColour.buttonEdge, lineWidth: 1))
                     .frame(width: 44, height: 44)
                     .overlay(
@@ -278,7 +280,7 @@ private struct MenuBarRoundButton: View {
                             .font(.system(size: 17, weight: .regular))
                             .foregroundStyle(button.isPrimary ? MenuBarColour.fillInk : MenuBarColour.text)
                     )
-                    .opacity(button.command.isEnabled ? 1 : 0.35)
+                    .opacity(button.command.isEnabled || button.isPrimary ? 1 : 0.35)
                     .menuBarFocusRing(Circle(), isShown: isFocused)
                 Text(button.command.title)
                     .font(.system(size: 10.5, weight: .medium))
