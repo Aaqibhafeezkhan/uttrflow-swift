@@ -153,15 +153,17 @@ struct InsightsCalendarShadeTests {
         #expect(!quiet.usesDeepInk)
     }
 
-    @Test("the deep ink starts past sixty per cent of the busiest day")
+    /// Past a 0.6 shade the page's white ink falls below the deep ink's contrast on the teal in dark.
+    @Test("the deep ink starts where the tile's shade passes 0.6")
     func deepInk() {
         let day = { (fraction: Double) in
             InsightsCalendarDay(
                 date: HistoryFixture.now, number: "1", words: 1, fraction: fraction, isToday: false,
                 detail: "")
         }
-        #expect(!day(0.6).usesDeepInk)
-        #expect(day(0.61).usesDeepInk)
+        #expect(!day(0.52).usesDeepInk)
+        #expect(day(0.53).usesDeepInk)
+        #expect(day(1).usesDeepInk)
     }
 
     @Test("a tile's share and a calendar's blanks are kept in range")
@@ -303,40 +305,59 @@ struct InsightsRangeTests {
 
 @Suite("The figures beside the calendar")
 struct InsightsFiguresTests {
-    @Test("words, dictations, words per minute and the streak, in that order")
+    @Test("words, a day, words per minute and the longest streak, in that order")
     func order() {
-        let page = HistoryFixture.insights(entries: HistoryFixture.aWeek(words: 10, seconds: 10))
-        #expect(page.figures.map(\.caption) == ["words", "dictations", "words / min", "streak"])
-        #expect(page.figures.map(\.value) == ["70", "7", "60", "7 days"])
+        let page = HistoryFixture.insights(
+            entries: HistoryFixture.aWeek(words: 10, seconds: 10), range: .week)
+        #expect(page.figures.map(\.caption) == ["words", "a day", "words / min", "longest streak"])
+        #expect(page.figures.map(\.value) == ["70", "10", "60", "7 days"])
     }
 
-    @Test("the words and dictations are the range's, grouped by thousands")
+    @Test("the words and the daily average are the range's, grouped by thousands")
     func withinTheRange() {
         let entries = HistoryFixture.aWeek(words: 500, days: 20)
         let week = HistoryFixture.insights(
             entries: entries, settings: HistoryFixture.keeping(30), range: .week)
         let month = HistoryFixture.insights(
             entries: entries, settings: HistoryFixture.keeping(30), range: .month)
-        #expect(week.figures.prefix(2).map(\.value) == ["3,500", "7"])
-        #expect(month.figures.prefix(2).map(\.value) == ["10,000", "20"])
+        #expect(week.figures.prefix(2).map(\.value) == ["3,500", "500"])
+        #expect(month.figures.prefix(2).map(\.value) == ["10,000", "333"])
     }
 
-    /// Nothing timed means no pace to give, and a dash says so rather than a zero.
+    /// Silent days count, so the average is what a day in the range came to, not a busy day.
+    @Test("the daily average divides by every day of the range, to the nearest word")
+    func dailyAverage() {
+        let entries = HistoryFixture.aWeek(words: 1_000, days: 3)
+        #expect(InsightsPresenter.dailyAverage(of: entries, over: .week) == 429)
+        #expect(InsightsPresenter.dailyAverage(of: entries, over: .month) == 100)
+        #expect(InsightsPresenter.dailyAverage(of: [], over: .quarter) == 0)
+    }
+
+    /// Words per minute is a dash until something is timed.
     @Test("words per minute is a dash until something is timed")
     func untimedPace() {
         let page = HistoryFixture.insights(entries: HistoryFixture.aWeek())
         #expect(page.figures.first { $0.caption == "words / min" }?.value == "—")
     }
 
-    /// The streak is Home's, so the two pages cannot disagree about it.
-    @Test("the streak is the one Home counts")
-    func streakIsHomes() {
+    /// Two runs with a gap between them: the longer, older one is the streak, not the current one.
+    @Test("the longest streak is the longest run in the range, not the one that ends today")
+    func longestStreak() {
         let entries = HistoryFixture.aWeek(days: 4, from: 1) + HistoryFixture.aWeek(days: 5, from: 6)
-        let page = HistoryFixture.insights(entries: entries, settings: HistoryFixture.keeping(30))
-        let home = HomeDashboard.streak(
-            in: entries, now: HistoryFixture.now, calendar: HistoryFixture.mondayFirst)
-        #expect(page.figures.last?.value == MainFormatting.count(home, "day", "days"))
-        #expect(page.figures.last?.value == "4 days", "yesterday back to the first gap")
+        let page = HistoryFixture.insights(
+            entries: entries, settings: HistoryFixture.keeping(30), range: .month)
+        #expect(page.figures.last?.value == "5 days")
+        let week = HistoryFixture.insights(
+            entries: entries, settings: HistoryFixture.keeping(30), range: .week)
+        #expect(week.figures.last?.value == "4 days", "the older run is cut by the week")
+    }
+
+    @Test("several dictations on one day are one day of a streak, and none is no streak")
+    func streakCountsDays() {
+        let calendar = HistoryFixture.mondayFirst
+        let twice = HistoryFixture.aWeek(days: 2) + HistoryFixture.aWeek(days: 2)
+        #expect(InsightsPresenter.longestStreak(in: twice, calendar: calendar) == 2)
+        #expect(InsightsPresenter.longestStreak(in: [], calendar: calendar) == 0)
     }
 
     @Test("the header names the page and where its figures come from")
