@@ -454,7 +454,7 @@ GATES = ("MotionBudget", "WindowAttention")
 # Panels that never become key, so WindowAttention never lets them move; each has its own reason it is not hidden while it runs.
 WINDOW_EXEMPT = {
     "Sources/Uttrflow/Dock/": "the dock is a floating panel above every window, ordered out when it has nothing to show",
-    "Sources/Uttrflow/MenuBar/": "the popover's controller hosts new content only while the panel is on screen",
+    "Sources/Uttrflow/MenuBar/": "the popover's controller hosts content only while the panel is on screen and empties it on close",
 }
 
 
