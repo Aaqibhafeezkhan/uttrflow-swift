@@ -11,16 +11,22 @@ public enum PanelEffect: Sendable, Equatable {
     case applyAndRedraw(PanelChange)
     /// Close and put this text at the caret; `used` names the clip so the last-used clock keeps running.
     case closeAndInsert(String, used: Clip.ID)
+    /// The same for a secret, whose words may only reach the clipboard marked concealed.
+    case closeAndInsertConcealed(String, used: Clip.ID)
     /// The same with the formatted form, so the receiving application takes whichever it understands.
     case closeAndInsertFormatted(String, richText: String, used: Clip.ID)
     /// Put it on the clipboard, say why on the panel, and close a moment later; never called an insertion.
     case copyAndSay(String, PanelNotice, used: Clip.ID)
+    /// The same for a secret, written with the concealed marker so clipboard histories keep it out.
+    case copyConcealedAndSay(String, PanelNotice, used: Clip.ID)
     /// Put the picture at the caret; carries the clip because the bytes are a file only the store can open.
     case closeAndInsertImage(Clip)
     /// Put the picture on the clipboard and say why it could not be placed, as `copyAndSay` does for text.
     case copyImageAndSay(Clip, PanelNotice)
     /// Put this text on the clipboard and close, for the row's Copy.
     case closeAndCopy(String, richText: String?, used: Clip.ID)
+    /// Put a secret on the clipboard marked concealed and close, for the row's Copy on a secret.
+    case closeAndCopyConcealed(String, used: Clip.ID)
     /// Put the picture on the clipboard and close, for the row's Copy on a picture.
     case closeAndCopyImage(Clip)
     /// B8 — say the picture has gone, and leave the panel up so the row can be seen.
@@ -33,6 +39,8 @@ extension PanelOutcome {
         switch self {
         case .open: .redraw
         case .dismissed: .close
+        case .insert(let clip) where clip.kind == .secret, .insertPlain(let clip) where clip.kind == .secret:
+            .closeAndInsertConcealed(clip.text, used: clip.id)
         case .insert(let clip):
             // Plain is what a clip without a rich form has always been; the panel decided, this only reports.
             clip.richText.map {
@@ -40,9 +48,13 @@ extension PanelOutcome {
             } ?? .closeAndInsert(clip.text, used: clip.id)
         case .insertPlain(let clip): .closeAndInsert(clip.text, used: clip.id)
         case .change(let change): .applyAndRedraw(change)
+        case .copyOnly(let clip, let why) where clip.kind == .secret && clip.image == nil:
+            .copyConcealedAndSay(clip.text, why.notice, used: clip.id)
         case .copyOnly(let clip, let why):
             clip.image == nil
                 ? .copyAndSay(clip.text, why.notice, used: clip.id) : .copyImageAndSay(clip, why.notice)
+        case .copy(let clip) where clip.kind == .secret && clip.image == nil:
+            .closeAndCopyConcealed(clip.text, used: clip.id)
         case .copy(let clip):
             clip.image == nil
                 ? .closeAndCopy(clip.text, richText: clip.richText, used: clip.id) : .closeAndCopyImage(clip)
