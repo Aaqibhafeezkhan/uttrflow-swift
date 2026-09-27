@@ -188,6 +188,11 @@ final class SuggestionCoordinator {
         interceptor.arm([])
         // Before the first keystroke, because the reader's queue may not call AppKit or HIToolbox.
         FocusedFieldReader.prepare()
+        // A ghost the panel takes off screen on its own, when it grows past its room, gives up its keys too.
+        panel.onWithdrawnUnasked = { [weak self] in
+            self?.interceptor.arm([])
+            self?.armedOffer = nil
+        }
         watchSwallowedKeys()
         watchForActivity()
     }
@@ -848,10 +853,10 @@ final class SuggestionCoordinator {
         }
         interceptor.arm(update.armed)
         armedOffer = update.suggestion.accepting
-        // Nothing is drawn off the caret's line, so a field that reports no inline placement is left alone.
-        guard update.suggestion != .silent, let snapshot, snapshot.placement == .inlineGhost,
-            let caret = snapshot.caret
-        else {
+        // Nothing is drawn off the caret's line, and what is not drawn claims no key.
+        guard let snapshot, let caret = Self.caret(for: update.suggestion, in: snapshot) else {
+            interceptor.arm([])
+            armedOffer = nil
             panel.hide()
             return
         }
@@ -868,6 +873,12 @@ final class SuggestionCoordinator {
             return
         }
         watchScrolls()
+    }
+
+    /// The caret a ghost for `suggestion` is drawn at, or nil when the field offers no inline place for one.
+    nonisolated static func caret(for suggestion: Suggestion, in snapshot: FocusedFieldSnapshot) -> CGRect? {
+        guard suggestion != .silent, snapshot.placement == .inlineGhost else { return nil }
+        return snapshot.caret
     }
 
     /// Draws what a move or a dismissal left where the ghost already stands, since no field was read for it and typing may have moved it.
