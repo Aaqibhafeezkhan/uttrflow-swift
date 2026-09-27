@@ -192,6 +192,24 @@ struct RedesignTokenTests {
         }
     }
 
+    /// The floating button's glass over a dark desktop and a light one, as `Docs/app-dock.md` measures against.
+    static let dockGlass = composite(R.dockGlass, over: BrandTone(dark: 0x26_2626, light: 0xEE_EEEE))
+
+    @Test("the floating button's ink clears 4.5:1 on its glass, and the meter 3:1, in both appearances")
+    func dockGlassIsLegible() {
+        let glass = Self.dockGlass
+        #expect(contrastRatio(R.textStrong.dark, glass.dark) >= 4.5)
+        #expect(contrastRatio(R.textStrong.light, glass.light) >= 4.5)
+        #expect(contrastRatio(R.dockMeter.dark, glass.dark) >= 3)
+        #expect(contrastRatio(R.dockMeter.light, glass.light) >= 3)
+    }
+
+    @Test("the floating button's glass is dark when dark and light when light")
+    func dockGlassFollowsTheAppearance() {
+        #expect(relativeLuminance(Self.dockGlass.dark) < 0.05)
+        #expect(relativeLuminance(Self.dockGlass.light) > 0.8)
+    }
+
     @Test("the sidebar island stays dark in the light appearance")
     func islandStaysDark() {
         #expect(relativeLuminance(R.sidebarIsland.tone.light) < 0.02)
