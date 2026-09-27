@@ -1,4 +1,4 @@
-// The Snippets page: the editor card, the table, and the worked example on the empty page.
+// The Snippets page: the editor card, the table, and the empty page.
 
 import UttrflowUX
 import SwiftUI
@@ -15,16 +15,7 @@ struct SnippetsPageView: View {
 
     var body: some View {
         if let empty = presentation.emptyState, presentation.editor == nil {
-            // The example sits below the scene, not over it, so the scene gives up room before the card is cut.
-            VStack(spacing: 0) {
-                MainEmptyStateView(state: empty, onIntent: onIntent)
-                if let example = presentation.example {
-                    SnippetExampleCard(example: example)
-                        .padding(.top, 12)
-                        .padding(.bottom, 12)
-                        .layoutPriority(1)
-                }
-            }
+            MainEmptyStateView(state: empty, onIntent: onIntent)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -164,6 +155,7 @@ struct SnippetEditorView: View {
             PageEditorField(label: editor.textLabel, symbolName: "keyboard", tint: PagePalette.suggestion) {
                 TextEditor(text: text)
                     .scrollContentBackground(.hidden)
+                    .scrollIndicators(.never)
                     .lineSpacing(3)
                     .frame(minHeight: 64)
                     .padding(.horizontal, -5)
@@ -195,31 +187,5 @@ struct SnippetEditorView: View {
         Binding(
             get: { draft.text },
             set: { draft = SnippetDraft(editing: draft.editing, trigger: draft.trigger, text: $0) })
-    }
-}
-
-/// The worked example on the empty page, so the idea lands before the form does.
-struct SnippetExampleCard: View {
-    let example: SnippetExample
-
-    var body: some View {
-        MainCard(padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(example.heading.uppercased())
-                    .font(.system(size: MainMetrics.footnoteSize, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                HStack(spacing: 8) {
-                    MainPillView(pill: example.trigger)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                    Text(example.text)
-                        .font(.system(size: MainMetrics.calloutSize))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .frame(width: 400)
-        .accessibilityElement(children: .combine)
     }
 }

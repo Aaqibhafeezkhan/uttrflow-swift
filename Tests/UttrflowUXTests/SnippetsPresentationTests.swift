@@ -166,7 +166,6 @@ struct SnippetsEditorTests {
     func editorInsteadOfEmpty() {
         let page = HistoryFixture.snippets([], draft: SnippetDraft())
         #expect(page.emptyState == nil)
-        #expect(page.example == nil)
         #expect(page.editor != nil)
     }
 }
@@ -180,14 +179,10 @@ struct SnippetsEmptyTests {
         #expect(page.emptyState?.action?.intent == .addSnippet)
     }
 
-    /// The idea lands before the form does.
-    @Test("the empty page shows one worked example")
-    func example() {
+    @Test("the empty page says the idea in one line")
+    func oneLine() {
         let page = HistoryFixture.snippets()
-        #expect(page.example?.heading == "For example")
-        #expect(page.example?.trigger.text == "my address")
-        #expect(page.example?.trigger.tone == .accent)
-        #expect(page.example?.text.contains("Example Residences") == true)
+        #expect(page.emptyState?.message == "Say a short phrase, and Uttrflow types the whole thing.")
     }
 
     @Test("a search that matched nothing says what it was looking for")
@@ -195,8 +190,6 @@ struct SnippetsEmptyTests {
         let page = HistoryFixture.snippets([HistoryFixture.snippet()], query: "invoice")
         #expect(page.emptyState?.title == "No matches")
         #expect(page.emptyState?.message.contains("“invoice”") == true)
-        // The example belongs to somebody with no snippets, not to a failed search.
-        #expect(page.example == nil)
     }
 }
 
