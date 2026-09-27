@@ -1,9 +1,9 @@
 # Changelog
 
 Notable changes to Uttrflow. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are calendar dates,
-`YEAR.MONTH.DAY` with no leading zeros, for the day a release is cut; a second release on
-the same day adds a fourth number, `2026.9.14.1`. Releases up to 0.5.0 used semantic
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are
+`YY.MMDD.REVISION` for the day a release is cut: `26.0926.0`, then `26.0926.1` for a second
+release that day. 2026.9.14 used `YEAR.MONTH.DAY`, and releases up to 0.5.0 used semantic
 versioning.
 
 Each released version is a git tag and a build at
