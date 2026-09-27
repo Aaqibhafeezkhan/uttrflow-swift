@@ -200,17 +200,24 @@ public actor Verifier {
         return standing
     }
 
-    /// Whether every word the model added is one the machine names, or one no listing could deny.
+    /// Whether every word the model added is one the machine names, or one no listing could deny; a listing not yet answered vouches for nothing.
     private func stands(
         _ completion: String, after typed: String, in surface: Surface, now: Date
     ) async -> Bool {
         guard await admits(completion, in: surface, now: now) else { return false }
+        // A field that is not a directory has no listings, so nothing it holds is looked up.
+        guard EnvironmentSource.workingDirectory(of: surface) != nil else { return true }
         for token in Verification.words(of: completion, addedAfter: typed) {
             guard let attestation = Verification.attestation(for: token) else { continue }
             var vouched = false
             for lookup in attestation.lookups where !vouched {
-                let known = await known(of: lookup.kinds, in: surface, now: now)
-                vouched = Verification.stands(lookup.word, known: known)
+                let answer = await knownAndComplete(of: lookup.kinds, in: surface, now: now)
+                if let answer, Verification.attests(lookup.word, answer.known) {
+                    vouched = true
+                } else if answer?.complete != true {
+                    // A listing still out is no proof either way, so only the disk itself may vouch meanwhile.
+                    vouched = lines.confirms(lookup, in: surface.scope)
+                }
             }
             guard vouched else { return false }
         }

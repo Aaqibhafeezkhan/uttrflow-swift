@@ -514,7 +514,9 @@ struct GeneratedLineTests {
 
     @Test("A program the machine has is drawn and one it has not is dropped, in the model's order.")
     func programsAreLookedUp() async {
-        let kept = await standing(["git status", "github"], after: "gi", machine: [.executable: ["git"]])
+        let kept = await standing(
+            ["git status", "github"], after: "gi",
+            machine: [.executable: ["git"], .subcommand(of: "git"): ["status"]])
         #expect(kept == ["git status"])
     }
 
@@ -522,7 +524,7 @@ struct GeneratedLineTests {
     func gitSubcommandsAreLookedUp() async {
         let kept = await standing(
             ["git checkout main", "git check"], after: "git chec",
-            machine: [.subcommand(of: "git"): ["checkout"]])
+            machine: [.subcommand(of: "git"): ["checkout"], .branch: ["main"]])
         #expect(kept == ["git checkout main"])
     }
 
@@ -534,9 +536,37 @@ struct GeneratedLineTests {
         #expect(kept.isEmpty)
     }
 
-    @Test("A machine that has not answered denies nothing, so the model's line stands.")
-    func silenceLetsTheLineStand() async {
-        #expect(await standing(["vim .env.vim"], after: "vim .env", machine: [:]) == ["vim .env.vim"])
+    @Test("A machine that has not answered vouches for nothing, so the model's line waits for the listing.")
+    func silenceHoldsTheLineBack() async {
+        #expect(await standing(["vim .env.vim"], after: "vim .env", machine: [:]).isEmpty)
+    }
+
+    @Test(
+        "A branch the model invented is held back while the branch listing is cold, and a real one stands once it answers."
+    )
+    func coldBranchListingVouchesForNothing() async {
+        let cold = await standing(["git checkout no-such-branch"], after: "git checkout ", machine: [:])
+        #expect(cold.isEmpty)
+        let warm: [EnvironmentKind: [String]] = [.branch: ["main"]]
+        #expect(
+            await standing(["git checkout no-such-branch"], after: "git checkout ", machine: warm).isEmpty)
+        #expect(
+            await standing(["git checkout main"], after: "git checkout ", machine: warm) == [
+                "git checkout main"
+            ])
+    }
+
+    @Test(
+        "An unanswered listing does not end the search early, so an answered one that denies the word decides."
+    )
+    func anUnansweredLookupDoesNotOutvoteAnAnsweredOne() async {
+        let machine: [EnvironmentKind: [String]] = [.entries(under: "docs"): ["guide.md"]]
+        #expect(
+            await standing(["git checkout docs/nowhere"], after: "git checkout d", machine: machine).isEmpty)
+        #expect(
+            await standing(["git checkout docs/guide.md"], after: "git checkout d", machine: machine) == [
+                "git checkout docs/guide.md"
+            ])
     }
 
     /// The listing names `guide.md`, and the candidate is the path that ends in it.

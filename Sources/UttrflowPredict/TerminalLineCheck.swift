@@ -97,6 +97,23 @@ public struct TerminalLineCheck: Sendable {
         }
     }
 
+    /// Whether the disk itself shows a looked-up name exists, for a listing that has not answered; a program's verbs and aliases are never read this way.
+    func confirms(_ lookup: Verification.Lookup, in scope: String?) -> Bool {
+        guard !lookup.word.isEmpty else { return false }
+        let directory = workingDirectory(scope)
+        let path = ShellWord(lookup.prefix + lookup.word)
+        return lookup.kinds.contains { kind in
+            switch kind {
+            case .entries: exists(path, as: .anything, from: directory)
+            case .directories: exists(path, as: .directory, from: directory)
+            case .branch:
+                directory.flatMap { GitRepository.holding($0, files: files) }?.hasBranch(lookup.word) ?? false
+            case .executable: isCommand(ShellWord(lookup.word), from: directory, aliases: [])
+            case .alias, .subcommand, .gitAlias: false
+            }
+        }
+    }
+
     /// Whether every word names a path of the required kind, `-` standing for the standard input.
     func allExist(
         _ words: some Collection<ShellWord>, as requirement: Requirement, from directory: String?
