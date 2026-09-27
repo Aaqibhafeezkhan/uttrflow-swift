@@ -51,8 +51,8 @@ struct MainWindowView: View {
 
     private var pane: some View {
         VStack(spacing: 0) {
-            // The band under the title bar, which the traffic lights and the window's drag own; Home draws its own.
-            if model.page != .home {
+            // The band under the title bar, which the traffic lights and the window's drag own; some pages draw their own.
+            if !drawsOwnHeader {
                 Color.clear.frame(height: MainMetrics.toolbarHeight)
                 OrbitPageHeader(
                     chrome: model.chrome, query: $model.searchQuery,
@@ -60,10 +60,10 @@ struct MainWindowView: View {
                     onSearch: onSearch, onScope: onScope)
             }
             page
-                // Home sets its own margins; every other page is a document and wants these.
-                .padding(.horizontal, model.page == .home ? 0 : MainMetrics.contentPadding)
-                .padding(.top, model.page == .home ? 0 : 18)
-                .padding(.bottom, model.page == .home ? 0 : 14)
+                // A page with its own header sets its own margins; every other page is a document and wants these.
+                .padding(.horizontal, drawsOwnHeader ? 0 : MainMetrics.contentPadding)
+                .padding(.top, drawsOwnHeader ? 0 : 18)
+                .padding(.bottom, drawsOwnHeader ? 0 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         // The notice floats in the corner over the page rather than pushing the page down.
@@ -83,6 +83,9 @@ struct MainWindowView: View {
         }
     }
 
+    /// Whether the page draws its own title, and so its own margins.
+    private var drawsOwnHeader: Bool { [.home, .insights].contains(model.page) }
+
     @ViewBuilder private var page: some View {
         switch model.page {
         case .home:
@@ -101,7 +104,8 @@ struct MainWindowView: View {
         case .corrections:
             CorrectionsPageView(presentation: model.content.corrections, onIntent: onIntent)
         case .insights:
-            InsightsPageView(presentation: model.content.insights, onIntent: onIntent)
+            InsightsPageView(
+                presentation: model.content.insights, onIntent: onIntent, onScope: onScope)
         case .snippets:
             SnippetsPageView(
                 presentation: model.content.snippets, draft: reporting($model.snippetDraft),

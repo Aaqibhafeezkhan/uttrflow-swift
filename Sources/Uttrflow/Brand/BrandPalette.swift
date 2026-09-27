@@ -243,6 +243,9 @@ enum BrandPalette {
             /// The aurora rising from the panel's top edge, drawn at this opacity in both appearances.
             static let auroraOpacity = 0.22
         }
+
+        /// The day number on a busy Insights calendar tile, deep teal on the bright teal in both appearances.
+        static let calendarDeepInk: UInt32 = 0x04_332F
     }
 }
 
