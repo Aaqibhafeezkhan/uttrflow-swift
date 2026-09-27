@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         info: Bundle.main.infoDictionary ?? [:], sdk: LiveCrashReportingSDK())
     /// Keeps the pipeline's stage timings for the session, which is what the diagnostics page reports on.
     private let diagnostics = DiagnosticsRecorder()
-    /// Anonymous counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
+    /// Counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
     private var telemetry: UsageTelemetry?
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
     private let secureInput = SecureInputWatch()
@@ -203,6 +203,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Puts a chosen clip where the caret is, announcing the write so it is not read as a copy.
     private lazy var clipInserter = TextInsertion.coordinator(
         pasteboard: announcingPasteboard)
+
+    /// The same for a secret clip, whose words reach the clipboard only with the concealed marker.
+    private lazy var secretInserter = TextInsertion.coordinator(
+        pasteboard: ConcealingPasteboard(announcingPasteboard))
 
     /// The panel's state while it is open, held here because a window has no memory.
     private var panel: PanelSnapshot?
@@ -956,6 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             monitor: ActivationMonitor(),
             cue: cue,
             activation: settings.hotkeyActivation,
+            handsFreeEnabled: settings.handsFreeEnabled,
             clock: ContinuousClock(),
             onAdvice: { [weak self] advice in
                 Task { @MainActor in self?.recordingAdviceChanged(to: advice) }
@@ -1316,9 +1321,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Closed first: insertion declines outright while Uttrflow is frontmost.
             closeQuickPanel()
             insert(text, used: used)
+        case .closeAndInsertConcealed(let text, let used):
+            closeQuickPanel()
+            insert(text, concealed: true, used: used)
         case .copyAndSay(let text, let notice, let used):
             // Stays open: the panel is the only surface left to say this on.
             putOnClipboard(text, used: used)
+            panel?.notice = notice
+            if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
+            closeAfterReading()
+        case .copyConcealedAndSay(let text, let notice, let used):
+            putOnClipboard(text, concealed: true, used: used)
             panel?.notice = notice
             if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
             closeAfterReading()
@@ -1336,6 +1349,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .closeAndCopy(let text, let richText, let used):
             // Onto the clipboard and no further: the user will paste it somewhere else.
             putOnClipboard(text, richText: richText, used: used)
+            closeQuickPanel()
+        case .closeAndCopyConcealed(let text, let used):
+            putOnClipboard(text, concealed: true, used: used)
             closeQuickPanel()
         case .closeAndCopyImage(let clip):
             closeQuickPanel()
@@ -1581,8 +1597,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Puts text where the caret is, through the coordinator whose last strategy cannot fail.
-    private func insert(_ text: String, richText: String? = nil, used: Clip.ID?) {
+    private func insert(_ text: String, richText: String? = nil, concealed: Bool = false, used: Clip.ID?) {
         markUsed(used)
+        let clipInserter = concealed ? secretInserter : clipInserter
         Task { [weak self, clipInserter] in
             do {
                 let attempt = try await clipInserter.insert(text, richText: richText)
@@ -1638,8 +1655,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Through the one pasteboard, so the write is announced and stays on this Mac. See `Docs/insertion.md`.
-    private func putOnClipboard(_ text: String, richText: String? = nil, used: Clip.ID?) {
+    private func putOnClipboard(
+        _ text: String, richText: String? = nil, concealed: Bool = false, used: Clip.ID?
+    ) {
         markUsed(used)
+        // A secret goes up marked, so no other clipboard history records it in plain text.
+        guard !concealed else { return announcingPasteboard.setConcealedText(text) }
         // E2, E3 — both flavours, so the receiving application takes the one it understands.
         announcingPasteboard.setText(text, richText: richText)
     }
@@ -1879,13 +1900,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             putOnClipboard(recent.text, used: nil)
         case .insertClip(let index):
             guard let clip = menuClips[safe: index] else { return }
-            if clip.image != nil { insertImage(clip) } else { insert(clip.text, used: clip.id) }
+            if clip.image != nil {
+                insertImage(clip)
+            } else {
+                insert(clip.text, concealed: clip.kind == .secret, used: clip.id)
+            }
         case .copyClip(let index):
             guard let clip = menuClips[safe: index] else { return }
             if clip.image != nil {
                 Task { [weak self] in _ = await self?.putImageOnClipboard(clip) }
             } else {
-                putOnClipboard(clip.text, richText: clip.richText, used: clip.id)
+                putOnClipboard(
+                    clip.text, richText: clip.richText, concealed: clip.kind == .secret, used: clip.id)
             }
         case .open(let destination):
             show(destination)
@@ -2016,13 +2042,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let kept = await history.records(
                 keeping: Retention(days: settings.transcriptRetentionDays, now: Date()))
             self.kept = kept
+            hasReadHistory = true
             knownRecordings = await recordings.waiting(now: Date())
             recents = RecentDictations(showing: kept)
             knownWords = await dictionary.allEntries()
             knownSnippets = await snippets.snippets()
             readAccount()
-            await refreshPicture()
             await refreshPermissions()
+            // The picture may need a round trip, so it follows the paint rather than holding it back.
+            defer { Task { [weak self] in await self?.refreshPictureThenRedraw() } }
             // A later refresh has newer state, and painting over it would leave the older reading up.
             guard reading == refreshGeneration else { return }
             // Read even out of sight, since the menu's Recent list comes from this reading too.
@@ -2054,7 +2082,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     systemName: NSFullUserName(),
                     shortcut: shortcut, settings: settings, now: now,
                     speechModel: speechModelLoad, speechDownload: speechReadiness.download,
-                    speechModelBytes: SpeechModel.default.downloadBytes)),
+                    speechModelBytes: SpeechModel.default.downloadBytes, hasReadHistory: hasReadHistory)),
             sidebar: SidebarPresenter.sidebar(
                 for: SidebarSnapshot(
                     // The page the window shows, which may be the Settings page on one of its tabs.
@@ -2175,6 +2203,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var mainWindowIsBehind = false
     /// Everything the store keeps, which is not ``recents`` — that is the menu's five.
     private var kept: [DictationRecord] = []
+    /// Whether ``kept`` has been read yet, so Home never shows its first-run page before it knows.
+    private var hasReadHistory = false
     /// Recordings whose words were lost, as of the last refresh.
     private var knownRecordings: [KeptRecording] = []
     /// The recording the pipeline is running again, so its row can say so.
@@ -2195,6 +2225,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The last answer each gate gave; absent means unchecked, which the pages draw as silence.
     private var knownPermissions: [PermissionKind: PermissionStatus] = [:]
+
+    /// Reads the account picture and redraws only when it changed.
+    private func refreshPictureThenRedraw() async {
+        let before = knownPicture?.path
+        await refreshPicture()
+        if knownPicture?.path != before { redrawMainWindow() }
+    }
 
     private func refreshPicture() async {
         guard let path = account.profiles.load()?.account.avatarPath else {
@@ -2457,6 +2494,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if updated.hotkeyActivation != previous.hotkeyActivation {
             let activation = updated.hotkeyActivation
             Task { [weak self] in await self?.controller?.setActivation(activation) }
+        }
+        if updated.handsFreeEnabled != previous.handsFreeEnabled {
+            let enabled = updated.handsFreeEnabled
+            Task { [weak self] in await self?.controller?.setHandsFreeEnabled(enabled) }
         }
         telemetry?.setEnabled(updated.sharesUsageStatistics)
         // As above: a switch that drew itself and changed nothing.

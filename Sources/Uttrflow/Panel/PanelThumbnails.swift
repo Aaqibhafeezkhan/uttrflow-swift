@@ -2,7 +2,7 @@
 
 import AppKit
 import Foundation
-import Observation
+import SwiftUI
 import UttrflowClipboard
 
 /// Where a picture clip's thumbnail comes from; injected so the cache is testable without photographs.
@@ -13,7 +13,6 @@ struct PanelThumbnailSource: Sendable {
 
 /// Thumbnails beside image clips, decoded once off the main thread and bounded in measured bytes. See Docs/clipboard-budget.md.
 @MainActor
-@Observable
 final class PanelThumbnails {
     static let shared = PanelThumbnails()
 
@@ -29,14 +28,14 @@ final class PanelThumbnails {
     /// The decoded (or absent) thumbnail for a file that has been asked for; absent entries means a decode is in flight.
     private(set) var known: [URL: NSImage?] = [:]
     /// What each answer is costing, so the total is kept without measuring the whole cache.
-    @ObservationIgnored private var cost: [URL: Int] = [:]
-    @ObservationIgnored private var held = 0
+    private var cost: [URL: Int] = [:]
+    private var held = 0
     /// Least recently asked for, first; a plain array, because the cache is small.
-    @ObservationIgnored private var order: [URL] = []
+    private var order: [URL] = []
     /// Decodes in flight; one per file, so a row drawn twice does not decode twice.
-    @ObservationIgnored private var inflight: [URL: Task<Void, Never>] = [:]
+    private var inflight: [URL: Task<Void, Never>] = [:]
     /// When each failed decode was recorded, so a file restored later is decoded again.
-    @ObservationIgnored private var missedAt: [URL: ContinuousClock.Instant] = [:]
+    private var missedAt: [URL: ContinuousClock.Instant] = [:]
     /// How long a failed decode is trusted before the file is read again.
     private let retryAfter: Duration
 
@@ -87,7 +86,19 @@ final class PanelThumbnails {
         }
     }
 
-    /// Awaits the decode that `prepare(_:)` started for `file`; used by tests, not by the panel.
+    /// What is already decoded for `file`, touching nothing, so a view can start from it without a flash.
+    func cached(_ file: URL) -> NSImage? {
+        known[file] ?? nil
+    }
+
+    /// The thumbnail for `file`, awaiting an off-main decode when it is not yet known.
+    func picture(for file: URL) async -> NSImage? {
+        if let remembered = thumbnail(for: file) { return remembered }
+        await waitForIdle(file: file)
+        return cached(file)
+    }
+
+    /// Awaits the decode that `prepare(_:)` started for `file`.
     func waitForIdle(file: URL) async {
         await inflight[file]?.value
     }
@@ -138,4 +149,33 @@ final class PanelThumbnails {
 /// A wrapper that carries an `NSImage` between actors without `Sendable` conformance.
 struct Loaded: @unchecked Sendable {
     let image: NSImage?
+}
+
+/// One picture clip's thumbnail, which alone redraws when its decode lands.
+struct PanelThumbnailView: View {
+    let file: URL
+    @State private var picture: NSImage?
+
+    /// Starts from what the cache already holds, so a row scrolled back into view draws at once.
+    init(file: URL) {
+        self.file = file
+        _picture = State(initialValue: PanelThumbnails.shared.cached(file))
+    }
+
+    var body: some View {
+        Group {
+            if let picture {
+                Image(nsImage: picture)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Color.panelCard
+            }
+        }
+        // Decoded off the main actor; a row reused for a different file starts over.
+        .task(id: file) {
+            picture = PanelThumbnails.shared.cached(file)
+            picture = await PanelThumbnails.shared.picture(for: file)
+        }
+    }
 }

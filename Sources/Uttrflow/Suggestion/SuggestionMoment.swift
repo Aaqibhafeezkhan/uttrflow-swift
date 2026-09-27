@@ -33,6 +33,11 @@ enum SuggestionMoment {
             canDraw: snapshot.placement == .inlineGhost, markedText: snapshot.markedText)
     }
 
+    /// Where in the field the line sits: the text before it, exactly as much as the model is shown.
+    static func place(of snapshot: FocusedFieldSnapshot) -> String? {
+        snapshot.preceding(maxLength: precedingContextLength)
+    }
+
     /// Which window a walk belongs to, from what the field read already says about it.
     static func windowKey(of snapshot: FocusedFieldSnapshot) -> String {
         "\(snapshot.bundleIdentifier)\u{1F}\(snapshot.document ?? "")"

@@ -64,24 +64,44 @@ struct HomeActivityCard: View {
     /// The rows beside a line that runs teal to blue to lilac down the gutter.
     private var rail: some View {
         VStack(spacing: 8) {
-            ForEach(presentation.activity) { HomeActivityRowView(row: $0, onIntent: onIntent) }
+            ForEach(Array(presentation.activity.enumerated()), id: \.element.id) { index, row in
+                HomeActivityRowView(
+                    row: row, dot: Self.railColor(at: index, of: presentation.activity.count),
+                    onIntent: onIntent)
+            }
         }
         .background(alignment: .leading) {
-            LinearGradient(
-                colors: [PagePalette.dictation, PagePalette.info, PagePalette.suggestion],
-                startPoint: .top, endPoint: .bottom
-            )
-            .frame(width: 2)
-            .padding(.vertical, 10)
-            .padding(.leading, HomeActivityRowView.lineOffset)
-            .accessibilityHidden(true)
+            LinearGradient(colors: Self.rail, startPoint: .top, endPoint: .bottom)
+                .frame(width: 2)
+                .padding(.vertical, 10)
+                .padding(.leading, HomeActivityRowView.lineOffset)
+                .accessibilityHidden(true)
         }
+    }
+}
+
+extension HomeActivityCard {
+    /// The rail's colours from top to bottom: teal, blue, lilac.
+    static var rail: [Color] { [PagePalette.dictation, PagePalette.info, PagePalette.suggestion] }
+
+    /// The rail's colour where the dot for row `index` of `count` sits, so each dot matches the line behind it.
+    static func railColor(at index: Int, of count: Int) -> Color {
+        rail[railStop(at: index, of: count)]
+    }
+
+    /// Which of the rail's three colours is nearest row `index` of `count`.
+    static func railStop(at index: Int, of count: Int) -> Int {
+        guard count > 1 else { return 0 }
+        let position = Double(min(max(index, 0), count - 1)) / Double(count - 1)
+        return Int((position * 2).rounded())
     }
 }
 
 /// One dictation: its time and dot in the gutter, then the app, the words, the details and the buttons.
 struct HomeActivityRowView: View {
     let row: HomeActivityRow
+    /// The dot's colour, taken from the rail at the row's place on it.
+    var dot: Color = PagePalette.dictation
     var onIntent: (MainIntent) -> Void
 
     /// The gutter the time and the dot sit in, and where the rail's line runs down it.
@@ -102,10 +122,10 @@ struct HomeActivityRowView: View {
                 .foregroundStyle(PagePalette.quiet)
                 .lineLimit(1)
             Circle()
-                .fill(tone)
+                .fill(dot)
                 .frame(width: 11, height: 11)
                 .background(Circle().fill(PagePalette.dotRing).padding(-3))
-                .shadow(color: tone.opacity(0.8), radius: 5)
+                .shadow(color: dot.opacity(0.8), radius: 5)
                 .padding(.leading, Self.lineOffset - 4.5)
                 .accessibilityHidden(true)
         }

@@ -18,10 +18,11 @@ public struct ModelPass: Sendable {
         case model
     }
 
-    /// The last answer that stood, with the field and line it was asked on.
-    public private(set) var lastGenerated: (surface: Surface, typed: String, completions: [String])?
-    /// The last line whose pass came back empty or failed.
-    public private(set) var lastEmpty: (surface: Surface, typed: String)?
+    /// The last answer that stood, with the field, the line and the text before the line it was asked on.
+    public private(set) var lastGenerated:
+        (surface: Surface, typed: String, place: String?, completions: [String])?
+    /// The last line whose pass came back empty or failed, and the text before it.
+    public private(set) var lastEmpty: (surface: Surface, typed: String, place: String?)?
 
     /// Nothing remembered.
     public init() {}
@@ -53,28 +54,46 @@ public struct ModelPass: Sendable {
         lastEmpty = nil
     }
 
-    /// What to do for this query: reuse an answer the line still begins, skip a line known empty, or ask.
-    public func plan(for query: SuggestionQuery) -> Plan {
+    /// Forgets the last answer unless this line types on from the one it was given for, in the same place.
+    public mutating func follow(_ query: SuggestionQuery, at place: String?) {
+        guard let last = lastGenerated, !Self.typesOn(query, at: place, from: last) else { return }
+        lastGenerated = nil
+    }
+
+    /// What to do for this query: reuse an answer the line types on from, skip a line known empty here, or ask.
+    public func plan(for query: SuggestionQuery, at place: String?) -> Plan {
         let lowered = query.typed.lowercased()
         let kept =
-            (lastGenerated?.surface == query.surface ? lastGenerated?.completions : nil)?
+            lastGenerated.flatMap { Self.typesOn(query, at: place, from: $0) ? $0.completions : nil }?
             .filter { $0.lowercased().hasPrefix(lowered) && $0 != query.typed } ?? []
         if !kept.isEmpty { return .reuse(kept) }
-        if let lastEmpty, lastEmpty.surface == query.surface, lastEmpty.typed == query.typed { return .skip }
+        if let lastEmpty, lastEmpty.surface == query.surface, lastEmpty.typed == query.typed,
+            lastEmpty.place == place
+        {
+            return .skip
+        }
         return .ask
     }
 
-    /// Remembers that this exact line came back empty or failed, so a tick does not repeat it.
-    public mutating func rememberEmpty(_ query: SuggestionQuery) {
-        lastEmpty = (query.surface, query.typed)
+    /// Whether the line is the answered one typed forward, in the same field and after the same text.
+    private static func typesOn(
+        _ query: SuggestionQuery, at place: String?,
+        from last: (surface: Surface, typed: String, place: String?, completions: [String])
+    ) -> Bool {
+        last.surface == query.surface && last.place == place && query.typed.hasPrefix(last.typed)
+    }
+
+    /// Remembers that this exact line came back empty or failed here, so a tick does not repeat it.
+    public mutating func rememberEmpty(_ query: SuggestionQuery, at place: String?) {
+        lastEmpty = (query.surface, query.typed, place)
     }
 
     /// Remembers what stood of an answer, or the line as empty when nothing did.
-    public mutating func remember(_ standing: [String], for query: SuggestionQuery) {
+    public mutating func remember(_ standing: [String], for query: SuggestionQuery, at place: String?) {
         if standing.isEmpty {
-            rememberEmpty(query)
+            rememberEmpty(query, at: place)
         } else {
-            lastGenerated = (query.surface, query.typed, standing)
+            lastGenerated = (query.surface, query.typed, place, standing)
         }
     }
 }

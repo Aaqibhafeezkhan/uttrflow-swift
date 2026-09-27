@@ -21,10 +21,30 @@ pipeline above knows there is more than one way to be recording.
   waits for its turn and returns once the click has been handled, so a caller that awaits it still
   sees the dictation it started or finished.
 - The cap (`Docs/stuck-recording.md`) is queued the same way. Its timer only submits "the cap
-  was reached", and the queue finishes the dictation, so a press cannot start the next dictation
-  while the capped one is still being inserted and learnt from. Each cap carries the generation
-  of the dictation it was started for, and a cap that arrives after another dictation has begun
-  neither finishes it nor stops that dictation's own cap.
+  was reached", and the queue closes the microphone, so the capped dictation ends like any other
+  and a press made while it is processed is decided as the section below says. Each cap carries
+  the generation of the dictation it was started for, and a cap that arrives after another
+  dictation has begun neither finishes it nor stops that dictation's own cap.
+
+## A press made while the last dictation is processed
+
+The queue holds a gesture only until the microphone has closed. Ending a dictation calls the
+pipeline's `stopListening()`, which drains the microphone, moves the state to `.transcribing`,
+and hands back a task for the rest — recognition, tidying, insertion, the paste confirmation,
+counting and learning. The queue moves on while that task runs.
+
+So a press made during those seconds is decided when it arrives, not replayed when they end: the
+pipeline is busy, `startRecording()` refuses it, no cue sounds, and the release that follows finds
+nothing listening and does nothing. The dock is showing the dictation still being processed, which
+is what tells the user why. The press is never held until the words land and then judged by the
+clock at that moment, which turned a long hold into a slip and lost the start of a held one.
+
+The pipeline stays busy until the words are on screen. Counting and learning run after that, and
+a press made then starts the next dictation, so those last steps read everything they need about
+their own dictation before their first await.
+
+`toggleFromControl()`, `setActivation(_:)` and `handle(_:)` still return only once the words have
+been inserted, without holding the queue while they wait.
 
 ## Rebinding the shortcut
 
@@ -80,7 +100,8 @@ honest response. The controller is generic over its clock so this rule tests exa
 instantly.
 
 A slip is cancelled only when it is neither half of a pair nor made while hands-free — see below,
-because the same 200 ms that decides a slip is what makes a tap countable.
+because the same 200 ms that decides a slip is what makes a tap countable. With hands-free
+switched off there is no pair, so every short tap is an ordinary slip.
 
 A binding made only of modifiers waits out the same 200 ms before a press opens anything, so
 another app's shortcut on those modifiers can arrive first and withdraw it. See
@@ -123,8 +144,14 @@ open the microphone as usual:
 - a click on a control: the menu bar's Stop Dictation, the panel's dictate button, Retry;
 - the cap, which finishes the recording and keeps its words (`Docs/stuck-recording.md`);
 - a change of activation mode;
+- switching Hands-free off in Settings, which finishes the recording and keeps its words;
 - the pipeline ending the recording on its own, such as a cancel: the next press notices the
   microphone is closed and forgets hands-free before acting.
+
+**It can be switched off.** Settings › General › Hands-free is `Settings.handsFreeEnabled`, on by
+default, and reaches the controller through `setHandsFreeEnabled(_:)`, queued like a change of
+mode. Off, `endHold()` never pairs two taps and `endTapThatNeverOpened()` does nothing, so a
+double tap is two slips and the microphone never stays open.
 
 **It exists in hold-to-talk only**, and that is not an omission. `endHold()` is reached from
 `(.holdToTalk, .released)` and nothing else — in press-to-toggle a release does nothing at all,

@@ -90,6 +90,13 @@ struct HTTPAuthenticationServiceTests {
         #expect(!challenge.authorisationURL.absoluteString.contains(verifier))
     }
 
+    @Test("is a real provider, so the page it returns is opened in the browser")
+    func isNotAStandIn() async throws {
+        let backend = service(transport: signingIn(), listener: answering())
+        #expect(!backend.signsInAsStandIn)
+        #expect(try await backend.beginSignIn(with: .google).method == .browser)
+    }
+
     /// Failing to bind falls back to the device code, a path `DeviceGrantTests` covers in full.
     @Test("does not fail when no port can be bound")
     func aPortThatCannotBeBound() async throws {

@@ -11,6 +11,9 @@ public enum SignInMethod: Sendable, Equatable {
     /// The person types a short code into a browser, here or on another machine.
     case code(userCode: String, verificationURL: URL)
 
+    /// Finishes on this Mac with no browser: a development build's stand-in account.
+    case standIn
+
     /// The code to show, when there is one.
     public var userCode: String? {
         guard case .code(let userCode, _) = self else { return nil }
@@ -68,4 +71,12 @@ public protocol AuthenticationService: Sendable {
 
     /// Forgets the credential locally, then tells the server; never throws, as signing out must work offline.
     func signOut() async
+
+    /// Whether sign-in mints a stand-in account on this Mac instead of asking a real provider.
+    var signsInAsStandIn: Bool { get }
+}
+
+extension AuthenticationService {
+    /// A real provider, unless a service says otherwise.
+    public var signsInAsStandIn: Bool { false }
 }

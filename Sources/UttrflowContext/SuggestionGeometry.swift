@@ -55,6 +55,11 @@ public enum SuggestionGeometry {
         return edge > start ? edge - start : nil
     }
 
+    /// Whether a ghost this wide is drawn whole in this much room, since a cut ghost would hide what Tab inserts.
+    public static func fits(_ width: CGFloat, in room: CGFloat) -> Bool {
+        width.isFinite && room.isFinite && width <= room
+    }
+
     /// Turns an Accessibility rectangle, whose `y` grows downwards, into AppKit's space.
     public static func fromAccessibility(_ rect: CGRect, primaryScreenMaxY: CGFloat) -> CGRect {
         CGRect(

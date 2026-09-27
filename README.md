@@ -412,15 +412,15 @@ exactly once; every launch after that works without one, and an entitlement that
 out still lets you dictate rather than locking you out. Signing out, or a session the
 server has ended, closes every window and stops dictation until you sign in again.
 
-**Anonymous usage statistics are sent, they can only carry numbers, and one switch turns
-them off.** Once an hour, and when the app quits, Uttrflow sends a report of counts and
+**Usage statistics are sent, linked to your account while you are signed in; they can only
+carry numbers, and one switch turns them off.** Once an hour, and when the app quits, Uttrflow sends a report of counts and
 timings: how many dictations started, were cancelled or failed, total recording and waiting
 time, how many characters were inserted, latency percentiles, language mix, which stage
 failed, and the app and macOS versions. It is not that we choose not to send your words: the
 type that gets encoded has no field capable of holding text at any depth, and a test walks
 it and fails on anything `String`-shaped. Audio, transcripts, dictionary contents, window
 titles and application names have nowhere to go. It is on by default; Settings → Privacy →
-"Share anonymous usage statistics" turns it off, which also drops anything not yet sent.
+"Share usage statistics" turns it off, which also drops anything not yet sent.
 [`Docs/account-telemetry.md`](Docs/account-telemetry.md) has the detail.
 
 **Crash reports are off unless you turn them on.** Settings → Privacy → *Send crash
