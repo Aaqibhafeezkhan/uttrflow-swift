@@ -102,7 +102,9 @@ EXCLUDED_FILES = {
     "Uttrflow/Onboarding/OnboardingAccountLayer.swift": "wiring only; pairs the backend with the store that believes its key",
     "Uttrflow/Onboarding/NetworkReachability+System.swift": "watches the real network path",
     "Uttrflow/Onboarding/OnboardingView.swift": "SwiftUI, drawn from a tested presentation",
-    "Uttrflow/Onboarding/OnboardingRail.swift": "SwiftUI; the step list it draws is tested in OnboardingStepTests",
+    "Uttrflow/Onboarding/OnboardingBackdrop.swift": "SwiftUI; the aurora, logo and waveform drawn behind a tested presentation",
+    "Uttrflow/Onboarding/OnboardingPieces.swift": "SwiftUI; the card's parts, drawn from a tested presentation",
+    "Uttrflow/Onboarding/OnboardingRail.swift": "SwiftUI; the Settings rail's ground, appearance only",
     "Uttrflow/Onboarding/OnboardingWindowController.swift": "owns an on-screen window and the real permission gates",
     "Uttrflow/Settings/SettingsWindowController.swift": "owns an on-screen window",
     "Uttrflow/Settings/SettingsViewModel.swift": "observable shell; every decision is in SettingsSession",
@@ -152,6 +154,8 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/MainEmptyStateScene.swift": "SwiftUI; which scene a page draws is decided and tested in MainEmptyScene",
     "Uttrflow/Main/MainDialogs.swift": "SwiftUI, drawn from a tested MainNotice and MainConfirmation",
     "Uttrflow/Main/HistoryPageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/HistoryRailRow.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/RecordingPlayback.swift": "plays a sound out of the speakers",
     "Uttrflow/Main/DiagnosticsPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Dock/DockPanelController.swift": "owns an on-screen floating window",
     "Uttrflow/Suggestion/SuggestionCoordinator.swift": (
@@ -223,9 +227,6 @@ OVERSIZED_EXCLUSIONS = {
         "and tap-insertion sequencing"
     ),
     "Uttrflow/Dock/DockView.swift": "what DockViewModel decides is tested in DockClockTests and DockBarsTests",
-    "Uttrflow/Onboarding/OnboardingView.swift": (
-        "OnboardingModel forwards every press to OnboardingFlow, which OnboardingFlowTests drives"
-    ),
     "Uttrflow/Main/MainPieces.swift": (
         "views, metrics and colour mappings; the one rule among them is RowReveal, tested in RowRevealTests"
     ),

@@ -1,23 +1,19 @@
 # Onboarding window: sizes and the provider marks
 
-## Window size
+## Window and card
 
-760 × 520. The sign-in page carries a glyph, a three-line subtitle, the provider stack, a note
-and the terms; at 620 × 470 that came to more than the window held once the two 34-point
-spacers were counted. One provider is offered today and `SignInProvider` names three; turning
-on a second adds 47 points to a window that clips rather than scrolls (fixed size, hosting view
-`sizingOptions = []`).
+860 × 560, drawn dark whatever the Mac is set to (`window.appearance = .darkAqua`). The
+aurora behind everything takes its colours from the page's `OnboardingMood`; it turns once
+every forty seconds and holds still under Reduce Motion, Low Power Mode or thermal pressure
+(`MotionBudget.demonstrationMoves`). The problem moods (warning, failure, offline) are drawn
+dimmer, so bad news is never the brightest thing on screen. No animation pulses: the
+waveform, the sign-in arc and the typing field move, and all of them are gated by the same
+budget.
 
-The column is 400 points wide so the body runs to three lines rather than two very wide ones.
-
-## Colours
-
-`onboardingAccentInk` has two values because this window follows the system appearance:
-`dockAccentLight` is unreadable on a white page and `dockAccent` is dull on a near-black one.
-The dark half is the panel's foreground teal (`#5FE0D3`); the light half (`#0E6B64`) is
-deepened until it clears 4.5:1 on `#F3F2F7`. The fineprint is `mainMuted`, not the dimmest
-grey, because it is the one line a person is agreeing to; at 2.9:1 it read as not saying
-something while appearing to.
+The logo top-left is `UttrflowMarkView` on a dark tile beside the wordmark in Outfit; there
+is no second logo asset. The card is 390 points wide, 40 from the right edge: a picture on
+top, then the heading, round buttons, a hint and one dot per step. Every colour is in
+`BrandPalette.Onboarding`.
 
 ## The Google mark
 
@@ -32,5 +28,12 @@ somebody would later be tempted to tint; redrawing it as a vector is the one thi
 not permit.
 
 `image(forResource:)` returning `nil` is a supported state. A checkout that has not run the
-script draws the wording alone, which is what the GitHub button does in every build: its mark
-is not fetched either, and a stand-in symbol would be somebody else's logo by implication.
+script draws a plain person symbol in the round button with the provider's name under it,
+which is also what the GitHub button would draw: its mark is not fetched either.
+
+## Providers
+
+Only the providers in `SignInProvider.offered` are drawn. The backend knows how to speak to
+Google and GitHub, but a deployment offers only those it has credentials for, and the
+production backend offers Google alone today, so the sign-in page draws one round button.
+Adding `.gitHub` to `offered` once the backend has GitHub credentials puts it beside Google.

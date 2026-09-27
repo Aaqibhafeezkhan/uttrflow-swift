@@ -53,8 +53,6 @@ enum BrandPalette {
         static let railTop: UInt32 = 0x0E_4F49
         static let railMiddle: UInt32 = 0x09_3B37
         static let railBottom: UInt32 = 0x06_2725
-        /// The tick cut out of the rail's ground.
-        static let railTick: UInt32 = 0x06_3A35
     }
 
     /// The brand purple: the secondary gradient and its light tone.
@@ -78,8 +76,6 @@ enum BrandPalette {
         static let well: UInt32 = 0x12_141C
         /// A control on a card.
         static let control = BrandTone(dark: raised, light: 0xF1_F0F5)
-        /// A control on the onboarding page.
-        static let onboardingControl = BrandTone(dark: raised, light: 0xFF_FFFF)
         /// The rail beside the page, a step darker than it.
         static let rail = BrandTone(dark: 0x08_090C, light: 0xEA_E9F0)
         /// The base of a hover or selection wash, applied with an alpha.
@@ -270,6 +266,43 @@ enum BrandPalette {
 
         /// The day number on a busy Insights calendar tile, deep teal on the bright teal in both appearances.
         static let calendarDeepInk: UInt32 = 0x04_332F
+    }
+
+    /// The onboarding window's tokens; it is drawn dark in every appearance. See `Docs/app-onboarding.md`.
+    enum Onboarding {
+        /// The window behind the aurora.
+        static let windowGround: UInt32 = 0x08_070F
+        /// The aurora's stops for each mood, first to last; the gradient closes on its first stop.
+        static let brandAurora = Redesign.auroraStops
+        static let liveAurora: [UInt32] = [0x14_B3A6, 0x2F_E0CF, 0x1F_8FB0, 0x8F_F5EC]
+        static let waitingAurora: [UInt32] = [0x4B_3FC0, 0x8A_4FE0, 0x2A_6FA0]
+        static let warningAurora: [UInt32] = [0x61_399F, 0x8A_3E6B, 0xC2_5E00, 0x3E_368A]
+        static let failureAurora: [UInt32] = [0x3E_368A, 0x7A_2436, 0xB0_161A, 0x2A_1B3D]
+        static let offlineAurora: [UInt32] = [0x2A_2D36, 0x3A_3F4A, 0x1E_2128]
+        static let doneAurora: [UInt32] = [0x2F_E0CF, 0x8F_F5EC, 0x1F_8FB0, 0x7A_3FD1]
+        /// The card's glass tint over the blurred aurora.
+        static let glass: UInt32 = 0x10_0D1E
+        /// The pale teal a heading's gradient ends in, and the pointer's ink.
+        static let glow: UInt32 = 0xAF_F3EC
+        /// The logo's wordmark and mark.
+        static let logoInk: UInt32 = 0xF2_F1EC
+        /// The logo tile, top to bottom.
+        static let tileTop: UInt32 = 0x1D_2024
+        static let tileBottom: UInt32 = 0x10_1215
+        /// Ink on a white round button.
+        static let buttonInk: UInt32 = 0x0B_0C10
+        /// The card's text field: its ink, its placeholder and its caret.
+        static let fieldInk: UInt32 = 0x10_1316
+        static let fieldPlaceholder: UInt32 = 0x9A_A09E
+        static let caret = Teal.deep
+        /// A badge's dark disc, and the amber-tinted one for something switched off.
+        static let badgeGround: UInt32 = 0x14_1224
+        static let cautionBadgeGround: UInt32 = 0x28_1405
+        /// The failure badge's disc, lit end to deep end, and the stopped ring.
+        static let failureLit: UInt32 = 0xFF_8A8C
+        static let failureDeep: UInt32 = 0xE0_262B
+        /// The failure badge's shadow.
+        static let failureShadow: UInt32 = 0xFF_383C
     }
 }
 
