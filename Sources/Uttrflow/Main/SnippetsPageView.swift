@@ -15,13 +15,15 @@ struct SnippetsPageView: View {
 
     var body: some View {
         if let empty = presentation.emptyState, presentation.editor == nil {
+            // The example sits below the scene, not over it, so the scene gives up room before the card is cut.
             VStack(spacing: 0) {
                 MainEmptyStateView(state: empty, onIntent: onIntent)
-                    .overlay(alignment: .bottom) {
-                        if let example = presentation.example {
-                            SnippetExampleCard(example: example).padding(.bottom, 8)
-                        }
-                    }
+                if let example = presentation.example {
+                    SnippetExampleCard(example: example)
+                        .padding(.top, 12)
+                        .padding(.bottom, 12)
+                        .layoutPriority(1)
+                }
             }
         } else {
             ScrollView {
