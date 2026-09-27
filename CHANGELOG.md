@@ -41,10 +41,11 @@ copy of 2026.9.14 is offered this release like any other.
   download it or try again when it is missing or did not load (#1968).
 - **An estimated time left while the speech model loads**, in place of an open-ended "Getting
   ready…" (#1982).
-- **Uttrflow now shares anonymous usage statistics, and this is on by default**, also for copies
-  updated from an earlier release. It sends counts and timings, such as how many dictations ran and
-  how long they took, with your dictation language and the app and macOS versions, never your words
-  or audio. Turn it off in Settings › Privacy › "Share anonymous usage statistics" (#1810).
+- **Uttrflow now shares usage statistics linked to your account, and this is on by default**, also
+  for copies updated from an earlier release. It sends counts and timings, such as how many
+  dictations ran and how long they took, with your dictation language and the app and macOS
+  versions, never your words or audio. Turn it off in Settings › Privacy › "Share anonymous usage
+  statistics" (#1810).
 
 ### Changed
 - **A new install dictates with ⌃⌥ held.** Hold Control and Option, talk, and let go. Installs
