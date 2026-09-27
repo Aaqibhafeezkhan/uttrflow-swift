@@ -794,9 +794,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             await (dictionary.allEntries(), Date())
         }
 
-        // One cue for both ends, so a stop sounds only after a start the user could have heard.
+        // One cue for both ends, shaped when it can be and the plain system sound when it cannot.
         let sounds = RecordingSounds(
-            player: SystemSoundPlayer(), enabled: settings.playsSoundWhenRecordingStarts)
+            player: FallbackSoundPlayer([ShapedSoundPlayer(), SystemSoundPlayer()]),
+            enabled: settings.playsSoundWhenRecordingStarts)
         recordingSounds = sounds
         let cue = sounds.cue
 
