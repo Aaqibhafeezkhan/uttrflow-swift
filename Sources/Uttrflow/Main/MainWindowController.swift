@@ -117,6 +117,8 @@ final class MainWindowController {
     var snippetDraft: SnippetDraft { model.snippetDraft }
     /// The same, for the word editor.
     var wordDraft: DictionaryDraft { model.wordDraft }
+    /// What the pages show now, so one page can be re-presented without rebuilding the others.
+    var content: MainContent { model.content }
 
     /// Where the sidebar's width is remembered; not a setting, so `UserDefaults` and not the settings store.
     private static let sidebarExpandedKey = "com.uttrflow.window.sidebarExpanded"
