@@ -629,16 +629,21 @@ public actor DictationPipeline {
         let expanded = await expand(written)
         guard !wasCancelled(mine) else { return }
 
+        // The boundary that decides what is written: a leading or trailing space when the field's
+        // surrounding text would otherwise glue the dictated words onto it. See #1908.
+        let insertionPoint = appContext?.insertionPoint ?? .unknown
+        let toWrite = insertionPoint.paddedBoundary(for: expanded.text)
+
         let changes = AppliedChanges(
             corrections: DictationCorrection.locating(
-                whole.corrected.corrections, from: whole.corrected.text, in: expanded.text),
+                whole.corrected.corrections, from: whole.corrected.text, in: toWrite),
             snippets: expanded.snippets,
             entriesTaken: whole.cleaned.entriesTaken,
             // The unrewritten sentence, which is the space the corrections' word ranges index.
             spokenWords: whole.heard.text.spokenWords.count)
         guard
             let arrival = await insert(
-                expanded.text, cleanedBy: whole.cleaned.producedBy, changes: changes,
+                toWrite, cleanedBy: whole.cleaned.producedBy, changes: changes,
                 delivery: delivery, generation: mine)
         else { return }
 
@@ -648,7 +653,7 @@ public actor DictationPipeline {
         await count(changes)
         // A secret is not a word to learn.
         guard !destinationIsSecure else { return }
-        await learnWords(heard: whole.heard.text, wrote: expanded.text, seeing: appContext ?? AppContext())
+        await learnWords(heard: whole.heard.text, wrote: toWrite, seeing: appContext ?? AppContext())
     }
 
     /// The screen to tidy against, which for a retry is Uttrflow's own window and says nothing.
