@@ -205,6 +205,20 @@ struct InsightsWaitingTests {
         #expect(empty?.message.contains("Uttrflow has 2.") == true)
     }
 
+    @Test("a whole week ahead is next week's day, not today's name")
+    func aWeekAheadSaysNext() {
+        let now = HistoryFixture.now
+        let calendar = HistoryFixture.calendar
+        let locale = HistoryFixture.locale
+        let today = now.formatted(.dateTime.weekday(.wide).locale(locale))
+        #expect(
+            InsightsPresenter.remaining(spoken: 0, now: now, calendar: calendar, locale: locale)
+                == "Charts appear next \(today)")
+        #expect(
+            InsightsPresenter.remaining(spoken: 1, now: now, calendar: calendar, locale: locale)
+                .hasPrefix("Charts appear on "))
+    }
+
     /// The two numbers that are already true are given rather than withheld.
     @Test("the figures that are honest on day two are given")
     func chips() {
