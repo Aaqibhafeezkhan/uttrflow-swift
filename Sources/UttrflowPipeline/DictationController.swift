@@ -233,6 +233,11 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
                 pressOpenedTheMicrophone = false
                 return
             }
+            // A click already opened the microphone, so this press does not own the recording.
+            if await pipeline.currentState.isListening {
+                pressOpenedTheMicrophone = false
+                return
+            }
             await beginListening()
             pressOpenedTheMicrophone = await pipeline.currentState.isListening
         case .pressToToggle:
@@ -401,6 +406,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         let now = clock.now
         let wasTap = pressed.map { $0.duration(to: now) < Self.minimumHold } ?? false
         if wasTap, let last = lastTapEndedAt, last.duration(to: now) < Self.doubleTapWindow {
+            // A press that did not open the microphone and was not part of a hands-free toggle cannot change the gesture a click-started dictation is waiting for.
+            guard pressOpenedTheMicrophone || isHandsFree else { return }
             lastTapEndedAt = nil
             if isHandsFree { await stopHandsFree() } else { setHandsFree(true) }
             return
@@ -409,6 +416,12 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
             lastTapEndedAt = now
             // A single tap while hands-free changes nothing; it may yet be half of the pair that ends it.
             guard !isHandsFree else { return }
+            // A slip on a click-started dictation finishes it cleanly, the way a release would, rather than discarding the words.
+            guard pressOpenedTheMicrophone else {
+                stopWatchingTheLimit()
+                await pipeline.finishRecording()
+                return
+            }
             stopWatchingTheLimit()
             await pipeline.cancel()
             return
