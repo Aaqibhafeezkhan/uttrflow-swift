@@ -97,20 +97,89 @@ public enum DestructiveCommand {
         return .none
     }
 
-    /// The first kubectl argument that is neither a global flag nor the value a flag takes.
-    private static func kubectlVerb(_ lowered: [String]) -> String? {
-        let valued: Set = [
-            "-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user", "-s", "--server",
-            "--token", "--as", "--as-group", "--as-uid", "--request-timeout", "-v", "--v", "--cache-dir",
-            "--certificate-authority", "--client-certificate", "--client-key", "--tls-server-name",
-            "--password", "--username", "--profile", "--profile-output", "--log-file", "--vmodule",
-        ]
+    /// A tool whose verbs follow its option flags: the flags that take a value, and which verbs delete for good.
+    private struct VerbTool: Sendable {
+        let valued: Set<String>
+        /// Whether the tool's positional words, then all its arguments, both lowercased, name an irreversible deletion.
+        let destroys: @Sendable (_ positionals: [String], _ arguments: [String]) -> Bool
+    }
+
+    /// Cluster, cloud and hosting tools, each judged by the verbs its option flags leave.
+    private static let verbTools: [String: VerbTool] = [
+        "kubectl": VerbTool(
+            valued: [
+                "-n", "--namespace", "--context", "--kubeconfig", "--cluster", "--user", "-s", "--server",
+                "--token", "--as", "--as-group", "--as-uid", "--request-timeout", "-v", "--v", "--cache-dir",
+                "--certificate-authority", "--client-certificate", "--client-key", "--tls-server-name",
+                "--password", "--username", "--profile", "--profile-output", "--log-file", "--vmodule",
+            ],
+            destroys: { positionals, _ in positionals.first == "delete" }),
+        "gh": VerbTool(
+            valued: [
+                "-r", "--repo", "--hostname", "-x", "--method", "-f", "--field", "--raw-field", "-h", "--header",
+                "-q", "--jq", "-t", "--template", "--input", "-p", "--preview", "--cache",
+            ],
+            destroys: { positionals, arguments in
+                positionals.dropFirst().first?.hasPrefix("delete") == true
+                    || (positionals.first == "api" && requestsDelete(arguments))
+            }),
+        "aws": VerbTool(
+            valued: [
+                "--profile", "--region", "--output", "--endpoint-url", "--query", "--cli-read-timeout",
+                "--cli-connect-timeout", "--ca-bundle", "--color", "--cli-binary-format", "--exclude", "--include",
+            ],
+            destroys: { positionals, arguments in
+                guard let service = positionals.first, let operation = positionals.dropFirst().first else {
+                    return false
+                }
+                if service == "s3" {
+                    return operation == "rm" || operation == "rb" || (operation == "sync" && arguments.contains("--delete"))
+                }
+                return operation.hasPrefix("delete-") || operation.hasPrefix("terminate-")
+            }),
+        "gcloud": VerbTool(
+            valued: [
+                "--project", "--account", "--configuration", "--format", "--verbosity", "--zone", "--region",
+                "--impersonate-service-account", "--billing-project", "--filter", "--flatten",
+            ],
+            destroys: { positionals, _ in positionals.contains("delete") }),
+        "az": VerbTool(
+            valued: [
+                "--subscription", "-g", "--resource-group", "-n", "--name", "-o", "--output", "--query", "-l",
+                "--location",
+            ],
+            destroys: { positionals, _ in positionals.contains("delete") }),
+        "gsutil": VerbTool(
+            valued: ["-o", "-h", "-u"],
+            destroys: { positionals, arguments in
+                positionals.first == "rm" || positionals.first == "rb"
+                    || (positionals.first == "rsync" && arguments.contains("-d"))
+            }),
+    ]
+
+    /// The words a tool's option flags leave, each flag's value skipped and everything after `--` kept.
+    private static func positionals(_ lowered: [String], valued: Set<String>) -> [String] {
+        var found: [String] = []
         var rest = lowered[...]
         while let word = rest.popFirst() {
-            guard word.hasPrefix("-") else { return word }
+            if word == "--" {
+                found += rest
+                break
+            }
+            guard word.count > 1, word.hasPrefix("-") else {
+                found.append(word)
+                continue
+            }
             if valued.contains(word), !rest.isEmpty { rest.removeFirst() }
         }
-        return nil
+        return found
+    }
+
+    /// Whether an HTTP request's lowercased flags ask for the DELETE method.
+    private static func requestsDelete(_ arguments: [String]) -> Bool {
+        zip(arguments, arguments.dropFirst()).contains { flag, value in
+            (flag == "-x" || flag == "--method") && value == "delete"
+        } || arguments.contains { $0 == "-xdelete" || $0 == "--method=delete" }
     }
 
     /// A parsed command word as the program it names, lowercased.
@@ -125,6 +194,9 @@ public enum DestructiveCommand {
         guard case .named(let command, let arguments) = parsed else { return false }
         let lowered = arguments.map { $0.lowercased() }
         if destroyers.contains(command) || command.hasPrefix("mkfs.") { return true }
+        if let tool = verbTools[command], tool.destroys(positionals(lowered, valued: tool.valued), lowered) {
+            return true
+        }
         switch command {
         case "git":
             if matchesDestructiveGit(arguments) { return true }
@@ -146,8 +218,6 @@ public enum DestructiveCommand {
             if lowered.contains("prune") || (lowered.first == "volume" && lowered.dropFirst().first == "rm") {
                 return true
             }
-        case "kubectl":
-            if kubectlVerb(lowered) == "delete" { return true }
         case "terraform", "tofu":
             if lowered.contains("destroy") || lowered.contains("-destroy") { return true }
         case "crontab":

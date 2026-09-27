@@ -307,4 +307,36 @@ struct DestructiveCommandTests {
     func pruningFetchIsOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A cloud or hosting tool deleting a repository, a release, a bucket or a resource is destructive.",
+        arguments: [
+            "gh repo delete example/demo --yes", "gh release delete v1.0", "gh release delete-asset v1.0 app.zip",
+            "gh -R example/demo release delete v1.0", "gh secret delete TOKEN", "gh api -X DELETE repos/o/r",
+            "gh api --method DELETE repos/o/r", "sudo gh repo delete example/demo",
+            "aws s3 rm s3://example-bucket --recursive", "aws s3 rm s3://example-bucket/key.txt",
+            "aws s3 rb s3://example-bucket --force", "aws --profile prod s3 rm s3://example-bucket --recursive",
+            "aws --region eu-west-1 s3 rb s3://example-bucket", "aws s3 sync . s3://example-bucket --delete",
+            "aws s3api delete-bucket --bucket example-bucket", "aws ec2 terminate-instances --instance-ids i-1",
+            "aws rds delete-db-instance --db-instance-identifier db", "timeout 60 aws s3 rm s3://b --recursive",
+            "gcloud compute instances delete vm-1", "gcloud --project demo sql instances delete db",
+            "az group delete --name demo", "az -o json vm delete -g demo -n vm1", "gsutil rm gs://example/x",
+            "gsutil -m rm -r gs://example", "gsutil rb gs://example", "gsutil rsync -d src gs://example",
+        ])
+    func cloudDeletionsAreDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A cloud or hosting tool that only reads or creates is ordinary.",
+        arguments: [
+            "gh repo view example/demo", "gh release list", "gh pr create --title delete", "gh api repos/o/r",
+            "aws s3 ls", "aws s3 ls s3://example-bucket/rm", "aws s3 cp a.txt s3://example-bucket",
+            "aws s3 sync . s3://example-bucket", "aws --region delete-me s3 ls", "aws ec2 describe-instances",
+            "gcloud compute instances list", "az group list", "gsutil ls gs://example",
+        ])
+    func cloudReadsAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
