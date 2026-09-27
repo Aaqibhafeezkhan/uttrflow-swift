@@ -122,7 +122,7 @@ struct SuggestionPresentationTests {
         let presentation = SuggestionPresentation(.certain("Sydney"))
         #expect(SuggestionPresentation.listPrefix == "↳")
         #expect(presentation.acceptGlyph == "⇥")
-        #expect(presentation.footer == "⇥ take   ↓ next   ⎋ dismiss")
+        #expect(presentation.footer == "⇥ take   ⌥↓ next   ⎋ dismiss")
         #expect(SuggestionPresentation.dimmedShare > 0 && SuggestionPresentation.dimmedShare < 1)
     }
 
@@ -141,7 +141,7 @@ struct SuggestionPresentationTests {
     func theHintFollowsTheAcceptKey() {
         let terminal = SuggestionPresentation(.certain("ls -l"), typed: "ls ", acceptKey: .rightArrow)
         #expect(terminal.acceptGlyph == "→")
-        #expect(terminal.footer == "→ take   ↓ next   ⎋ dismiss")
+        #expect(terminal.footer == "→ take   ⌥↓ next   ⎋ dismiss")
         #expect(terminal.accessibilityLabel == "AI suggestion: ls -l. Right Arrow to accept.")
         let editor = SuggestionPresentation(.certain("Sydney"), acceptKey: .optionTab)
         #expect(editor.acceptGlyph == "⌥⇥")

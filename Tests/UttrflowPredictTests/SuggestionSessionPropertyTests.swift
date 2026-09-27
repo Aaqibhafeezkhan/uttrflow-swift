@@ -28,7 +28,8 @@ private func stored(for typed: String) -> [Candidate] {
 /// Every keystroke the tap might hand the session.
 private let strokes = [
     KeyStroke(.tab), KeyStroke(.tab, modifiers: .option), KeyStroke(.return), KeyStroke(.escape),
-    KeyStroke(.escape, modifiers: .option), KeyStroke(.downArrow), KeyStroke(.upArrow),
+    KeyStroke(.escape, modifiers: .option), KeyStroke(.downArrow, modifiers: .option),
+    KeyStroke(.upArrow, modifiers: .option), KeyStroke(.downArrow), KeyStroke(.upArrow),
     KeyStroke(.rightArrow),
     KeyStroke(.other), KeyStroke(.downArrow, modifiers: .command),
 ]
@@ -339,17 +340,18 @@ private struct Script {
         case .certain(let text):
             #expect(armed.contains(accept) && armed.contains(.optionEscape))
             #expect(armed.contains(.escape) == escapes)
-            #expect(!armed.contains(.downArrow) && !armed.contains(.return) && !armed.contains(.upArrow))
+            #expect(!armed.contains(.optionDownArrow) && !armed.contains(.return))
+            #expect(!armed.contains(.optionUpArrow))
             #expect(extends(text))
         case .choice(let leader, let others):
             #expect(!isQuiet)
             #expect(!others.isEmpty && others.count < SuggestionSession.verifiedDepth)
             let lowered = others.map { $0.lowercased() }
             #expect(!lowered.contains(leader.lowercased()) && Set(lowered).count == others.count)
-            #expect(armed.contains(accept) && armed.contains(.downArrow))
+            #expect(armed.contains(accept) && armed.contains(.optionDownArrow))
             #expect(armed.contains(.escape) == escapes)
             #expect(armed.contains(.return) == session.selection.hasMoved)
-            #expect(armed.contains(.upArrow) == session.selection.hasMoved)
+            #expect(armed.contains(.optionUpArrow) == session.selection.hasMoved)
             #expect(extends(leader) && others.allSatisfy(extends))
         }
     }

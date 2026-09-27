@@ -450,7 +450,7 @@ SCENARIOS=(
   "edit-prose-pause-plain|edit-plain|t:15:Deploy the re; ex:QUIET typedChars=([7-9]|1[0-3]) .*writingFluently:2; eg:3; shot:ghost-plain"
   "edit-tab-accepts|edit|t:15:Deploy the re; eg:3; k:48; p:800; ex:ACCEPT chars=[0-9]+ typedChars=13 via=:2; rb:value:^Deploy the re[a-z].{3,}"
   "edit-mixed-rhythm|edit|t:200:Deploy; t:12: the re; eg:3"
-  "edit-down-opens-list-escape-collapses|edit|t:15:I hope this message; el:6; ex:ALTERNATIVES typedChars=19 got=[1-9]:8; k:125; ex:SWALLOWED key=downArrow .*decision=redraw:3; shot:list; k:53; ex:SWALLOWED key=escape .*decision=redraw:2"
+  "edit-down-opens-list-escape-collapses|edit|t:15:I hope this message; el:6; ex:ALTERNATIVES typedChars=19 got=[1-9]:8; k:125:opt; ex:SWALLOWED key=downArrow .*decision=redraw:3; shot:list; k:53; ex:SWALLOWED key=escape .*decision=redraw:2"
   "edit-trademark-line|edit|t:15:The Acme™ product ships; ex:GENERATE .*typedChars=23 got=:6"
   "edit-lrm-prefixed-word|edit|t:15:${LRM}Deploy the re; el:4"
   "edit-emoji-line|edit|t:15:Let us ship 🚀 today and; ex:GENERATE .*typedChars=(1[3-9]|2[0-3]) got=:6"

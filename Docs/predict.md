@@ -340,7 +340,7 @@ When the corpus and the machine both have nothing for the line and the generator
 - **One line first.** The pass asks for the single most likely completion and stops at its
   newline; `resolveGenerated` draws it as `.certain`. The alternatives are fetched in a
   second pass once that line is on screen and `expandGenerated` turns it into a `.choice`,
-  so ↓ still opens a list and nobody waited for it. Quiet mode never expands.
+  so ⌥↓ still opens a list and nobody waited for it. Quiet mode never expands.
 - **Drawn against the field as it is now.** A late answer is drawn only after a fresh read
   finds the same field and the same line (`drawFresh`), so a scrolled caret is followed and
   a changed line is not written over.

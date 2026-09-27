@@ -324,7 +324,7 @@ final class TapState: @unchecked Sendable {
         guard armed.load(ordering: .relaxed) & slot.rawValue != 0 else { return false }
         guard enqueue(slot.rawValue) else { return false }
         // Claims Return only for a captured arrow, so a rejected arrow never blocks a Return the app should see.
-        if slot == .downArrow || slot == .upArrow {
+        if slot == .optionDownArrow || slot == .optionUpArrow {
             armed.bitwiseOr(ArmedKeys.return.rawValue, ordering: .relaxed)
         }
         return true
