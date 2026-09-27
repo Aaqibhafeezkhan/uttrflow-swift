@@ -85,8 +85,6 @@ final class SuggestionCoordinator {
     private var lastReading: FieldReading?
     /// The line capture was last handed as a keystroke, and the field it was in, so a Return can catch up what it displaced.
     private var handed: (line: String, reading: FieldReading)?
-    /// The last field read, so the highlight can move without reading anything again.
-    private var lastSnapshot: FocusedFieldSnapshot?
     /// The line the accept key takes as last armed by a draw, so a later answer never inherits that claim.
     private var armedOffer: String?
     private var lastKeystroke = Date.distantPast
@@ -224,7 +222,8 @@ final class SuggestionCoordinator {
         let keys = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             // A key this app inserted must not wake another turn, or the feature types on its own.
             if let cgEvent = event.cgEvent, SyntheticEvent.isOurs(cgEvent) { return }
-            MainActor.assumeIsolated { self?.keyPressed(Key(keyCode: event.keyCode)) }
+            let text = Self.typedText(characters: event.characters, modifiers: event.modifierFlags)
+            MainActor.assumeIsolated { self?.keyPressed(Key(keyCode: event.keyCode), typing: text) }
         }
         if let keys { monitors.append(keys) }
         // A click moves the caret or the focus without a key, so it wakes a turn the way a pause does.
@@ -312,15 +311,41 @@ final class SuggestionCoordinator {
         wake(.tick)
     }
 
+    /// The text a key puts on the line, or nothing for a shortcut, an arrow or any other key that types no text.
+    nonisolated static func typedText(characters: String?, modifiers: NSEvent.ModifierFlags) -> String? {
+        guard let characters, !characters.isEmpty,
+            modifiers.intersection([.command, .control, .option, .function]).isEmpty,
+            characters.unicodeScalars.allSatisfy({
+                !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value)
+            })
+        else { return nil }
+        return characters
+    }
+
     /// One key pressed in another application, which is the only thing that moves the caret for us.
-    private func keyPressed(_ key: Key) {
+    private func keyPressed(_ key: Key, typing text: String? = nil) {
         noteActivity()
         lastKeystroke = Date()
+        if let text, typedThrough(text) { return }
         // Counted in the session, so a Tab pressed before the next read cannot take an offer for the old line.
         session.keystrokeArrived()
         // The line just changed, so the ghost at the old caret, a pass about the old prefix and a booked wake are all stale.
         withdraw()
         wake(key == .return ? .returnPressed : .keystroke)
+    }
+
+    /// Keeps the ghost up when the key typed its next letters, answering false for any other key, which withdraws it.
+    private func typedThrough(_ text: String) -> Bool {
+        guard panel.isShowing, !isInserting, let update = session.typedThrough(text) else { return false }
+        // Whatever was being worked out was for the shorter line, and the turn woken below reads the new one.
+        generating?.cancel()
+        pendingWake?.cancel()
+        running?.cancel()
+        interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
+        guard panel.advance(to: session.typed, showing: update.suggestion) else { return false }
+        wake(.keystroke)
+        return true
     }
 
     /// Another application came to the front, so whatever was being worked out for the last field is stale now.
@@ -433,7 +458,6 @@ final class SuggestionCoordinator {
         }
         guard turns.isCurrent(number) else { return }
         lastReading = reading
-        lastSnapshot = snapshot
 
         let turn = session.turn(
             in: reading.surface, at: context(of: snapshot, at: started),
@@ -536,7 +560,6 @@ final class SuggestionCoordinator {
                 sameReading: reading(of: fresh) == reading(of: snapshot),
                 sameLine: fresh.currentLine == snapshot.currentLine)
         else { return }
-        lastSnapshot = fresh
         draw(update, in: fresh)
     }
 
@@ -783,7 +806,6 @@ final class SuggestionCoordinator {
         armedOffer = update.suggestion.accepting
         panel.hide()
         lastReading = nil
-        lastSnapshot = nil
     }
 
     /// Arms the tap first and draws second, so no key is claimed that nothing is offering.
@@ -816,6 +838,22 @@ final class SuggestionCoordinator {
             return
         }
         watchScrolls()
+    }
+
+    /// Draws what a move or a dismissal left where the ghost already stands, since no field was read for it and typing may have moved it.
+    private func redraw(_ update: SuggestionUpdate) {
+        guard !isStopped, session.isCurrent else {
+            interceptor.arm([])
+            panel.hide()
+            return
+        }
+        interceptor.arm(update.armed)
+        armedOffer = update.suggestion.accepting
+        guard panel.redraw(update.suggestion, typed: session.typed, selection: session.selection) else {
+            interceptor.arm([])
+            armedOffer = nil
+            return
+        }
     }
 
     // MARK: Accepting
@@ -858,7 +896,7 @@ final class SuggestionCoordinator {
                 // The field is re-read a moment later, since an application applies the insertion after the keys land.
                 wake(.tick, afterMilliseconds: 80)
             case .redraw(let update):
-                draw(update, in: lastSnapshot)
+                redraw(update)
             case .giveBack(let refused):
                 KeyStrokeReturn.post(refused)
             }

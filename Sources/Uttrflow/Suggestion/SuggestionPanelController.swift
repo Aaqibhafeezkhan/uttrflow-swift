@@ -108,6 +108,37 @@ final class SuggestionPanelController {
         return render()
     }
 
+    /// Draws another offer, highlight or dot at the caret the panel already follows, answering whether it is on screen whole.
+    @discardableResult
+    func redraw(_ suggestion: Suggestion, typed: String, selection: SuggestionSelection) -> Bool {
+        var next = request
+        next.suggestion = suggestion
+        next.typed = typed
+        next.selection = selection
+        if isActuallyShowing, next.draws(sameAs: request) { return true }
+        request = next
+        return render()
+    }
+
+    /// Follows a key that typed the ghost's next characters: the rest stays where it is drawn, and nothing is hidden.
+    @discardableResult
+    func advance(to typed: String, showing suggestion: Suggestion) -> Bool {
+        guard isActuallyShowing, let caret = request.caret, let before = drawn.inline else { return false }
+        let drawnWidth = width(of: before, in: drawn)
+        var next = request
+        next.typed = typed
+        next.suggestion = suggestion
+        let after = SuggestionPresentation(
+            suggestion, typed: typed, selection: next.selection, fieldPointSize: next.fieldPointSize,
+            appearance: Self.appearance(), acceptKey: next.acceptKey, fontFamily: next.fontFamily,
+            fieldTextColor: next.textColor)
+        guard let remaining = after.inline else { return false }
+        // The caret moves by exactly the width the typed characters took off the ghost, so the rest does not shift.
+        next.caret = caret.offsetBy(dx: drawnWidth - width(of: remaining, in: after), dy: 0)
+        request = next
+        return render()
+    }
+
     func hide() {
         // Already hidden and already drawn hidden: redrawing would change nothing and costs a screen lookup per key.
         if request.suggestion == .silent, !panel.isVisible, drawn.style == .hidden { return }
@@ -115,7 +146,7 @@ final class SuggestionPanelController {
         render()
     }
 
-    /// Whether a suggestion is on screen, which is what a scroll acts on.
+    /// Whether a suggestion is on screen, which is what a scroll or a typed-through key acts on.
     var isShowing: Bool { isActuallyShowing }
 
     /// Exposed so a probe or a test can read back what was actually configured.
@@ -129,6 +160,9 @@ final class SuggestionPanelController {
 
     /// How many times the panel has been placed, so a test can see that one redraw moves it once.
     private(set) var placements = 0
+
+    /// How many times the panel has been taken off screen, so a test can see a typed-through ghost never blinks.
+    private(set) var withdrawals = 0
 
     /// The ghost line's full width in this presentation's face, as the view would draw it with no room limit.
     private func width(of row: SuggestionPresentation.Row, in presentation: SuggestionPresentation) -> CGFloat
@@ -147,6 +181,7 @@ final class SuggestionPanelController {
     private func withdraw() {
         announcer.surfaceWithdrawn()
         isActuallyShowing = false
+        withdrawals += 1
         panel.orderOut(nil)
     }
 
