@@ -50,10 +50,17 @@ struct MainWindowView: View {
             // The band under the title bar, which the traffic lights and the window's drag own; Home draws its own.
             if model.page != .home {
                 Color.clear.frame(height: MainMetrics.toolbarHeight)
-                OrbitPageHeader(
-                    chrome: model.chrome, query: $model.searchQuery,
-                    searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
-                    onSearch: onSearch, onScope: onScope)
+                if isRedesigned {
+                    PageTitleBar(
+                        chrome: model.chrome, query: $model.searchQuery,
+                        searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
+                        onSearch: onSearch)
+                } else {
+                    OrbitPageHeader(
+                        chrome: model.chrome, query: $model.searchQuery,
+                        searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
+                        onSearch: onSearch, onScope: onScope)
+                }
             }
             if let notice = model.content.notice {
                 MainNoticeBar(notice: notice)
@@ -62,8 +69,8 @@ struct MainWindowView: View {
             }
             page
                 // Home sets its own margins; every other page is a document and wants these.
-                .padding(.horizontal, model.page == .home ? 0 : MainMetrics.contentPadding)
-                .padding(.top, model.page == .home ? 0 : 18)
+                .padding(.horizontal, horizontalMargin)
+                .padding(.top, model.page == .home ? 0 : (isRedesigned ? 16 : 18))
                 .padding(.bottom, model.page == .home ? 0 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -71,6 +78,15 @@ struct MainWindowView: View {
         .onChange(of: model.page) { _, _ in
             model.searchQuery = model.chrome.search?.query ?? ""
         }
+    }
+
+    /// Whether the page draws the redesign's title bar and margins.
+    private var isRedesigned: Bool { [.dictionary].contains(model.page) }
+
+    /// Home sets its own margins; a redesigned page is set wider than the others.
+    private var horizontalMargin: CGFloat {
+        if model.page == .home { return 0 }
+        return isRedesigned ? PageMetrics.margin : MainMetrics.contentPadding
     }
 
     @ViewBuilder private var page: some View {
@@ -87,7 +103,7 @@ struct MainWindowView: View {
         case .dictionary:
             DictionaryPageView(
                 presentation: model.content.dictionary, draft: reporting($model.wordDraft),
-                onIntent: onIntent)
+                onIntent: onIntent, onFilter: onScope)
         case .corrections:
             CorrectionsPageView(presentation: model.content.corrections, onIntent: onIntent)
         case .insights:

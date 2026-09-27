@@ -1904,7 +1904,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             dictionary: DictionaryPresenter.page(
                 for: DictionarySnapshot(
                     entries: knownWords, draft: wordDraft, refusal: wordRefusal,
-                    query: query(for: .dictionary), now: now)),
+                    query: query(for: .dictionary), filter: scope(for: .dictionary),
+                    corrections: corrections, now: now)),
             corrections: CorrectionsPresenter.page(
                 for: CorrectionsSnapshot(
                     corrections: corrections, dictations: entries,
