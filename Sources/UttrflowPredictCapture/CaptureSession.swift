@@ -43,8 +43,8 @@ public actor CaptureSession {
     private var isRetryingCommits = false
     /// True while held acceptances are being retried, so a re-entrant retry does not write the same one twice.
     private var isRetryingAcceptances = false
-    /// The last acceptance written, watched for an undo until the line moves on or `undoWindow` passes.
-    private var lastAcceptance: (text: String, surface: Surface, moment: Date)?
+    /// The last acceptance written and the line it was taken over, watched for an undo until the line moves on or `undoWindow` passes.
+    private var lastAcceptance: (text: String, over: String, surface: Surface, moment: Date)?
     /// How long after an acceptance a line cut back inside the accepted text reads as the person undoing it.
     static let undoWindow: Double = 10
 
@@ -84,9 +84,9 @@ public actor CaptureSession {
         return surface == known && focused.isSecure == reading.isSecure
     }
 
-    /// Records a completion the person took, through the same refusals as anything they typed.
+    /// Records a completion the person took over the line `typed`, through the same refusals as anything they typed.
     public func accepted(
-        _ text: String, in reading: FieldReading, at moment: Date
+        _ text: String, over typed: String = "", in reading: FieldReading, at moment: Date
     ) async throws -> CaptureOutcome {
         guard let surface = reading.surface else { return .nothing }
         if let refusal = CaptureGate.refusal(toRecord: text, from: reading, given: preferences) {
@@ -103,11 +103,11 @@ public actor CaptureSession {
             hold(failure.remaining)
             throw failure.underlying
         }
-        lastAcceptance = (text, surface, moment)
+        lastAcceptance = (text, typed.trimmingCharacters(in: .whitespacesAndNewlines), surface, moment)
         return .recorded(text)
     }
 
-    /// Takes back the last acceptance when the line, read soon after in its field, is cut back inside the accepted text.
+    /// Takes back the last acceptance when the line, read soon after in its field, is cut back inside the accepted text or to the line it was taken over.
     private func retractIfUndone(_ event: CaptureEvent, in reading: FieldReading) async {
         guard let last = lastAcceptance else { return }
         guard reading.surface == last.surface, event.moment.timeIntervalSince(last.moment) <= Self.undoWindow
@@ -123,7 +123,11 @@ public actor CaptureSession {
             if now.count > accepted.count, Array(now.prefix(accepted.count)) == accepted {
                 lastAcceptance = nil
             }
-            guard now.count < accepted.count, Array(accepted.prefix(now.count)) == now else { return }
+            let cutBack = now.count < accepted.count && Array(accepted.prefix(now.count)) == now
+            // A fuzzy acceptance rewrote the typed line, so an undo lands on the typo, which is no prefix of the line taken.
+            let over = Array(last.over.unicodeScalars)
+            let restored = now.count <= over.count && Array(over.prefix(now.count)) == now && now != accepted
+            guard cutBack || restored else { return }
             lastAcceptance = nil
             try? await sink.retractAcceptance(last.text, in: last.surface)
         case .returnPressed, .focusLeft, .applicationDeactivated:

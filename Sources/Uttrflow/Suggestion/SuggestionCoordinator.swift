@@ -1026,7 +1026,7 @@ final class SuggestionCoordinator {
         let log = Self.log
         acceptances.enqueue { [capture] in
             do {
-                _ = try await capture.accepted(text, in: reading, at: moment)
+                _ = try await capture.accepted(text, over: typed, in: reading, at: moment)
             } catch {
                 // The session holds the acceptance and retries it before the next event.
                 log.error("An accepted suggestion's corpus write failed and is held for a retry")
