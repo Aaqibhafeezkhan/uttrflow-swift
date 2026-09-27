@@ -9,9 +9,11 @@ private struct Field {
     var bounds: (Int, Int) -> CGRect? = { _, _ in nil }
     var marker: CGRect? = nil
     var frame: CGRect? = nil
+    var pointSize: CGFloat? = nil
 
     func caret(at selection: (location: Int, length: Int)?) -> CGRect? {
-        CaretLocator.caret(at: selection, frame: frame, bounds: bounds, markerBounds: { marker })
+        CaretLocator.caret(
+            at: selection, frame: frame, pointSize: pointSize, bounds: bounds, markerBounds: { marker })
     }
 }
 
@@ -67,5 +69,41 @@ struct CaretLocatorTests {
             value: "Thanks for the quick", selection: nil, caret: caret)
         #expect(reading.placement == .inlineGhost)
         #expect(reading.currentLine == "Thanks for the quick")
+    }
+
+    @Test("A marker rectangle that is the whole rich editor is no caret, so nothing is drawn at its corner")
+    func markerAsTheWholeEditorIsNoCaret() {
+        let editor = CGRect(x: 64, y: 1_117, width: 602, height: 202)
+        var field = locator(
+            bounds: { _, _ in CGRect(x: 0, y: 1_117, width: 0, height: 0) }, marker: editor, frame: editor)
+        #expect(field.caret(at: (location: 84, length: 0)) == nil)
+        field.frame = nil
+        #expect(field.caret(at: (location: 84, length: 0)) == nil)
+        field.frame = editor
+        field.pointSize = 80
+        #expect(field.caret(at: (location: 84, length: 0)) == nil)
+    }
+
+    @Test("A marker rectangle taller than a line of the field's type is no caret, and one line of it is")
+    func markerTallerThanALineIsNoCaret() {
+        var field = locator(marker: CGRect(x: 90, y: 40, width: 0, height: 60), frame: nil)
+        field.pointSize = 14
+        #expect(field.caret(at: nil) == nil)
+        field.marker = CGRect(x: 90, y: 40, width: 0, height: 18)
+        #expect(field.caret(at: nil) == CGRect(x: 90, y: 40, width: 0, height: 18))
+        field.pointSize = nil
+        field.marker = CGRect(x: 90, y: 40, width: 0, height: 40)
+        #expect(field.caret(at: nil) == CGRect(x: 90, y: 40, width: 0, height: 40))
+    }
+
+    @Test(
+        "A one-line field whose marker fills it is no caret, since the marker's corner is not where typing is"
+    )
+    func markerFillingAOneLineFieldIsNoCaret() {
+        let input = CGRect(x: 10, y: 10, width: 300, height: 22)
+        #expect(locator(marker: input, frame: input).caret(at: nil) == nil)
+        #expect(
+            locator(marker: CGRect(x: 120, y: 13, width: 0, height: 16), frame: input).caret(at: nil)
+                == CGRect(x: 120, y: 13, width: 0, height: 16))
     }
 }
