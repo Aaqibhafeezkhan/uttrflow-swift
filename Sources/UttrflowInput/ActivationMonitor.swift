@@ -77,14 +77,16 @@ public final class ActivationMonitor: HotkeyMonitoring {
     }
 
     public func stop() {
-        let began = recogniser.withLock { _ in generation.load(ordering: .relaxed) }
-        source.stop()
-        stopReconciling()
-        // A hold interrupted by stopping is a release, or the microphone stays open.
-        recogniser.withLock { current in
-            guard generation.load(ordering: .relaxed) == began else { return }
-            if let owed = current?.finish() { continuation.yield(owed) }
-            current = nil
+        TeardownGuard.once(for: self) {
+            let began = recogniser.withLock { _ in generation.load(ordering: .relaxed) }
+            source.stop()
+            stopReconciling()
+            // A hold interrupted by stopping is a release, or the microphone stays open.
+            recogniser.withLock { current in
+                guard generation.load(ordering: .relaxed) == began else { return }
+                if let owed = current?.finish() { continuation.yield(owed) }
+                current = nil
+            }
         }
     }
 

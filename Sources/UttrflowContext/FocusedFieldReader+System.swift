@@ -133,7 +133,8 @@ public enum FocusedFieldReader {
         let secure = declaredSecure || (value.map(SecureField.looksMasked) ?? false)
         // Checked between messages: a turn that has given up should not pay for the rest of them.
         guard isWanted() else { return nil }
-        let style = range.flatMap { typeStyle(field, at: $0) }
+        // The attributed string carries the characters, so a secure field is never asked for its style.
+        let style = secure ? nil : range.flatMap { typeStyle(field, at: $0) }
         guard isWanted() else { return nil }
         let flipped = cachedPrimaryScreenMaxY.withLock { $0 }
         let marked = CompositionProbe.markedText(of: field)
@@ -291,9 +292,10 @@ public enum FocusedFieldReader {
     /// What the collector asks one element: its shape in a single message, and its value apart, only when its text is read.
     final class Answers {
         /// The attributes asked for together, in the order the answers come back, the value left out since it can be a whole document.
-        private static let attributes = [
+        static let attributes = [
             kAXRoleAttribute, kAXPositionAttribute, kAXSizeAttribute, kAXTitleAttribute,
-            kAXDescriptionAttribute, kAXChildrenAttribute, kAXParentAttribute,
+            kAXDescriptionAttribute, kAXChildrenAttribute, kAXParentAttribute, kAXSubroleAttribute,
+            kAXIdentifierAttribute, kAXPlaceholderValueAttribute,
         ]
 
         /// How many UTF-16 units of a long value are read from its end, twice the per-element cap so cleaning still leaves enough.
@@ -305,6 +307,12 @@ public enum FocusedFieldReader {
 
         init(_ element: AXUIElement) {
             self.element = element
+        }
+
+        /// Answers already in hand, one per attribute, so a test can ask them without another application.
+        init(_ element: AXUIElement, fetched: [AnyObject]) {
+            self.element = element
+            self.fetched = fetched.count == Self.attributes.count ? fetched : []
         }
 
         /// The answers, one per attribute, an element that does not answer at all standing as none.
@@ -328,8 +336,18 @@ public enum FocusedFieldReader {
         var role: String? { self[kAXRoleAttribute] as? String }
         var title: String? { self[kAXTitleAttribute] as? String }
 
-        /// What the element says: the end of its value, else its title, else its description, which is where a chat keeps its messages.
+        /// Whether the element declares itself secure by role, subrole or name, asked of the answers already fetched.
+        var isSecure: Bool {
+            SecureField.isDeclaredSecure(
+                role: role, subrole: self[kAXSubroleAttribute] as? String,
+                identifier: self[kAXIdentifierAttribute] as? String,
+                placeholder: self[kAXPlaceholderValueAttribute] as? String,
+                description: self[kAXDescriptionAttribute] as? String)
+        }
+
+        /// What the element says: the end of its value, else its title, else its description, and nothing for a secure element.
         var text: String? {
+            guard !isSecure else { return nil }
             let candidates: [() -> String?] = [
                 { self.value }, { self[kAXTitleAttribute] as? String },
                 { self[kAXDescriptionAttribute] as? String },
@@ -393,6 +411,7 @@ public enum FocusedFieldReader {
     /// The other application's window as the surroundings collector walks it, one Accessibility message per element.
     struct AXElementTree: ElementTree {
         func role(of node: AXNode) -> String? { node.answers.role }
+        func isSecure(_ node: AXNode) -> Bool { node.answers.isSecure }
         func text(of node: AXNode) -> String? { node.answers.text }
         func frame(of node: AXNode) -> CGRect? { node.answers.frame }
         func children(of node: AXNode) -> [AXNode] { node.answers.children.map(AXNode.init) }
