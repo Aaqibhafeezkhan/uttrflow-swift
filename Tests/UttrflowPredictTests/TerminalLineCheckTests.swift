@@ -60,6 +60,48 @@ private func fork() -> FakeDisk {
         ])
 }
 
+/// A project with one script per interpreter and each interpreter on the search path.
+private let scripts = TerminalLineCheck(
+    files: FakeDisk(
+        home: "/Users/someone", searchPaths: ["/usr/bin"],
+        directories: ["/Users/someone/tools"],
+        files: [
+            "/Users/someone/tools/present.py", "/Users/someone/tools/app.js", "/Users/someone/tools/run.sh",
+            "/Users/someone/tools/task.rb", "/Users/someone/tools/fix.pl", "/Users/someone/tools/notes.txt",
+        ],
+        executables: [
+            "/usr/bin/python3", "/usr/bin/node", "/usr/bin/bash", "/usr/bin/ruby", "/usr/bin/perl",
+            "/usr/bin/php",
+        ]))
+
+@Suite("Checking the script an interpreter runs")
+struct InterpreterScriptTests {
+    @Test(
+        "A script named after the interpreter's flags must exist here.",
+        arguments: [
+            "python3 -u missing.py", "python3 -W ignore missing.py", "python3 -B -O missing.py",
+            "node --inspect gone.js", "node -r dotenv/config gone.js", "bash -x nothere.sh",
+            "bash -o pipefail nothere.sh", "bash -l nothere.sh", "ruby -w old.rb", "ruby -I lib old.rb",
+            "perl -w gone.pl", "perl -pie 's/a/b/' notes.txt", "php -f gone.php", "python3 -- missing.py",
+        ])
+    func missingScriptsAreRefused(_ line: String) {
+        #expect(!scripts.allows(line, in: "/Users/someone/tools"), "\(line) names a missing script")
+    }
+
+    @Test(
+        "A script that exists stands, and code given inline, as a module or on the standard input needs no file.",
+        arguments: [
+            "python3 -u present.py", "python3 -W ignore present.py", "python3 -m http.server",
+            "python3 -c 'print(1)'",
+            "python3 -Bc 'print(1)'", "python3", "python3 -", "node -e '1'", "node --eval=1", "node -p 1",
+            "node --inspect app.js", "bash -x run.sh", "bash -lc 'ls'", "bash -s", "ruby -w task.rb",
+            "ruby -e 'puts 1'", "perl -pi -e 's/a/b/' notes.txt", "perl -w fix.pl", "php -r 'echo 1;'",
+        ])
+    func presentAndInlineStand(_ line: String) {
+        #expect(scripts.allows(line, in: "/Users/someone/tools"), "\(line) needs nothing missing")
+    }
+}
+
 @Suite("Checking a git line in a repository with two remotes")
 struct TwoRemoteCheckTests {
     @Test(
