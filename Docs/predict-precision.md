@@ -105,6 +105,16 @@ command, 160 for a document. A reply's token budget follows the typical line too
 person is not given a paragraph's room. The `chat/echo` fixtures cover a reply that opens as the
 last message does.
 
+**P8 — A generated line adds no specific nobody gave it. Done, not yet measured.** A number, a
+time, a date, an amount, a percentage, an email or a web address is the one kind of wrong that
+reads as right, and one Tab puts it in a sent message. `CompletionText.finished` now refuses a
+line from either model when a token it adds names such a specific and that exact token is not in
+the typed text, this person's lines here, the screen or the machine's values. Tokens compare
+lowercased with surrounding punctuation removed. There is no prefix or substring match. A digit
+inside a name, as in `python3`, is not a number. The corpus is unaffected: a line this person
+typed is theirs, specifics included. Each refusal is logged under `predict` as `DROP made-up
+specific`, by reason only.
+
 ## What this trades away
 
 Coverage falls, and some of it will feel like a loss: the address bar goes quiet unless the person

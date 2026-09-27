@@ -136,18 +136,18 @@ enum PasteKeyLayout {
         return code
     }
 
-    /// The current layout's key code for `v`, or the ASCII-capable layout's when the current one has none.
+    /// The current layout's key code for ⌘V, read from its ⌘ table, or the ASCII-capable layout's when the current one has none.
     @MainActor
     private static func readVKeyCode() -> CGKeyCode {
         if let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
             let data = unicodeLayoutData(of: source),
-            let code = LayoutKeyCode.code(for: vCharacter, in: data)
+            let code = LayoutKeyCode.code(for: vCharacter, in: data, modifiers: LayoutKeyCode.commandHeld)
         {
             return code
         }
         if let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
             let data = unicodeLayoutData(of: source),
-            let code = LayoutKeyCode.code(for: vCharacter, in: data)
+            let code = LayoutKeyCode.code(for: vCharacter, in: data, modifiers: LayoutKeyCode.commandHeld)
         {
             return code
         }
