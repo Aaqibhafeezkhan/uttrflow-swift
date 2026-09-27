@@ -8,42 +8,47 @@ import Testing
 /// A ``SoundPlayer`` that makes no sound and remembers everything it is asked for.
 private final class SpyPlayer: SoundPlayer {
     private struct State {
-        var requested: [SystemSound] = []
-        var prewarmed: [SystemSound] = []
-        var refused: Set<SystemSound> = []
+        var requested: [CueSound] = []
+        var prewarmed: [CueSound] = []
+        var refused: Set<CueSound> = []
     }
 
     private let state = Mutex(State())
 
     /// - Parameter refusing: Sounds the "system" claims not to have.
-    init(refusing: Set<SystemSound> = []) {
+    init(refusing: Set<CueSound> = []) {
         state.withLock { $0.refused = refusing }
     }
 
-    func play(_ sound: SystemSound) -> Bool {
+    func play(_ sound: CueSound) -> Bool {
         state.withLock { state in
             state.requested.append(sound)
             return !state.refused.contains(sound)
         }
     }
 
-    func prewarm(_ sounds: [SystemSound]) {
+    func prewarm(_ sounds: [CueSound]) {
         state.withLock { $0.prewarmed.append(contentsOf: sounds) }
     }
 
-    var requested: [SystemSound] { state.withLock(\.requested) }
-    var prewarmed: [SystemSound] { state.withLock(\.prewarmed) }
+    var requested: [CueSound] { state.withLock(\.requested) }
+    var prewarmed: [CueSound] { state.withLock(\.prewarmed) }
 }
 
 /// A player that leaves ``SoundPlayer/prewarm(_:)`` to the protocol's default.
 private final class MinimalPlayer: SoundPlayer {
     private let count = Mutex(0)
-    func play(_ sound: SystemSound) -> Bool {
+    func play(_ sound: CueSound) -> Bool {
         count.withLock { $0 += 1 }
         return true
     }
     var playCount: Int { count.withLock { $0 } }
 }
+
+/// Cues other than the defaults, to prove the recording cue plays what it is given.
+private let frog = CueSound("Frog", semitones: 0, lowPassHz: 20_000, volume: 1)
+private let purr = CueSound("Purr", semitones: 0, lowPassHz: 20_000, volume: 1)
+private let missing = CueSound("Missing", semitones: 0, lowPassHz: 20_000, volume: 1)
 
 /// A "sounds off" setting the user can flip mid-recording.
 private final class SoundsSetting: Sendable {
@@ -71,11 +76,6 @@ struct SystemSoundTests {
         #expect(Set([SystemSound("Purr"), SystemSound("Purr")]).count == 1)
     }
 
-    @Test("defaults to the two shortest system sounds, to minimise cue bleed")
-    func defaultsAreShortest() {
-        #expect(SystemSound.tink.name == "Tink")
-        #expect(SystemSound.morse.name == "Morse")
-    }
 }
 
 @Suite("SoundPlayingRecordingCue")
@@ -87,7 +87,7 @@ struct SoundPlayingRecordingCueTests {
 
         cue.playStart()
 
-        #expect(player.requested == [.tink])
+        #expect(player.requested == [.start])
     }
 
     @Test("plays the stop sound after a start")
@@ -98,7 +98,7 @@ struct SoundPlayingRecordingCueTests {
         cue.playStart()
         cue.playStop()
 
-        #expect(player.requested == [.tink, .morse])
+        #expect(player.requested == [.start, .stop])
     }
 
     @Test("says nothing when asked to stop what never started")
@@ -121,7 +121,7 @@ struct SoundPlayingRecordingCueTests {
         cue.playStop()
         cue.playStop()
 
-        #expect(player.requested == [.tink, .morse])
+        #expect(player.requested == [.start, .stop])
     }
 
     @Test("plays both cues again on the next recording")
@@ -134,7 +134,7 @@ struct SoundPlayingRecordingCueTests {
         cue.playStart()
         cue.playStop()
 
-        #expect(player.requested == [.tink, .morse, .tink, .morse])
+        #expect(player.requested == [.start, .stop, .start, .stop])
     }
 
     @Test("stays armed when a start arrives twice")
@@ -146,30 +146,30 @@ struct SoundPlayingRecordingCueTests {
         cue.playStart()
         cue.playStop()
 
-        #expect(player.requested == [.tink, .tink, .morse])
+        #expect(player.requested == [.start, .start, .stop])
     }
 
     @Test("uses the sounds it was given")
     func customSounds() {
         let player = SpyPlayer()
         let cue = SoundPlayingRecordingCue(
-            player: player, startSound: SystemSound("Frog"), stopSound: SystemSound("Purr")
+            player: player, startSound: frog, stopSound: purr
         )
 
         cue.playStart()
         cue.playStop()
 
-        #expect(player.requested == [SystemSound("Frog"), SystemSound("Purr")])
+        #expect(player.requested == [frog, purr])
     }
 
     @Test("warms both of its sounds before either is needed")
     func prewarmsItsSounds() {
         let player = SpyPlayer()
         _ = SoundPlayingRecordingCue(
-            player: player, startSound: SystemSound("Frog"), stopSound: SystemSound("Purr")
+            player: player, startSound: frog, stopSound: purr
         )
 
-        #expect(player.prewarmed == [SystemSound("Frog"), SystemSound("Purr")])
+        #expect(player.prewarmed == [frog, purr])
         #expect(player.requested.isEmpty, "warming must not be audible")
     }
 
@@ -209,7 +209,7 @@ struct SoundPlayingRecordingCueTests {
         setting.turn(on: false)
         cue.playStop()
 
-        #expect(player.requested == [.tink])
+        #expect(player.requested == [.start])
     }
 
     @Test("does not owe a stop cue to the next recording")
@@ -224,44 +224,44 @@ struct SoundPlayingRecordingCueTests {
         setting.turn(on: true)
         cue.playStop()
 
-        #expect(player.requested == [.tink], "the pair closed when it was suppressed")
+        #expect(player.requested == [.start], "the pair closed when it was suppressed")
     }
 
     // MARK: A system that will not co-operate
 
     @Test("does not answer a start sound the system refused to play")
     func refusedStartDoesNotArm() {
-        let player = SpyPlayer(refusing: [.tink])
+        let player = SpyPlayer(refusing: [.start])
         let cue = SoundPlayingRecordingCue(player: player)
 
         cue.playStart()
         cue.playStop()
 
-        #expect(player.requested == [.tink], "only the start was attempted")
+        #expect(player.requested == [.start], "only the start was attempted")
     }
 
     @Test("recovers on the next recording after a refused start")
     func refusedStartRecovers() {
-        let player = SpyPlayer(refusing: [SystemSound("Missing")])
+        let player = SpyPlayer(refusing: [missing])
         let cue = SoundPlayingRecordingCue(
-            player: player, startSound: SystemSound("Missing"), stopSound: .morse
+            player: player, startSound: missing, stopSound: .stop
         )
 
         cue.playStart()
         cue.playStop()
-        #expect(player.requested == [SystemSound("Missing")])
+        #expect(player.requested == [missing])
     }
 
     @Test("a refused stop sound still closes the pair")
     func refusedStopStillDisarms() {
-        let player = SpyPlayer(refusing: [.morse])
+        let player = SpyPlayer(refusing: [.stop])
         let cue = SoundPlayingRecordingCue(player: player)
 
         cue.playStart()
         cue.playStop()
         cue.playStop()
 
-        #expect(player.requested == [.tink, .morse])
+        #expect(player.requested == [.start, .stop])
     }
 
     // MARK: Concurrency
@@ -278,8 +278,8 @@ struct SoundPlayingRecordingCueTests {
             }
         }
 
-        let starts = player.requested.count { $0 == .tink }
-        let stops = player.requested.count { $0 == .morse }
+        let starts = player.requested.count { $0 == .start }
+        let stops = player.requested.count { $0 == .stop }
         #expect(starts == 200)
         #expect(stops <= starts, "every stop cue must answer a start cue")
     }
@@ -298,7 +298,7 @@ struct RecordingCueBoundaryTests {
         let player = SpyPlayer()
         drive(SoundPlayingRecordingCue(player: player))
 
-        #expect(player.requested == [.tink, .morse])
+        #expect(player.requested == [.start, .stop])
     }
 
     @Test("a player that ignores warming still works")

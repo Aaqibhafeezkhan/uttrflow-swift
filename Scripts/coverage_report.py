@@ -38,6 +38,7 @@ EXCLUDED_MODULES = {
 EXCLUDED_FILES = {
     "UttrflowAudio/AVAudioEngineMicrophoneSource.swift": "drives a physical microphone",
     "UttrflowAudio/RecordingCue+System.swift": "plays a sound out of the speakers",
+    "UttrflowAudio/RecordingCue+Engine.swift": "plays a shaped sound out of the speakers",
     "UttrflowPermissions/MicrophonePermissionGate+System.swift": "puts a system dialog on screen",
     "UttrflowPermissions/AccessibilityPermissionGate+System.swift": "opens System Settings",
     "UttrflowPermissions/SystemSettingsOpener+System.swift": "hands a System Settings address to the system to open",

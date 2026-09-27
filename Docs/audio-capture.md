@@ -136,9 +136,10 @@ raised the peak level of the first 700 ms of capture by about 6 dB on average, a
 trial reached −11.5 dBFS against a −25.3 dBFS quiet mean, comfortably inside the range the
 recogniser treats as speech.
 
-The head of the recording is exposed, because `NSSound.play()` returns immediately (0.1 ms warm)
-while the sound goes on for another half second: `DictationController` plays the start cue after
-the pipeline is listening, so the whole cue lands in the recording.
+The head of the recording is exposed, because playing a cue returns immediately (under 0.1 ms;
+the engine start happens on the player's own queue) while the sound goes on afterwards:
+`DictationController` plays the start cue after the pipeline is listening, so the whole cue lands
+in the recording.
 
 The tail is not. `AVAudioCaptureEngine.stop()` plays the stop cue after the microphone source has
 stopped and before the buffer is taken, so none of it is recorded. The drain below sits in front of
@@ -152,9 +153,11 @@ What mitigates it, in descending order of effect:
    the cue; it changed the input format from 1 channel to 9 on this machine, which the resampler
    would reduce to channel 0; and it imposes AGC and noise suppression the recogniser has not
    been tuned against.
-2. Being short and quiet, which is all the cue can do by itself. `Tink` is the shortest sound in
-   `/System/Library/Sounds` on macOS 26.5 at 0.564 s, chosen for brevity rather than taste, and
-   the default volume is 0.4.
+2. Being quiet and soft, which is all the cue can do by itself. The low-pass takes off the bright
+   top that carries furthest into a microphone. Measured on the source samples, before speakers or
+   room: the shaped start cue peaks at −14.0 dBFS against −16.7 dBFS for the unshaped `Tink` at
+   0.4 it replaced, and its first 700 ms average −36.1 dBFS RMS against −36.7 dBFS. It is 1.94 s
+   long, most of it a quiet tail.
 
 Deliberately not a mitigation: waiting for the start cue to finish before opening the
 microphone. It buys silence at the cost of half a second before the user may speak.
@@ -162,23 +165,54 @@ microphone. It buys silence at the cost of half a second before the user may spe
 **Trimming a lead-in is also deliberately not a mitigation, by measured decision.** A synthetic
 sweep with `Tink` through `BackedSpeechEngine` found no word errors at the loudest measured
 real leak (−11.5 dBFS); a fixed-window trim would convert a probabilistic bleed into
-deterministic word loss for users who press and speak, so the cue stays in the buffer. The start
-cue in `Sources/UttrflowAudio/RecordingCue+System.swift:8` points at this paragraph rather than
-at an open question.
+deterministic word loss for users who press and speak, so the cue stays in the buffer. That sweep
+used the earlier `Tink` start cue, not the shaped one.
+
+## Changing the cue sounds
+
+Both cues are one line each in `Sources/UttrflowAudio/CueSounds.swift`:
+
+```swift
+public static let start = CueSound("Pop", semitones: -3, lowPassHz: 3000, volume: 0.7)
+public static let stop = CueSound("Tink", semitones: -9, lowPassHz: 2200, volume: 0.7)
+```
+
+- The name is any sound in `/System/Library/Sounds` (or `~/Library/Sounds`), without its extension.
+- `semitones` shifts pitch by reading the sound faster or slower, so it also changes the length:
+  the rate is 2^(semitones/12), and −12 plays an octave down at twice the length.
+- `lowPassHz` is the cutoff of a second-order low-pass whose resonance is 0.5 dB, the unit and
+  value a browser's `BiquadFilterNode` reads `Q` in, so a sound auditioned there with
+  `playbackRate`, a `lowpass` filter at `Q` 0.5 and a gain node sounds the same here.
+- `volume` is linear gain from 0 to 1.
+
+`CueSoundsTests` pins the values, so a change edits the test beside it. Whatever the start cue
+becomes lands in the recording; re-measure it against the numbers under *Cue bleed*.
 
 ## Playing a system sound reliably
 
-- Uttrflow carries no audio of its own. A borrowed system sound is one the user recognises as
+- Uttrflow carries no audio of its own, and ships no copy of a system sound: the shaping runs on
+  the Mac's own file when the app starts. A borrowed system sound is one the user recognises as
   their machine rather than this app, it follows whatever they replaced it with in
   `~/Library/Sounds`, and there is no asset to lose.
+- Playing is a chain. `ShapedSoundPlayer` plays the shaped cue through an output-only
+  `AVAudioEngine`; when its engine or the sound file cannot be had, `SystemSoundPlayer` plays the
+  same named sound unshaped through `NSSound` at the cue's volume; when that fails too, the cue is
+  silent and dictation carries on. An engine that fails to start after `play` has returned leaves
+  that one cue silent and hands the next to `NSSound` while it rebuilds.
+- Shaping happens once, at prewarm, into one 48 kHz mono buffer per cue, each on its own player
+  node so a stop cue never cuts off a start cue still sounding. The first engine start of a process
+  costs about 37 ms, paid at prewarm; a start from pause costs 8 to 40 ms depending on how long the
+  output device has been idle, and happens on the player's queue rather than the caller's.
+- The engine pauses one second after the last cue ends, so the output device is not held open
+  between dictations, and it is rebuilt when the output device changes.
 - `play()` on an `NSSound` that is still playing returns `false` and does nothing, so a second
   dictation inside the previous cue's half-second tail would be silent and, worse, would report
   failure and suppress its own stop cue. Stopping first makes a retrigger restart the sound:
   measured 5/5 successes at 120 ms spacing against 0/5 without. It also covers a starved main run
   loop, where `isPlaying` never clears.
-- The first sound of a process costs about 118 ms inside AppKit building its output graph, then
-  12 ms per sound. Prewarming pays it at construction rather than on the keystroke that starts a
-  dictation.
+- The first `NSSound` of a process costs about 118 ms inside AppKit building its output graph,
+  then 12 ms per sound. Prewarming pays it at construction rather than on the keystroke that starts
+  a dictation.
 - A stop cue is owed only after a start cue the user could have heard, and the pair is closed
   whether or not the stop cue plays, so a cue suppressed by the setting is never left owed to the
   next recording.
