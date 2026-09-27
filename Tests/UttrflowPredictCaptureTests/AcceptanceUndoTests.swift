@@ -46,11 +46,11 @@ struct AcceptanceUndoTests {
     @Test(
         "An undo of a fuzzy acceptance, back to the typo it corrected, leaves no new line and no acceptance.")
     func undoneFuzzyAcceptanceLeavesNothing() async throws {
-        for undone in ["git staus", "git stau"] {
+        for undone in ["gti st", "gti s"] {
             let scratch = Scratch()
             let (session, store) = try await opened(scratch)
-            _ = try await session.handle(.keystroke("git staus", at: accepted), in: shell)
-            _ = try await session.accepted("git status --short", over: "git staus", in: shell, at: accepted)
+            _ = try await session.handle(.keystroke("gti st", at: accepted), in: shell)
+            _ = try await session.accepted("git status --short", over: "gti st", in: shell, at: accepted)
             _ = try await session.handle(.keystroke(undone, at: accepted + 1), in: shell)
             #expect(try await evidence(of: "git status --short", in: store) == nil, "undone to \(undone)")
         }
@@ -61,7 +61,7 @@ struct AcceptanceUndoTests {
         for ending in ["git status --short -b", "git stash"] {
             let scratch = Scratch()
             let (session, store) = try await opened(scratch)
-            _ = try await session.accepted("git status --short", over: "git staus", in: shell, at: accepted)
+            _ = try await session.accepted("git status --short", over: "gti st", in: shell, at: accepted)
             _ = try await session.handle(.keystroke(ending, at: accepted + 1), in: shell)
             #expect(try await evidence(of: "git status --short", in: store)?.accepted == 1, "\(ending)")
         }
