@@ -36,6 +36,13 @@ public final class FullTreeSwitch: Sendable {
 
     public init() {}
 
+    /// Whether a read calls for the tree: always in a Chromium browser, whose first read may run out of time, and elsewhere for a text field with no caret.
+    static func isNeeded(in bundleIdentifier: String, after reading: FocusedFieldSnapshot?) -> Bool {
+        if chromiumBrowsers.contains(bundleIdentifier) { return true }
+        guard let reading else { return false }
+        return reading.caret == nil && !reading.isSecure && FocusedFieldSnapshot.isTextEntry(reading.role)
+    }
+
     /// The processes whose tree this switch turned on and has not turned off.
     var switchedOn: [Int32: String] { state.withLock { $0.switched } }
 

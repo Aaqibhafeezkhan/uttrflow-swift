@@ -76,10 +76,8 @@ public enum FocusedFieldReader {
         // A field that stops answering costs the turn half a second at most, and no later turn waits behind it.
         return await queue.run(within: .milliseconds(500)) { isWanted in
             let reading = snapshot(app: app, while: isWanted)
-            // A browser engine answers zero-size caret bounds until its full tree is on, so a caretless field turns it on.
-            if let reading, reading.caret == nil, !reading.isSecure,
-                FocusedFieldSnapshot.isTextEntry(reading.role)
-            {
+            // A browser engine answers zero-size caret bounds until its full tree is on.
+            if FullTreeSwitch.isNeeded(in: app.bundleIdentifier, after: reading) {
                 fullTree.switchOn(
                     processIdentifier: app.processIdentifier, bundleIdentifier: app.bundleIdentifier,
                     host: fullTreeHost(app.processIdentifier))

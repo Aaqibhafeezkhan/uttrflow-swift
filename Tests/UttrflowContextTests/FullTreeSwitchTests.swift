@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 
 @testable import UttrflowContext
@@ -98,5 +99,22 @@ struct FullTreeSwitchTests {
         #expect(tree.switchedOn.isEmpty)
         tree.switchOn(processIdentifier: 9, bundleIdentifier: "com.google.Chrome", host: chrome.host)
         #expect(chrome.values[FullTreeSwitch.enhancedAttribute] == true)
+    }
+
+    @Test(
+        "A Chromium browser is switched on whatever the read found, and elsewhere only a caretless text field is."
+    )
+    func whenTheTreeIsNeeded() {
+        let reading = { (role: String, caret: CGRect?, secure: Bool) in
+            FocusedFieldSnapshot(
+                bundleIdentifier: "com.example.chat", applicationName: "Chat", role: role, value: "hi",
+                caret: caret, isSecure: secure)
+        }
+        #expect(FullTreeSwitch.isNeeded(in: "com.google.Chrome", after: nil))
+        #expect(FullTreeSwitch.isNeeded(in: "com.example.chat", after: reading("AXTextArea", nil, false)))
+        #expect(!FullTreeSwitch.isNeeded(in: "com.example.chat", after: nil))
+        #expect(!FullTreeSwitch.isNeeded(in: "com.example.chat", after: reading("AXTextArea", .zero, false)))
+        #expect(!FullTreeSwitch.isNeeded(in: "com.example.chat", after: reading("AXTextField", nil, true)))
+        #expect(!FullTreeSwitch.isNeeded(in: "com.example.chat", after: reading("AXGroup", nil, false)))
     }
 }
