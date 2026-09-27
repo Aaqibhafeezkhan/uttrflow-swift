@@ -45,7 +45,20 @@ struct SettingsPageView: View {
         .padding(.top, SettingsMetrics.topInset)
         .padding(.horizontal, 34)
         .foregroundStyle(PagePalette.text)
+        // Over the whole page rather than the scrolled column, so the question is centred in what is seen.
+        .overlay {
+            if let asked, let confirmation = asked.confirmation {
+                ConfirmationSheet(
+                    confirmation: MainConfirmation(confirmation),
+                    onCancel: { model.dismissRemoval() },
+                    onConfirm: { model.confirm(asked) })
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: asked)
     }
+
+    /// What is being asked, if anything; the session knows which button was pressed.
+    private var asked: SettingsRemoval? { model.session.pendingRemoval }
 
     private var header: some View {
         HStack(spacing: 16) {
