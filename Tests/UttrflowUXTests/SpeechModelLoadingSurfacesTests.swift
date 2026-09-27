@@ -200,6 +200,13 @@ struct SpeechModelLoadingSurfacesTests {
         #expect(page.subtitle == "Uttrflow cannot listen yet.")
     }
 
+    @Test("a download with a known size says how much has arrived")
+    func downloadCountsTheBytes() {
+        let status = HomeModelStatus.downloading(0.42, bytes: 1_400_000_000)
+        #expect(status.subtitle == "Downloading the speech model · 588 MB of 1.4 GB")
+        #expect(HomeModelStatus.downloading(1.4, bytes: 1_000_000).subtitle.hasSuffix("1 MB of 1 MB"))
+    }
+
     @Test("a download's bar never runs past either end")
     func downloadIsClamped() {
         #expect(HomeModelStatus.downloading(1.4).progress == .fraction(1))
