@@ -214,6 +214,8 @@ final class SuggestionCoordinator {
         activations = nil
         for observer in spaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         spaceObservers = []
+        // A browser's full Accessibility tree stays on only while suggestions do.
+        FocusedFieldReader.releaseFullTrees()
     }
 
     // MARK: What wakes the loop

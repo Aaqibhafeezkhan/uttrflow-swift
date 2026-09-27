@@ -75,8 +75,42 @@ public enum FocusedFieldReader {
         guard let app = await frontmostApp() else { return nil }
         // A field that stops answering costs the turn half a second at most, and no later turn waits behind it.
         return await queue.run(within: .milliseconds(500)) { isWanted in
-            snapshot(app: app, while: isWanted)
+            let reading = snapshot(app: app, while: isWanted)
+            // A browser engine answers zero-size caret bounds until its full tree is on, so a caretless field turns it on.
+            if let reading, reading.caret == nil, !reading.isSecure,
+                FocusedFieldSnapshot.isTextEntry(reading.role)
+            {
+                fullTree.switchOn(
+                    processIdentifier: app.processIdentifier, bundleIdentifier: app.bundleIdentifier,
+                    host: fullTreeHost(app.processIdentifier))
+            }
+            return reading
         }
+    }
+
+    /// The full Accessibility trees the suggestion loop turned on, kept so stopping the loop turns them off.
+    private static let fullTree = FullTreeSwitch()
+
+    /// Turns off every browser engine's full tree the suggestion loop turned on.
+    public static func releaseFullTrees() {
+        fullTree.switchOffEverything(host: fullTreeHost)
+    }
+
+    /// One application's full-tree switches, each message capped so a stalled application cannot hold the caller.
+    private static func fullTreeHost(_ processIdentifier: Int32) -> FullTreeSwitch.Host {
+        let application = AXUIElementCreateApplication(processIdentifier)
+        _ = AXUIElementSetMessagingTimeout(application, elementTimeoutInSeconds)
+        return FullTreeSwitch.Host(
+            read: { attribute in
+                var value: AnyObject?
+                guard AXUIElementCopyAttributeValue(application, attribute as CFString, &value) == .success
+                else { return nil }
+                return (value as? NSNumber)?.boolValue
+            },
+            write: { attribute, isOn in
+                AXUIElementSetAttributeValue(
+                    application, attribute as CFString, isOn ? kCFBooleanTrue : kCFBooleanFalse) == .success
+            })
     }
 
     /// Its own thread for the wider walk, so an application slow to describe its window never holds up a field read.
