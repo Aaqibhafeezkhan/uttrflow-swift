@@ -46,11 +46,35 @@ struct MainNoticeTests {
         #expect(!drawings.contains { $0.symbolName.isEmpty })
     }
 
+    /// The first sentence is the notice's title and the rest sits under it, with no word lost.
+    @Test("a notice splits its sentence into a title and the line under it")
+    func splitsIntoTitleAndDetail() {
+        let notice = MainNotice(
+            message: "Microphone is off. Turn it on.", symbolName: "mic.slash", tone: .critical)
+        #expect(notice.headline == "Microphone is off.")
+        #expect(notice.detail == "Turn it on.")
+        let single = MainNotice(message: "Copied", symbolName: "doc.on.clipboard", tone: .neutral)
+        #expect(single.headline == "Copied")
+        #expect(single.detail == nil)
+    }
+
+    /// A refusal that says what would fix it offers that fix as the notice's button.
+    @Test("a refusal with a recovery offers it, and one without offers nothing")
+    func offersTheFailuresRecovery() {
+        let blocked = MainNotice(refusing: HotkeyError.observationNotPermitted)
+        #expect(blocked.action?.intent == .recover(.openSystemSettings(.accessibility)))
+        #expect(MainNotice(refusing: HistoryStoreError.couldNotWrite).action == nil)
+        #expect(MainNotice.action(for: .retry)?.title == "Try Again")
+        #expect(MainNotice.action(for: .pasteManually) == nil)
+        #expect(MainNotice.action(for: nil) == nil)
+    }
+
     @Test("a notice built from its parts keeps them")
     func keepsItsParts() {
         let notice = MainNotice(message: "No.", symbolName: "xmark", tone: .good)
         #expect(notice.message == "No.")
         #expect(notice.symbolName == "xmark")
         #expect(notice.tone == .good)
+        #expect(notice.action == nil)
     }
 }

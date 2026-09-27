@@ -136,28 +136,82 @@ struct MainCalloutView: View {
     }
 }
 
-/// The band above a page saying a change it was asked for did not happen.
+/// A glass notice in the window's top-right corner saying what happened, with a way on and a way to put it away.
 struct MainNoticeBar: View {
     let notice: MainNotice
+    var onIntent: (MainIntent) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: notice.symbolName)
-                .font(.system(size: 13))
-                .foregroundStyle(notice.tone.foreground)
-                .padding(.top, 1)
-            Text(notice.message)
-                .font(.system(size: MainMetrics.subheadSize))
-                // In the tone's own colour, not secondary: a refusal has to read unlike a caption.
-                .foregroundStyle(notice.tone.foreground)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+        HStack(alignment: .top, spacing: 12) {
+            MainTintedTile(symbolName: notice.symbolName, color: notice.tone.glow)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(notice.headline)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(PagePalette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button {
+                        onIntent(.dismissNotice)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(PagePalette.text.opacity(0.45))
+                            .frame(width: 16, height: 16)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss")
+                    .accessibilityLabel("Dismiss")
+                }
+                if let detail = notice.detail {
+                    Text(detail)
+                        .font(.system(size: 12))
+                        .lineSpacing(2)
+                        .foregroundStyle(PagePalette.text.opacity(0.65))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 3)
+                }
+                if let action = notice.action {
+                    HStack(spacing: 6) {
+                        Button(action.title) { onIntent(action.intent) }
+                            .buttonStyle(MainPrimaryButtonStyle(size: .compact))
+                        Button("Not now") { onIntent(.dismissNotice) }
+                            .buttonStyle(MainSecondaryButtonStyle(size: .compact))
+                    }
+                    .padding(.top, 10)
+                }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(notice.tone.background, in: .rect(cornerRadius: MainMetrics.cardRadius))
-        .accessibilityElement(children: .combine)
+        .padding(14)
+        .frame(width: 360, alignment: .leading)
+        .background { glass }
+        .clipShape(.rect(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(PagePalette.controlEdge, lineWidth: 1)
+        }
+        .shadow(color: PagePalette.floatShadow, radius: 25, y: 24)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(notice.message)
+    }
+
+    /// Frosted glass with the notice's colour glowing up from behind its tile.
+    private var glass: some View {
+        ZStack(alignment: .topLeading) {
+            Rectangle().fill(.ultraThinMaterial)
+            PagePalette.toastGlass
+            EllipticalGradient(
+                colors: [
+                    notice.tone.glow.opacity(0.3), notice.tone.glow.opacity(0.08),
+                    notice.tone.glow.opacity(0),
+                ],
+                center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5
+            )
+            .frame(width: 220, height: 180)
+            .offset(x: -90, y: -90)
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -285,9 +339,16 @@ struct MainActionButton: View {
     var isProminent = false
     var onIntent: (MainIntent) -> Void
 
+    /// The window's question host, when there is one; an action that asks first asks through it.
+    @Environment(MainConfirmationCenter.self) private var confirmations: MainConfirmationCenter?
+
     var body: some View {
         Button {
-            onIntent(action.intent)
+            if let confirmation = action.confirmation, let confirmations {
+                confirmations.ask(confirmation, before: action.intent)
+            } else {
+                onIntent(action.intent)
+            }
         } label: {
             if let symbol = action.symbolName {
                 Label(action.title, systemImage: symbol)

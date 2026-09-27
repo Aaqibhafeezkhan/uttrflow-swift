@@ -2119,6 +2119,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .signIn:
             // Onboarding owns the whole sign-in conversation, so this asks for it explicitly.
             presentOnboarding(skippingWelcome: true, askingToSignIn: true)
+        case .dismissNotice:
+            actionNotice = nil
+            redrawMainWindow()
         case .signOut:
             // Cleared first and the server told after, so signing out never waits on a network.
             account.profiles.clear()

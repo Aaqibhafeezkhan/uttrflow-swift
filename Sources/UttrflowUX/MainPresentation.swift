@@ -61,6 +61,8 @@ public enum MainIntent: Sendable, Equatable {
     case signIn
     /// End the session on this Mac.
     case signOut
+    /// Put away the notice in the window's corner.
+    case dismissNotice
 }
 
 /// Something a page offers the user to click.
@@ -86,6 +88,9 @@ public struct MainAction: Sendable, Equatable, Identifiable {
         self.intent = intent
         self.isDestructive = isDestructive
     }
+
+    /// What pressing it asks first, decided by its intent so every button for one act asks the same.
+    public var confirmation: MainConfirmation? { MainConfirmation.before(intent) }
 }
 
 /// A pane with nothing in it, or with something in the way, saying which of a dozen reasons applies.
@@ -122,6 +127,58 @@ public struct MainEmptyState: Sendable, Equatable {
         self.chips = chips
         self.progress = progress
         self.footnote = footnote
+    }
+}
+
+/// The question asked before a button does something that cannot be taken back.
+public struct MainConfirmation: Sendable, Equatable {
+    /// The question, ending in a question mark.
+    public let title: String
+    /// What happens and what stays.
+    public let message: String
+    /// The button that goes ahead.
+    public let confirmTitle: String
+    /// The button that changes nothing, which Return presses.
+    public let cancelTitle: String
+    /// The SF Symbol on the sheet's tile.
+    public let symbolName: String
+    /// The tile's colour.
+    public let tone: MainTone
+    /// Whether going ahead destroys something, which draws the confirm button in red.
+    public let isDestructive: Bool
+
+    /// Builds a question from its parts.
+    public init(
+        title: String, message: String, confirmTitle: String, cancelTitle: String = "Cancel",
+        symbolName: String, tone: MainTone, isDestructive: Bool
+    ) {
+        self.title = title
+        self.message = message
+        self.confirmTitle = confirmTitle
+        self.cancelTitle = cancelTitle
+        self.symbolName = symbolName
+        self.tone = tone
+        self.isDestructive = isDestructive
+    }
+
+    /// Settings' question in the same sheet, since whatever Settings asks first removes something.
+    public init(_ settings: SettingsConfirmation) {
+        self.init(
+            title: settings.title, message: settings.message, confirmTitle: settings.confirmTitle,
+            cancelTitle: settings.cancelTitle, symbolName: "trash", tone: .critical,
+            isDestructive: true)
+    }
+
+    /// Asked before signing out, because Uttrflow stops until the user signs in again.
+    public static let signOut = MainConfirmation(
+        title: "Sign out of Uttrflow?",
+        message: "Your dictations stay on this Mac. You’ll need to sign in again to keep using Uttrflow.",
+        confirmTitle: "Sign Out", symbolName: "rectangle.portrait.and.arrow.right", tone: .warning,
+        isDestructive: true)
+
+    /// What pressing a button for this intent asks first, or `nil` when it acts at once.
+    public static func before(_ intent: MainIntent) -> MainConfirmation? {
+        intent == .signOut ? signOut : nil
     }
 }
 
