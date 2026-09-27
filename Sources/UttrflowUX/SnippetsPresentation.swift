@@ -181,16 +181,18 @@ public enum SnippetsPresenter {
                 locale: locale)
         }
         let editor = snapshot.draft.map { self.editor(for: $0, in: snapshot) }
+        // The empty page is the title over the scene, whose own button is the one way to add.
+        let isBare = snapshot.snippets.isEmpty && editor == nil
 
         return SnippetsPresentation(
             chrome: MainPageChrome(
                 title: "Snippets",
-                caption: caption(for: snapshot.snippets.count),
+                caption: isBare ? nil : caption(for: snapshot.snippets.count),
                 search: snapshot.snippets.isEmpty
                     ? nil
                     : MainSearchField(placeholder: searchPlaceholder, query: snapshot.query),
-                addAction: MainAction(
-                    title: "New Snippet", symbolName: "plus", intent: .addSnippet)),
+                addAction: isBare
+                    ? nil : MainAction(title: "New Snippet", symbolName: "plus", intent: .addSnippet)),
             rows: rows,
             editor: editor,
             emptyState: rows.isEmpty && editor == nil ? emptyState(for: snapshot) : nil,

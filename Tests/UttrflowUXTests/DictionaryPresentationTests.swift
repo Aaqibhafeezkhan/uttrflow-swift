@@ -132,10 +132,11 @@ struct DictionaryPageTests {
         #expect(HistoryFixture.dictionary(entries: [HistoryFixture.word()]).chrome.search != nil)
     }
 
-    /// Adding is always offered, including from the empty page: a dictionary you cannot start is none.
+    /// Adding is always offered: from the empty page's own button, and from the title bar once there are words.
     @Test("adding a word is always offered")
     func add() {
-        #expect(HistoryFixture.dictionary().chrome.addAction?.intent == .addWord)
+        #expect(HistoryFixture.dictionary().chrome.addAction == nil)
+        #expect(HistoryFixture.dictionary().emptyState?.action?.intent == .addWord)
         #expect(
             HistoryFixture.dictionary(entries: [HistoryFixture.word()]).chrome.addAction?.intent
                 == .addWord)
@@ -381,9 +382,9 @@ struct DictionaryFilterTests {
     @Test("there are no chips while there are no words")
     func noChips() {
         #expect(HistoryFixture.dictionary().filters.isEmpty)
-        #expect(
-            HistoryFixture.dictionary().chrome.caption
-                == "Names and terms Uttrflow would otherwise get wrong.")
+        #expect(HistoryFixture.dictionary().chrome.caption == nil)
+        let editing = DictionaryPresenter.page(for: DictionarySnapshot(draft: DictionaryDraft(), now: .now))
+        #expect(editing.chrome.caption == "Names and terms Uttrflow would otherwise get wrong.")
     }
 
     @Test("a chip with nothing under it says so and keeps the page")

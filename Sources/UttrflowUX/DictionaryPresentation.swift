@@ -251,15 +251,17 @@ public enum DictionaryPresenter {
         let rows = listed.map { row(for: $0, locale: locale) }
         let editor = snapshot.draft.map { self.editor(for: $0, in: snapshot) }
         let today = fixedToday(in: snapshot, calendar: calendar)
+        // The empty page is the title over the scene, whose own button is the one way to add.
+        let isBare = snapshot.entries.isEmpty && editor == nil
 
         return DictionaryPresentation(
             chrome: MainPageChrome(
                 title: "Dictionary",
-                caption: caption(for: snapshot.entries.count),
+                caption: isBare ? nil : caption(for: snapshot.entries.count),
                 search: snapshot.entries.isEmpty
                     ? nil
                     : MainSearchField(placeholder: searchPlaceholder, query: snapshot.query),
-                addAction: MainAction(title: "Add Word", symbolName: "plus", intent: .addWord)),
+                addAction: isBare ? nil : MainAction(title: "Add Word", symbolName: "plus", intent: .addWord)),
             fixesLabel: today.isEmpty
                 ? nil
                 : "Fixed today · \(MainFormatting.count(today.count, "correction", "corrections"))",
