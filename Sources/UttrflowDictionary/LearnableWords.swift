@@ -89,13 +89,21 @@ struct SightingLedger: Sendable {
     }
 
     private var sightings: [String: Sighting] = [:]
-    /// Words the user has deleted since Uttrflow started, refused for the rest of the run.
+    /// Words the user has deleted, which the store writes down so a relaunch still refuses them.
     private var refused: Set<String> = []
     /// The refused words oldest first, so the bound lapses the refusal made longest ago.
     private var refusalOrder: [String] = []
 
+    /// Starts with the refusals a previous run wrote down, oldest first, keeping only the newest the bound allows.
+    init(refusing earlier: [String] = []) {
+        for word in earlier { refuse(word) }
+    }
+
     /// How many refusals the ledger holds now.
     var refusalCount: Int { refused.count }
+
+    /// The refused words oldest first, which is what the store writes down.
+    var refusals: [String] { refusalOrder }
 
     /// Stops counting a word and stops it being counted again; what a deletion reaches.
     mutating func refuse(_ word: String) {

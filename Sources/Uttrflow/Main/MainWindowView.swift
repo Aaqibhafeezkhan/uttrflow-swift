@@ -22,6 +22,9 @@ struct MainWindowView: View {
                 account: model.content.home.account,
                 picture: model.content.account.identity?.picture,
                 isExpanded: model.isSidebarExpanded,
+                // The page on screen, so the highlight moves with it rather than with the next redraw.
+                selection: model.showsSettings
+                    ? .settings(model.settings?.session.tab ?? .general) : .page(model.page),
                 onSelect: { destination in
                     switch destination {
                     case .page(let page):

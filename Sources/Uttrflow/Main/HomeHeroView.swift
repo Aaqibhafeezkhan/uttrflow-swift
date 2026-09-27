@@ -20,7 +20,7 @@ struct HomeHeroCard: View {
         VStack(alignment: .leading, spacing: 0) {
             headline
             features
-                .padding(.top, 12)
+                .padding(.top, 6)
                 .padding(.bottom, 20)
             if let status = hero.modelStatus {
                 HomeModelStatusView(status: status)
@@ -51,9 +51,14 @@ struct HomeHeroCard: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(PagePalette.dictation.opacity(0.28), lineWidth: 1)
         }
-        .shadow(
-            color: PagePalette.dictation.opacity(isDark ? 0.18 : 0.22), radius: isDark ? 20 : 14,
-            y: isDark ? 0 : 8)
+        // Cast by a plain shape underneath, so a moving bar in the card never re-renders the shadow.
+        .background {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(PagePalette.hero)
+                .shadow(
+                    color: PagePalette.dictation.opacity(isDark ? 0.18 : 0.22), radius: isDark ? 20 : 14,
+                    y: isDark ? 0 : 8)
+        }
     }
 
     private var isDark: Bool { colorScheme == .dark }

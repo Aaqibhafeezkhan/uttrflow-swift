@@ -96,8 +96,8 @@ public struct HomeModelStatus: Sendable, Equatable {
         let size = bytes.map { MenuBarPresenter.size(of: $0) }
         return HomeModelStatus(
             title: "Speech model not installed",
-            subtitle: ["Dictation needs it", size, "works offline after"].compactMap(\.self)
-                .joined(separator: " · "),
+            subtitle: "Dictation needs it · "
+                + (size.map { "\($0), works offline after" } ?? "works offline after"),
             tone: .warning, progress: nil,
             action: MainAction(title: "Download speech model", intent: .recover(.downloadSpeechModel)),
             accessibilityLabel:

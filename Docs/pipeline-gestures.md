@@ -100,7 +100,8 @@ honest response. The controller is generic over its clock so this rule tests exa
 instantly.
 
 A slip is cancelled only when it is neither half of a pair nor made while hands-free — see below,
-because the same 200 ms that decides a slip is what makes a tap countable.
+because the same 200 ms that decides a slip is what makes a tap countable. With hands-free
+switched off there is no pair, so every short tap is an ordinary slip.
 
 A binding made only of modifiers waits out the same 200 ms before a press opens anything, so
 another app's shortcut on those modifiers can arrive first and withdraw it. See
@@ -143,8 +144,14 @@ open the microphone as usual:
 - a click on a control: the menu bar's Stop Dictation, the panel's dictate button, Retry;
 - the cap, which finishes the recording and keeps its words (`Docs/stuck-recording.md`);
 - a change of activation mode;
+- switching Hands-free off in Settings, which finishes the recording and keeps its words;
 - the pipeline ending the recording on its own, such as a cancel: the next press notices the
   microphone is closed and forgets hands-free before acting.
+
+**It can be switched off.** Settings › General › Hands-free is `Settings.handsFreeEnabled`, on by
+default, and reaches the controller through `setHandsFreeEnabled(_:)`, queued like a change of
+mode. Off, `endHold()` never pairs two taps and `endTapThatNeverOpened()` does nothing, so a
+double tap is two slips and the microphone never stays open.
 
 **It exists in hold-to-talk only**, and that is not an omission. `endHold()` is reached from
 `(.holdToTalk, .released)` and nothing else — in press-to-toggle a release does nothing at all,

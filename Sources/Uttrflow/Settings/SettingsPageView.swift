@@ -12,7 +12,12 @@ struct SettingsPageView: View {
     var searchFocusRequest = 0
     var onIntent: (MainIntent) -> Void = { _ in }
 
+    /// Rises about once a minute while suggestions are paused, so the countdown and its button keep up.
+    @State private var pauseTick = 0
+
     var body: some View {
+        // Read so a tick redraws the page; the presentation is taken at the moment it is drawn.
+        let _ = pauseTick
         let presentation = model.session.presentation
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -45,7 +50,31 @@ struct SettingsPageView: View {
         .padding(.top, SettingsMetrics.topInset)
         .padding(.horizontal, 34)
         .foregroundStyle(PagePalette.text)
+        // Over the whole page rather than the scrolled column, so the question is centred in what is seen.
+        .overlay {
+            if let asked, let confirmation = asked.confirmation {
+                ConfirmationSheet(
+                    confirmation: MainConfirmation(confirmation),
+                    onCancel: { model.dismissRemoval() },
+                    onConfirm: { model.confirm(asked) })
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: asked)
+        .task(id: model.session.settings.suggestions.pausedUntil) { await followThePause() }
     }
+
+    /// Ticks until a running pause has lifted, then stops; nothing runs while there is no pause.
+    private func followThePause() async {
+        while let until = model.session.settings.suggestions.pausedUntil, until > Date() {
+            let wait = min(60, until.timeIntervalSinceNow) + 0.5
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled else { return }
+            pauseTick &+= 1
+        }
+    }
+
+    /// What is being asked, if anything; the session knows which button was pressed.
+    private var asked: SettingsRemoval? { model.session.pendingRemoval }
 
     private var header: some View {
         HStack(spacing: 16) {
@@ -73,10 +102,13 @@ struct SettingsSearchField: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13))
                 .foregroundStyle(PagePalette.faint)
-            TextField(SettingsPresenter.searchPlaceholder, text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .focused($isFocused)
+            TextField(
+                SettingsPresenter.searchPlaceholder, text: $query,
+                prompt: Text(SettingsPresenter.searchPlaceholder).foregroundStyle(PagePalette.faint)
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .focused($isFocused)
             if query.isEmpty {
                 Text("⌘F")
                     .font(.system(size: 11, weight: .medium))
@@ -142,6 +174,8 @@ struct SettingsTabStrip: View {
                             .lineLimit(1)
                             .fixedSize()
                     }
+                    // Room either side of the words, so the chosen tab's fill never touches them.
+                    .padding(.horizontal, 8)
                     .foregroundStyle(isSelected ? SettingsPalette.inverseInk : SettingsPalette.ink(0.62))
                     .frame(maxWidth: .infinity)
                     .frame(height: 32)

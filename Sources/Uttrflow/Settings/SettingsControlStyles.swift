@@ -236,7 +236,7 @@ struct SettingsChipView: View {
             if let onRemove {
                 Button(action: onRemove) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(PagePalette.faint)
                         .frame(width: 14, height: 14)
                         .contentShape(.rect)

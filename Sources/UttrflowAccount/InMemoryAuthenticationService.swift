@@ -18,7 +18,7 @@ public final class InMemoryAuthenticationService: AuthenticationService {
     /// A month: the backstop that stops a cancelled subscription running for ever, not a session timeout.
     public static let defaultLifetime: TimeInterval = 30 * 24 * 60 * 60
 
-    /// A host in the reserved `.invalid` domain, so the app rehearses opening a page that resolves nowhere.
+    /// A host in the reserved `.invalid` domain, so the challenge's address resolves nowhere if anything opens it.
     public static let developmentEndpoint = safeURL("https://sign-in.invalid/uttrflow")
 
     /// Everything that changes, behind a `Mutex` because nothing done with it is slow enough for an actor.
@@ -62,12 +62,15 @@ public final class InMemoryAuthenticationService: AuthenticationService {
         Ed25519EntitlementVerifier(publicKey: signingKey.publicKey)
     }
 
-    /// Issues a state and a page to open.
+    /// Always, as no provider is asked.
+    public var signsInAsStandIn: Bool { true }
+
+    /// Issues a state and a stand-in challenge that needs no browser.
     public func beginSignIn(with provider: SignInProvider) async throws(AccountError) -> SignInChallenge {
         let state = UUID().uuidString
         progress.withLock { $0.pendingState = state }
         return SignInChallenge(
-            authorisationURL: authorisationURL(for: provider, state: state), state: state)
+            authorisationURL: authorisationURL(for: provider, state: state), state: state, method: .standIn)
     }
 
     /// Mints a profile for the attempt whose state matches; a mismatch is refused, as in the release build.

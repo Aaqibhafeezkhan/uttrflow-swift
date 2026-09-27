@@ -419,4 +419,13 @@ struct SuggestionGeometryTests {
         #expect(
             one != SuggestionAnchor(placement: .inlineGhost, frame: CGRect(x: 9, y: 9, width: 9, height: 9)))
     }
+
+    @Test("A ghost fits only when all of it is inside the room, so none of what Tab inserts is ever cut off")
+    func aGhostFitsOnlyWhole() {
+        #expect(SuggestionGeometry.fits(120, in: 120))
+        #expect(SuggestionGeometry.fits(80, in: 120))
+        #expect(!SuggestionGeometry.fits(120.5, in: 120))
+        #expect(!SuggestionGeometry.fits(.infinity, in: 120))
+        #expect(!SuggestionGeometry.fits(.nan, in: 120))
+    }
 }

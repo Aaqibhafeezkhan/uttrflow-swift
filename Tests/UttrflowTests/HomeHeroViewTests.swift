@@ -1,6 +1,7 @@
 // Tests for what home's views decide: the waveform's bars, the loading bar, the tile columns and the mood pictures.
 
 import AppKit
+import ImageIO
 import Testing
 import UttrflowUX
 
@@ -40,14 +41,47 @@ struct HomeHeroViewTests {
         #expect(HomeStatTileView.columns(forWidth: four - 1) == 2)
     }
 
-    @Test("every mood's picture ships in the bundle")
-    func moodPictures() {
+    @Test("every mood's picture ships, decoded no larger than it is drawn, and only the latest is kept")
+    func moodPictures() async {
         for mood in HomeMood.allCases {
-            let image = MoodPictures.image(for: mood)
-            #expect(image != nil, "\(mood.imageName) is missing")
-            #expect((image?.size.width ?? 0) > 0)
-            #expect(MoodPictures.image(for: mood) === image)
+            let picture = await MoodPictures.picture(for: mood)
+            #expect(picture != nil, "\(mood.imageName) is missing")
+            let image = picture?.image
+            #expect(max(image?.width ?? 0, image?.height ?? 0) <= MoodPictures.pixels)
+            #expect(Double(image?.width ?? 0) >= HomeMoodPicture.widest * 2 - 1)
+            #expect(MoodPictures.cached(for: mood)?.image === image)
         }
+        #expect(MoodPictures.cached(for: .morning) == nil)
+    }
+
+    @Test("four tiles take one row where they fit and two rows where they do not, with no measuring pass")
+    func tileGridRows() {
+        let four = HomeStatTileView.narrowest * 4 + HomeTileGrid.spacing * 3
+        #expect(HomeTileGrid.rows(count: 4, width: four) == 1)
+        #expect(HomeTileGrid.rows(count: 4, width: four - 1) == 2)
+        #expect(HomeTileGrid.rows(count: 0, width: four) == 0)
+    }
+
+    @Test("each rail dot takes the colour of the line where it sits: teal, blue, then lilac")
+    func railDots() {
+        #expect((0..<3).map { HomeActivityCard.railStop(at: $0, of: 3) } == [0, 1, 2])
+        #expect((0..<2).map { HomeActivityCard.railStop(at: $0, of: 2) } == [0, 2])
+        #expect(HomeActivityCard.railStop(at: 0, of: 1) == 0)
+    }
+
+    @Test("an account picture is decoded to avatar size and kept for the same bytes")
+    func accountPicture() async throws {
+        let image = try #require(await MoodPictures.picture(for: .evening)?.image)
+        let data = NSMutableData()
+        let destination = try #require(
+            CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, nil)
+        #expect(CGImageDestinationFinalize(destination))
+        let bytes = data as Data
+        let avatar = try #require(await AccountPictures.image(for: bytes))
+        #expect(max(avatar.width, avatar.height) <= AccountPictures.pixels)
+        #expect(AccountPictures.cached(for: bytes) === avatar)
+        #expect(AccountPictures.cached(for: Data([1, 2, 3])) == nil)
     }
 
     @Test("each stat tile has its own icon")
