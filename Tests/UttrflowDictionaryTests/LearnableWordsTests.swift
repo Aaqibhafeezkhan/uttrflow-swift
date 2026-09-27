@@ -411,3 +411,26 @@ struct SightingLedgerTests {
         #expect(ledger.refusalCount == 1)
     }
 }
+
+@Suite("Digits inside a learnable word")
+struct DigitBearingWordTests {
+    @Test("Keeps a digit as part of the word it sits in")
+    func keepsDigits() {
+        #expect(
+            LearnableWords.words(in: "GPT4 iOS17, Web3 PROJ-123", atMost: 8) == [
+                "GPT4", "iOS17", "Web3", "PROJ", "123",
+            ])
+    }
+
+    @Test("Learns a correction to a digit-bearing spelling whole")
+    func correctionKeepsDigits() {
+        #expect(LearnableWords.corrected(over: "gpt", wrote: "GPT4") == "GPT4")
+    }
+
+    @Test("Considers a digit-bearing title term whole")
+    func titleTermKeepsDigits() {
+        let found = LearnableWords.seenAndSaid(
+            heard: "ask about pgvector", seeing: .fixture(documentName: "pgvector2 notes"))
+        #expect(found == ["pgvector2"])
+    }
+}

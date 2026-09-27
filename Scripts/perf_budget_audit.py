@@ -60,12 +60,18 @@ WAKEUPS_ALLOWED = {
     ("Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift", ".milliseconds(max(delay, 1))"): (
         "books one turn after a pause in typing, calling the other `wake` overload once; each keystroke replaces it"
     ),
+    ("Sources/UttrflowPredict/IdleRelease.swift", "wait"): (
+        "sleeps until the idle window can run out, never under a tenth of it (18 s), and ends once the model is let go"
+    ),
+    ("Sources/UttrflowSpeech/BackedSpeechEngine.swift", "wait"): (
+        "sleeps until the speech model's ten-minute idle window can run out, and ends once the model is let go"
+    ),
 }
 
 # Loops whose interval is a stored value, checked against the constant that supplies it.
 WAKEUPS_BOUND_BY = {
     ("Sources/UttrflowClipboard/PasteboardWatcher.swift", "interval"): "PasteboardWatcher.pollInterval",
-    ("Sources/UttrflowPredict/IdleRelease.swift", "interval"): "IdleRelease.tight / 4",
+    ("Sources/Uttrflow/UsageTelemetry.swift", "interval"): "UsageTelemetry.flushInterval",
 }
 
 # Known breaches of the budget, each open under the issue that fixes it; a listed breach that is gone fails as stale.
@@ -742,7 +748,7 @@ INJECTIONS = (
     ),
     (
         "Sources/Uttrflow/Dock/DockView.swift",
-        "paused: !motion.workingDotsMove", "paused: false", "motion",
+        "paused: !motion.workingBarsMove", "paused: false", "motion",
     ),
     (
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",

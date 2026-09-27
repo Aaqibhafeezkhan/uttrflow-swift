@@ -160,6 +160,8 @@ final class MainWindowController {
         self.window = window
         // Asked for explicitly: opened from the menu bar or the Dock, nothing else brings the app forward.
         NSApplication.shared.activate()
+        // Each opening asks again, so an app installed or launched since shows its real icon.
+        if !window.isVisible { ApplicationIcons.shared.forget() }
         window.makeKeyAndOrderFront(nil)
     }
 

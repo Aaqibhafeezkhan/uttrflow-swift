@@ -33,6 +33,19 @@ struct TurnGateTests {
         #expect(!gate.isRunning)
     }
 
+    @Test("An abandoned turn stops being current, ends without effect, and the next turn is admitted free.")
+    func anAbandonedTurnIsLeftBehind() {
+        var gate = TurnGate()
+        #expect(gate.begin(at: moment) == .free(1))
+        gate.abandon()
+        #expect(!gate.isCurrent(1))
+        #expect(!gate.isRunning)
+        let staleEnded = gate.end(1)
+        #expect(!staleEnded)
+        #expect(gate.begin(at: moment.addingTimeInterval(1)) == .free(2))
+        #expect(!gate.isCurrent(1))
+    }
+
     @Test("A turn left behind stops being current, so it can ask before it touches anything.")
     func aStalledTurnIsNotCurrent() {
         var gate = TurnGate()

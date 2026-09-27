@@ -107,6 +107,9 @@ milliseconds, not hundreds.
    `clamp(typicalLength / 2, 24, 96)` when the register knows a typical length, else 32
    for symbolic text, 48 for a conversation and 64 otherwise; the alternatives pass gets
    three times that, and every pass is capped at 128.
+   The window title and the leading suggestion the alternatives pass excludes are the two
+   spans the prompt quotes, and a literal `"` in either is made `'` first, so text from the
+   screen cannot close the quote and write an instruction of its own.
 5. **Emotion and tone are the model's job, not a classifier's.** Given the last messages
    and this person's earlier replies, the 4B infers register; there is no sentiment
    module, because one would be a second hardcoded thing to be wrong. The evaluation set

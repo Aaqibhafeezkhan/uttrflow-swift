@@ -76,6 +76,21 @@ struct WindowLifetimeTests {
             network: AlwaysReachable())
     }
 
+    @Test("a second onboarding request reuses the open controller instead of building another")
+    func overlappingOnboardingReusesOpenController() {
+        var made = 0
+        var slot: OnboardingWindowController?
+        for _ in 0..<2 {
+            let (controller, isNew) = OnboardingWindowController.reusing(slot) {
+                made += 1
+                return onboardingController()
+            }
+            if isNew { slot = controller }
+            #expect(controller === slot)
+        }
+        #expect(made == 1)
+    }
+
     @Test("finishing onboarding reloads settings after closing releases its owner")
     func finishingOnboardingKeepsFinishCallback() throws {
         let settingsStore = UserDefaultsSettingsStore(store: MemoryDefaults())

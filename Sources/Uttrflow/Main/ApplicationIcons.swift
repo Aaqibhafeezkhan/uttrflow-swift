@@ -11,7 +11,7 @@ struct ApplicationIconSource {
     var installed: @MainActor (String) -> NSImage?
 }
 
-/// The real icons from `NSWorkspace`, remembered while the window is open, misses included.
+/// The real icons from `NSWorkspace`, misses included, remembered until the main window is next brought up.
 @MainActor
 final class ApplicationIcons {
     static let shared = ApplicationIcons()
@@ -37,5 +37,10 @@ final class ApplicationIcons {
             ?? (name.isEmpty ? nil : source.running(name) ?? source.installed(name))
         known[key] = found
         return found
+    }
+
+    /// Drops every remembered answer, so the next lookup asks `NSWorkspace` again.
+    func forget() {
+        known.removeAll()
     }
 }

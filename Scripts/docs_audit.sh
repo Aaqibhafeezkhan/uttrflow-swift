@@ -672,13 +672,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. The worktree cleanup recipe must wait for a merged pull request.
+# 4. The worktree cleanup recipe must keep the pull request's remote branch.
 # ---------------------------------------------------------------------------
 #
-# The contributor recipe once opened a pull request and immediately deleted the worktree,
-# local branch and remote branch. `git branch -d` does not prove the branch reached `main`;
-# it can succeed when the local branch is merely merged to its upstream. The doc must keep
-# every cleanup command below a GitHub merged-state check.
+# The remote branch is the pull request's source ref, open or merged, and it is never
+# deleted. The local worktree and branch are disposable once the branch is pushed and the
+# pull request exists, so the recipe may clean them up then — but only after both, and it
+# must never carry a command that deletes the remote branch.
 printf '\nWorktree cleanup order\n'
 
 read -r -d '' CLEANUP_PROGRAM <<'PYTHON' || true
@@ -693,11 +693,11 @@ if start == -1 or end == -1:
 
 section = text[start:end]
 required = [
+    ("branch push", r"^git push -u origin"),
     ("pull request creation", r"^gh pr create --base main"),
-    ("GitHub merge-state check", r"^gh pr view [^\n]*--json mergedAt"),
     ("worktree removal", r"^git worktree remove"),
     ("local branch deletion", r"^git branch -[dD]"),
-    ("remote branch deletion", r"^git push origin --delete"),
+    ("the never-delete rule", r"Remote branches are never deleted"),
 ]
 
 positions = {}
@@ -708,26 +708,26 @@ for name, pattern in required:
     else:
         positions[name] = match.start()
 
-merge = positions.get("GitHub merge-state check")
-if merge is not None:
-    for name in ("worktree removal", "local branch deletion", "remote branch deletion"):
-        where = positions.get(name)
-        if where is not None and where < merge:
-            print(f"AGENTS.md  {name} appears before the GitHub merge-state check")
-
 create = positions.get("pull request creation")
-if create is not None and merge is not None and merge < create:
-    print("AGENTS.md  merge-state check appears before pull request creation")
+push = positions.get("branch push")
+for name in ("worktree removal", "local branch deletion"):
+    where = positions.get(name)
+    for before, label in ((push, "branch push"), (create, "pull request creation")):
+        if where is not None and before is not None and where < before:
+            print(f"AGENTS.md  {name} appears before {label}")
+
+if re.search(r"^git push origin --delete", section, re.MULTILINE):
+    print("AGENTS.md  the recipe deletes the remote branch, which is the pull request's source ref")
 PYTHON
 cleanup_order="$(python3 -c "$CLEANUP_PROGRAM")"
 
 if [[ -n "${cleanup_order//[[:space:]]/}" ]]; then
-    fail "the worktree cleanup recipe can delete a pull request branch before it is merged" \
-        "Keep the worktree and both feature-branch refs while the pull request is open." \
-        "Verify through GitHub that the pull request has merged before cleanup commands." \
+    fail "the worktree cleanup recipe can lose a pull request's branch" \
+        "Push the branch and open the pull request before removing the local worktree and branch," \
+        "and never delete the remote branch: it is the pull request's source ref, open or merged." \
         "" $'\n'"$cleanup_order"
 else
-    pass "branch cleanup follows GitHub merge verification in AGENTS.md"
+    pass "the cleanup recipe keeps the remote branch and cleans up only after the pull request exists"
 fi
 
 # ---------------------------------------------------------------------------

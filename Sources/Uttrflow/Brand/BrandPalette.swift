@@ -16,6 +16,13 @@ struct BrandTone: Sendable, Equatable {
     }
 }
 
+/// A tone drawn at an opacity that can differ between the appearances.
+struct BrandLayer: Sendable, Equatable {
+    let tone: BrandTone
+    let darkOpacity: Double
+    let lightOpacity: Double
+}
+
 /// The single source of truth for colour. See `Docs/app-main-window.md`.
 enum BrandPalette {
     /// The brand teal and the ramp derived from it.
@@ -38,12 +45,8 @@ enum BrandPalette {
         static let wash: UInt32 = 0xEF_F8F7
         /// Ink on a teal fill.
         static let inkOnFill: UInt32 = 0x04_332F
-        /// Ink for the mark inside the dock's teal disc.
-        static let inkOnDisc: UInt32 = 0x04_100F
         /// The accent as a mark on a surface that follows the appearance.
         static let ink = BrandTone(dark: bright, light: 0x0E_6B64)
-        /// The waveform, deepened on a light desktop.
-        static let waveform = BrandTone(dark: 0x00_C3D0, light: 0x06_7A87)
         /// The callout ground behind secondary ink.
         static let calloutWash = BrandTone(dark: 0x10_1E1D, light: wash)
         /// The onboarding and settings rail, top to bottom.
@@ -116,5 +119,50 @@ enum BrandPalette {
         static let criticalInk = BrandTone(dark: 0xFF_6B6E, light: 0xB0_161A)
         /// The dock's failure disc, deep enough that its white glyph clears 3:1. See `Docs/app-dock.md`.
         static let warningFill: UInt32 = 0xC2_5E00
+    }
+
+    /// The redesign's tokens; no screen draws them yet. See `Docs/redesign-tokens.md`.
+    enum Redesign {
+        /// The page behind everything.
+        static let pageGround = BrandTone(dark: 0x0B_0C10, light: 0xF2_F1EC)
+        /// The window body the page sits in.
+        static let windowGround = BrandTone(dark: 0x0C_0D14, light: 0xF2_F1EC)
+        /// A card: a faint white film when dark, solid white when light.
+        static let cardFill = BrandLayer(tone: BrandTone(0xFF_FFFF), darkOpacity: 0.035, lightOpacity: 1)
+        /// The hairline around a card.
+        static let hairline = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0xDE_DCD4), darkOpacity: 0.08, lightOpacity: 1)
+        /// The sidebar island, which stays dark in the light appearance.
+        static let sidebarIsland = BrandLayer(
+            tone: BrandTone(dark: 0x10_0F1C, light: 0x12_101E), darkOpacity: 0.92, lightOpacity: 1)
+        /// Headline and body text.
+        static let textStrong = BrandTone(dark: 0xFF_FFFF, light: 0x10_1316)
+        /// Secondary text.
+        static let textSoft = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x5C_6866), darkOpacity: 0.72, lightOpacity: 1)
+        /// The quietest text.
+        static let textQuiet = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x5C_6866), darkOpacity: 0.55, lightOpacity: 1)
+        /// Dictation's accent.
+        static let dictationAccent = BrandTone(dark: 0x5F_E0D3, light: 0x12_8077)
+        /// The accent for AI suggestions.
+        static let suggestionAccent = BrandTone(dark: 0xC4_9BF5, light: 0x7A_4FC4)
+        /// The clipboard's accent.
+        static let clipboardAccent = BrandTone(dark: 0xFF_B05C, light: 0xB5_650F)
+        /// The accent for information.
+        static let infoAccent = BrandTone(dark: 0x6B_B4F5, light: 0x1E_6FC4)
+        /// The aurora gradient's stops, first to last, in both appearances.
+        static let auroraStops: [UInt32] = [0x7A_3FD1, 0x4B_3FC0, 0x1F_8FB0, 0x2F_E0CF]
+        /// The floating button's glass over the system material: violet-black when dark, frosted white when light.
+        static let dockGlass = BrandLayer(
+            tone: BrandTone(dark: 0x10_0D1E, light: 0xFF_FFFF), darkOpacity: 0.72, lightOpacity: 0.9)
+        /// The hairline round the floating button's glass.
+        static let dockGlassEdge = BrandLayer(
+            tone: BrandTone(dark: 0xFF_FFFF, light: 0x10_1316), darkOpacity: 0.14, lightOpacity: 0.1)
+        /// The floating button's shadow, lighter on a light desktop.
+        static let dockShadow = BrandLayer(
+            tone: BrandTone(dark: 0x00_0000, light: 0x10_1316), darkOpacity: 0.5, lightOpacity: 0.22)
+        /// The listening meter: white on the dark glass, dictation teal on the light.
+        static let dockMeter = BrandTone(dark: textStrong.dark, light: dictationAccent.light)
     }
 }

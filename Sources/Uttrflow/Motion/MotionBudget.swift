@@ -30,8 +30,8 @@ struct MotionBudget: Equatable {
         !reducesMotion && energy.allowsDiscretionaryWork
     }
 
-    /// Whether the working dots walk; Reduce Motion holds them still.
-    var workingDotsMove: Bool {
+    /// Whether the working bars rise and settle; Reduce Motion holds them still.
+    var workingBarsMove: Bool {
         !reducesMotion
     }
 

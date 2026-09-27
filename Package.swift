@@ -71,6 +71,8 @@ let package = Package(
         // so a floating version means the bytes linked into a signed build can change
         // without anything in this repository changing.
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.7.2"),
+        // Opt-in crash and hang reports. Confined to UttrflowDiagnostics; see Docs/crash-reporting.md.
+        .package(url: "https://github.com/getsentry/sentry-cocoa", exact: "9.29.2"),
     ],
     targets: [
         // Platform-free domain layer: protocols, models, errors. Imports nothing but the stdlib.
@@ -281,6 +283,13 @@ let package = Package(
             swiftSettings: sharedSwiftSettings
         ),
 
+        // Opt-in crash reports: the only target that links the crash reporter, so nothing else can call it.
+        .target(
+            name: "UttrflowDiagnostics",
+            dependencies: [.product(name: "Sentry", package: "sentry-cocoa")],
+            swiftSettings: sharedSwiftSettings
+        ),
+
         // The app itself. Owns nothing but the wiring: everything worth testing lives
         // in a module a test can reach without a screen.
         .executableTarget(
@@ -290,7 +299,7 @@ let package = Package(
                 "UttrflowAccount", "UttrflowClipboard", "UttrflowDictionary",
                 "UttrflowHistory", "UttrflowLocalModel", "UttrflowPermissions", "UttrflowPipeline",
                 "UttrflowPredict", "UttrflowPredictCapture", "UttrflowPredictStore",
-                "UttrflowSettings", "UttrflowSpeech", "UttrflowUX",
+                "UttrflowDiagnostics", "UttrflowSettings", "UttrflowSpeech", "UttrflowUX",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             // The mark, for the panel and the menu bar slot. The bare monogram rather
@@ -314,6 +323,11 @@ let package = Package(
             swiftSettings: mlxSwiftSettings
         ),
 
+        .testTarget(
+            name: "UttrflowDiagnosticsTests",
+            dependencies: ["UttrflowDiagnostics"],
+            swiftSettings: sharedSwiftSettings
+        ),
         .testTarget(
             name: "UttrflowCoreTests",
             dependencies: ["UttrflowCore", "UttrflowTestSupport"],

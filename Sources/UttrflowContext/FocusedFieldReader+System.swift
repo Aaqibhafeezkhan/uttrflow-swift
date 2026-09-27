@@ -127,11 +127,12 @@ public enum FocusedFieldReader {
         let declaredSecure = SecureField.isDeclaredSecure(
             role: role, subrole: subrole, identifier: identifier, placeholder: placeholder,
             description: description)
-        let value = declaredSecure ? nil : SurfaceProbe.string(field, kAXValueAttribute)
+        let range = SurfaceProbe.selectedRange(field)
+        let read = declaredSecure ? (value: nil, selection: nil) : boundedValue(of: field, at: range)
+        let value = read.value
         let secure = declaredSecure || (value.map(SecureField.looksMasked) ?? false)
         // Checked between messages: a turn that has given up should not pay for the rest of them.
         guard isWanted() else { return nil }
-        let range = SurfaceProbe.selectedRange(field)
         let style = range.flatMap { typeStyle(field, at: $0) }
         guard isWanted() else { return nil }
         let flipped = cachedPrimaryScreenMaxY.withLock { $0 }
@@ -158,10 +159,10 @@ public enum FocusedFieldReader {
             accessibilityDescription: description,
             document: tail.document,
             value: secure ? nil : value,
-            selection: range.map { NSRange(location: $0.location, length: $0.length) },
-            caret: tail.caret.map { flip($0, below: flipped) },
-            window: tail.window.map { flip($0, below: flipped) },
-            field: tail.frame.map { flip($0, below: flipped) },
+            selection: read.selection,
+            caret: range.flatMap { caret(field, at: $0) }.map { flip($0, below: flipped) },
+            window: windowFrame(of: field).map { flip($0, below: flipped) },
+            field: fieldFrame(of: field).map { flip($0, below: flipped) },
             pointSize: style?.size,
             fontFamily: style?.family,
             textColor: style?.color,
@@ -172,6 +173,22 @@ public enum FocusedFieldReader {
             readMicroseconds: Int((DispatchTime.now().uptimeNanoseconds - started) / 1000),
             windowTitle: tail.title
         )
+    }
+
+    /// The field's value around the caret, with the selection moved into it, so a long scrollback is never copied whole.
+    private static func boundedValue(
+        of field: AXUIElement, at range: CFRange?
+    ) -> (value: String?, selection: NSRange?) {
+        let selection = range.map { NSRange(location: $0.location, length: $0.length) }
+        let count: Int? = selection == nil ? nil : SurfaceProbe.integer(field, kAXNumberOfCharactersAttribute)
+        return ValueWindow.read(
+            count: count, selection: selection,
+            whole: { SurfaceProbe.string(field, kAXValueAttribute) },
+            part: { window in
+                SurfaceProbe.parameterized(
+                    field, kAXStringForRangeParameterizedAttribute,
+                    CFRange(location: window.location, length: window.length)) as? String
+            })
     }
 
     /// Accessibility measures from the top of the primary screen; AppKit measures from the bottom.
@@ -271,16 +288,20 @@ public enum FocusedFieldReader {
         static func == (lhs: AXNode, rhs: AXNode) -> Bool { CFEqual(lhs.element, rhs.element) }
     }
 
-    /// Everything the collector asks one element, fetched in a single message the first time any of it is needed.
+    /// What the collector asks one element: its shape in a single message, and its value apart, only when its text is read.
     final class Answers {
-        /// The attributes asked for, in the order the answers come back.
+        /// The attributes asked for together, in the order the answers come back, the value left out since it can be a whole document.
         private static let attributes = [
-            kAXRoleAttribute, kAXPositionAttribute, kAXSizeAttribute, kAXValueAttribute, kAXTitleAttribute,
+            kAXRoleAttribute, kAXPositionAttribute, kAXSizeAttribute, kAXTitleAttribute,
             kAXDescriptionAttribute, kAXChildrenAttribute, kAXParentAttribute,
         ]
 
+        /// How many UTF-16 units of a long value are read from its end, twice the per-element cap so cleaning still leaves enough.
+        static let valueReadLimit = Surroundings.maximumCharactersPerElement * 2
+
         private let element: AXUIElement
         private var fetched: [AnyObject]?
+        private var valueRead: String??
 
         init(_ element: AXUIElement) {
             self.element = element
@@ -307,14 +328,47 @@ public enum FocusedFieldReader {
         var role: String? { self[kAXRoleAttribute] as? String }
         var title: String? { self[kAXTitleAttribute] as? String }
 
-        /// What the element says: its value, else its title, else its description, which is where a chat keeps its messages.
+        /// What the element says: the end of its value, else its title, else its description, which is where a chat keeps its messages.
         var text: String? {
-            for attribute in [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute] {
-                if let text = self[attribute] as? String, text.contains(where: { !$0.isWhitespace }) {
-                    return text
-                }
+            let candidates: [() -> String?] = [
+                { self.value }, { self[kAXTitleAttribute] as? String },
+                { self[kAXDescriptionAttribute] as? String },
+            ]
+            for candidate in candidates {
+                if let text = candidate(), text.contains(where: { !$0.isWhitespace }) { return text }
             }
             return nil
+        }
+
+        /// The element's value, read once and only its last ``valueReadLimit`` units when the element can say how long it is.
+        private var value: String? {
+            if let valueRead { return valueRead }
+            let read = Self.tail(of: element)
+            valueRead = .some(read)
+            return read
+        }
+
+        /// The end of an element's value by range where it is long, else the whole value, which is short or of unknown length.
+        private static func tail(of element: AXUIElement) -> String? {
+            var length: AnyObject?
+            if AXUIElementCopyAttributeValue(element, kAXNumberOfCharactersAttribute as CFString, &length)
+                == .success,
+                let count = (length as? NSNumber)?.intValue, count > valueReadLimit
+            {
+                let range = CFRange(location: count - valueReadLimit, length: valueReadLimit)
+                if let tail = SurfaceProbe.parameterized(
+                    element, kAXStringForRangeParameterizedAttribute, range)
+                    as? String
+                {
+                    return tail
+                }
+            }
+            var value: AnyObject?
+            guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success
+            else {
+                return nil
+            }
+            return value as? String
         }
 
         /// Where the element is, or nothing when it reports no position or no size.
