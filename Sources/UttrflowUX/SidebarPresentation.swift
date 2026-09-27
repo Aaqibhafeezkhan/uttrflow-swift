@@ -205,7 +205,7 @@ public enum SidebarPresenter {
     }
 
     /// Lights the page the main window is showing; the Settings row lights on any of its tabs.
-    static func isSelected(
+    public static func isSelected(
         _ destination: SidebarDestination, given selection: SidebarDestination
     )
         -> Bool
