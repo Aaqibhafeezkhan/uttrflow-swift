@@ -633,6 +633,29 @@ struct UserDefaultsSettingsStoreTests {
 
         #expect(store.load().hotkey == .optionSpace)
     }
+
+    @Test("keeps a transcript retention an earlier build saved, week included", arguments: [7, 30])
+    func keepsAStoredTranscriptRetention(days: Int) {
+        for onboarded in [false, true] {
+            let defaults = InMemoryKeyValueStore(json: #"{"transcriptRetentionDays": \#(days)}"#)
+            let store = UserDefaultsSettingsStore(store: defaults)
+
+            store.pinDefaults(onboarded: onboarded)
+
+            #expect(store.load().transcriptRetentionDays == days, "onboarded: \(onboarded)")
+        }
+    }
+
+    @Test("gives a saved file with no transcript retention the keep-always default")
+    func unsetTranscriptRetentionKeepsAlways() {
+        let defaults = InMemoryKeyValueStore(json: #"{"opensAtLogin": false}"#)
+        let store = UserDefaultsSettingsStore(store: defaults)
+
+        store.pinDefaults(onboarded: true)
+
+        #expect(store.load().transcriptRetentionDays == Settings.keepAlwaysDays)
+        #expect(!store.load().opensAtLogin)
+    }
 }
 
 /// The one suite that touches real preferences, in a domain of its own that it removes afterwards.

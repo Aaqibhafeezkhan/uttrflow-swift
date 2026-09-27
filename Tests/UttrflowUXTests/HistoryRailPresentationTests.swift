@@ -192,4 +192,10 @@ struct HistoryHeaderTests {
         #expect(result.retentionNotice.phrase == "kept for 30 days")
         #expect(result.retentionNotice.link.intent == .go(.settings(.privacy)))
     }
+
+    @Test("the caption's phrase says dictations kept always stay until deleted")
+    func phraseWhenKeptAlways() {
+        let result = HistoryFixture.page(entries: [])
+        #expect(result.retentionNotice.phrase == "kept until you delete it")
+    }
 }
