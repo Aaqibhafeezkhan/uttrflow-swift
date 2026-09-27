@@ -1,4 +1,4 @@
-// Tests for the onboarding pages: rules that hold on every page, each page's wording, keycaps, dots.
+// Tests for the onboarding pages: rules that hold on every page, each page's card, keycaps, dots.
 import Testing
 
 @testable import UttrflowAccount
@@ -13,9 +13,9 @@ private let everyState: [OnboardingState] = [
     OnboardingState(step: .signIn, detail: .signIn(.signingIn(.google))),
     OnboardingState(step: .signIn, detail: .signIn(.signingIn(.gitHub))),
     OnboardingState(step: .signIn, detail: .signIn(.signingIn(.apple))),
+    OnboardingState(step: .signIn, detail: .signIn(.enterCode(.google, code: "WDJB-MJHT"))),
     OnboardingState(step: .signIn, detail: .signIn(.refused("Nobody answered."))),
     OnboardingState(step: .signIn, detail: .reading),
-    OnboardingState(step: .welcome, detail: .reading),
     OnboardingState(step: .microphone, detail: .permission(.notDetermined)),
     OnboardingState(step: .microphone, detail: .permission(.denied)),
     OnboardingState(step: .microphone, detail: .permission(.restricted)),
@@ -27,9 +27,12 @@ private let everyState: [OnboardingState] = [
     OnboardingState(step: .accessibility, detail: .permission(.granted)),
     OnboardingState(step: .accessibility, detail: .awaitingSystemSettings),
     OnboardingState(step: .setup, detail: .installing(0.5)),
-    OnboardingState(step: .setup, detail: .installFailed("It stopped.")),
+    OnboardingState(step: .setup, detail: .installFailed("It stopped.", reached: 0.4)),
+    OnboardingState(step: .setup, detail: .installed),
     OnboardingState(step: .setup, detail: .reading),
     OnboardingState(step: .ready, detail: .finishing(.ready)),
+    OnboardingState(step: .ready, detail: .finishing(.ready, trial: .listening)),
+    OnboardingState(step: .ready, detail: .finishing(.ready, trial: .heard("Hello there."))),
     OnboardingState(step: .ready, detail: .finishing(.pastesManually)),
     OnboardingState(step: .ready, detail: .finishing(.needsSpeechModel)),
     OnboardingState(step: .ready, detail: .finishing(.needsMicrophone)),
@@ -43,9 +46,16 @@ private let forbiddenWords = [
 
 /// The page for a state, with the default shortcut unless given one.
 private func page(
-    _ state: OnboardingState, hotkey: HotkeyBinding = .optionSpace
+    _ state: OnboardingState, hotkey: HotkeyBinding = .optionSpace,
+    activation: HotkeyActivation = .holdToTalk
 ) -> OnboardingPage {
-    OnboardingPresenter.page(for: state, hotkey: hotkey)
+    OnboardingPresenter.page(for: state, hotkey: hotkey, activation: activation)
+}
+
+/// Every intent a page offers, buttons, providers and link together.
+private func intents(_ page: OnboardingPage) -> [OnboardingIntent] {
+    page.providers.filter(\.isEnabled).map { .signIn($0.provider) }
+        + page.buttons.filter(\.isEnabled).map(\.intent) + [page.link?.intent].compactMap(\.self)
 }
 
 @Suite("Onboarding pages")
@@ -53,78 +63,54 @@ struct OnboardingPresenterTests {
 
     // MARK: Rules that hold on every page
 
-    @Test("says something, and offers something, on every page it can be asked for")
+    @Test("says something on every page it can be asked for, and numbers it")
     func everyPageIsWhole() {
         for state in everyState {
             let page = page(state)
             #expect(!page.title.isEmpty, "\(state) has no title")
-            #expect(!page.subtitle.isEmpty, "\(state) has no subtitle")
             #expect(!page.accessibilityLabel.isEmpty, "\(state) has nothing to read aloud")
-            #expect(page.hasSomethingToPress, "\(state) offers nothing")
             #expect(page.position == state.step.position)
             #expect(page.stepCount == OnboardingStep.allCases.count)
         }
     }
 
-    @Test("never leaves the user on a page with nothing they can press")
+    /// The last page offers only the dashboard once words have arrived, since it is closing by itself.
+    @Test("never leaves the user on a page with nothing they can press, but the one closing itself")
     func noPageIsADeadEnd() {
-        for state in everyState {
-            let pressable =
-                page(state).buttons.filter(\.isEnabled).map(\.title)
-                + page(state).providers.filter(\.isEnabled).map(\.title)
-            #expect(!pressable.isEmpty, "\(state) is a dead end")
+        for state in everyState where state.detail.trial == .waiting || state.detail.trial == .listening {
+            #expect(page(state).hasSomethingToPress, "\(state) is a dead end")
         }
+        let closing = page(OnboardingState(step: .ready, detail: .finishing(.ready, trial: .heard("Hi"))))
+        #expect(!closing.hasSomethingToPress)
+        #expect(closing.hint == "Opening your dashboard…")
     }
 
-    @Test("puts the provider stack on the sign-in page and nowhere else")
+    @Test("puts the providers on the sign-in page, and only where one can be chosen or chosen again")
     func onlySignInOffersProviders() {
         for state in everyState {
-            let expected = state.step == .signIn ? SignInProvider.offered.count : 0
+            let offers =
+                state.step == .signIn
+                && [.offering, .refused("Nobody answered.")].contains(state.detail.signIn)
+            let expected = offers ? SignInProvider.offered.count : 0
             #expect(page(state).providers.count == expected, "\(state) draws the wrong providers")
         }
     }
 
     @Test("only the page a person is agreeing on carries the terms")
     func onlySignInCarriesTheTerms() {
-        for state in everyState {
-            #expect((page(state).fineprint != nil) == (state.step == .signIn), "\(state)")
+        let agreeing = page(OnboardingState(step: .signIn, detail: .signIn(.offering)))
+        #expect(agreeing.showsTerms)
+        for state in everyState where state.step != .signIn {
+            #expect(!page(state).showsTerms, "\(state)")
         }
     }
 
-    @Test("warns above what it is explaining, and reassures below")
-    func onlyAWarningComesFirst() {
-        let offline = page(OnboardingState(step: .signIn, detail: .signIn(.unreachable)))
-        #expect(offline.note?.tone == .warning)
-
-        let online = page(OnboardingState(step: .signIn, detail: .signIn(.offering)))
-        #expect(online.note?.tone == .quiet)
-        #expect(online.note?.text.contains("Wi-Fi off") == true)
-    }
-
-    /// The pages that report a failure, written out because being marked one is deliberate, not computed.
-    private static let failures: [OnboardingState] = [
-        OnboardingState(step: .setup, detail: .installFailed("It stopped.")),
-        OnboardingState(step: .ready, detail: .finishing(.needsMicrophone)),
-        // A permission a device policy took away reports something wrong rather than asking.
-        OnboardingState(step: .microphone, detail: .permission(.restricted)),
-        OnboardingState(step: .accessibility, detail: .permission(.restricted)),
-    ]
-
-    @Test("draws the pages that report a failure differently from the ones that ask")
-    func failuresAreMarkedAsFailures() {
-        for state in Self.failures {
-            #expect(page(state).emphasis == .caution, "\(state) is drawn as an ordinary page")
-        }
-        for state in everyState where !Self.failures.contains(state) {
-            #expect(page(state).emphasis != .caution, "\(state) is drawn as a failure")
-        }
-    }
-
-    @Test("steers towards at most one answer")
+    @Test("steers towards at most one answer, and points at none but that one")
     func atMostOneProminentButton() {
         for state in everyState {
-            let prominent = page(state).buttons.filter(\.isProminent)
-            #expect(prominent.count <= 1, "\(state) steers towards \(prominent.count) answers")
+            let page = page(state)
+            #expect(page.buttons.filter(\.isProminent).count <= 1, "\(state) steers towards many answers")
+            #expect(page.buttons.filter { $0.isPointedAt && !$0.isProminent }.isEmpty, "\(state)")
         }
     }
 
@@ -132,7 +118,7 @@ struct OnboardingPresenterTests {
     func neverNamesTheMachinery() {
         for state in everyState {
             let page = page(state)
-            let spoken = [page.title, page.subtitle, page.body ?? "", page.note?.text ?? ""]
+            let spoken = [page.title, page.hint ?? "", page.explanation ?? "", page.accessibilityLabel]
                 .joined(separator: " ")
                 .lowercased()
             for word in forbiddenWords {
@@ -141,186 +127,258 @@ struct OnboardingPresenterTests {
         }
     }
 
-    @Test("reads aloud as one sentence that says both what the page is and what it wants")
+    @Test("reads aloud the heading and the sentence behind it")
     func voiceOverGetsTheWholePage() {
         for state in everyState {
             let page = page(state)
-            #expect(page.accessibilityLabel.contains(page.title))
-            #expect(page.accessibilityLabel.contains(page.subtitle))
+            #expect(page.accessibilityLabel.hasPrefix(page.title))
+            if let said = page.explanation ?? page.hint {
+                #expect(page.accessibilityLabel.contains(said))
+            }
         }
     }
 
-    // MARK: The pages themselves
+    // MARK: Moods
 
-    @Test("opens with the mark rather than an icon")
-    func welcomeWearsTheMark() {
-        let welcome = page(OnboardingState(step: .welcome, detail: .reading))
-        #expect(welcome.symbolName == nil)
-        #expect(welcome.emphasis == .brand)
-        #expect(welcome.buttons.map(\.intent) == [.advance])
+    /// The problem moods, written out because being marked one is deliberate, not computed.
+    private static let troubles: [(OnboardingState, OnboardingMood)] = [
+        (OnboardingState(step: .signIn, detail: .signIn(.unreachable)), .offline),
+        (OnboardingState(step: .signIn, detail: .signIn(.refused("Nobody answered."))), .failure),
+        (OnboardingState(step: .setup, detail: .installFailed("It stopped.", reached: 0.4)), .failure),
+        (OnboardingState(step: .microphone, detail: .permission(.denied)), .warning),
+        (OnboardingState(step: .microphone, detail: .permission(.restricted)), .warning),
+        (OnboardingState(step: .accessibility, detail: .permission(.restricted)), .warning),
+        (OnboardingState(step: .ready, detail: .finishing(.needsMicrophone)), .warning),
+        (OnboardingState(step: .ready, detail: .finishing(.needsSpeechModel)), .warning),
+    ]
+
+    @Test("draws the pages that report a problem in their own light, and no others")
+    func troublesAreMarked() {
+        let problems: Set<OnboardingMood> = [.warning, .failure, .offline]
+        for state in everyState {
+            if let mood = Self.troubles.first(where: { $0.0 == state })?.1 {
+                #expect(page(state).mood == mood, "\(state) is drawn in the wrong light")
+            } else {
+                #expect(!problems.contains(page(state).mood), "\(state) is drawn as a problem")
+            }
+        }
     }
 
-    @Test("holds back what skipping the microphone costs until the user has been asked")
-    func theMicrophoneCostArrivesWhenItMatters() {
-        let unasked = page(
-            OnboardingState(step: .microphone, detail: .permission(.notDetermined)))
-        #expect(unasked.note == nil)
-
-        let refused = page(OnboardingState(step: .microphone, detail: .permission(.denied)))
-        #expect(refused.note?.text == PermissionError.microphoneDenied.userMessage)
-        #expect(refused.note?.tone == .warning)
-    }
-
-    /// A page argues only with somebody who has refused it, and a first visit has refused nothing.
-    @Test("says what is blocked only once the user has met the question")
-    func whatIsBlockedIsSaidAfterAsking() {
+    @Test("lights a finished step as done and a step under way as live")
+    func doneAndLive() {
         for step in [OnboardingStep.microphone, .accessibility] {
-            let unasked = page(OnboardingState(step: step, detail: .permission(.notDetermined)))
-            #expect(unasked.note == nil, "\(step) argues before it has been asked")
-
-            let waiting = page(OnboardingState(step: step, detail: .awaitingSystemSettings))
-            #expect(waiting.note?.tone == .warning, "\(step) is quiet about being blocked")
+            #expect(page(OnboardingState(step: step, detail: .permission(.granted))).mood == .done)
+            #expect(page(OnboardingState(step: step, detail: .awaitingSystemSettings)).mood == .waiting)
         }
+        #expect(page(OnboardingState(step: .setup, detail: .installed)).mood == .done)
+        #expect(page(OnboardingState(step: .setup, detail: .installing(0.2))).mood == .live)
+        #expect(page(OnboardingState(step: .signIn, detail: .signIn(.signingIn(.google)))).mood == .waiting)
+    }
 
-        let refused = page(OnboardingState(step: .microphone, detail: .permission(.denied)))
-        #expect(refused.note?.tone == .warning, "the microphone is denied only after a no")
+    // MARK: Sign-in
+
+    @Test("says what Uttrflow is for on the page that asks who you are")
+    func signInCarriesThePitch() {
+        let offering = page(OnboardingState(step: .signIn, detail: .signIn(.offering)))
+        #expect(offering.title == "Just talk.")
+        #expect(offering.picture == .waveform(.talking, badge: nil))
+        #expect(offering.explanation == OnboardingPresenter.pitch)
+        #expect(offering.providers.first?.label == "Google")
+        #expect(offering.providers.first?.title == "Continue with Google")
+    }
+
+    @Test("offline, offers only to try again")
+    func offlineOffersOnlyTryAgain() {
+        let offline = page(OnboardingState(step: .signIn, detail: .signIn(.unreachable)))
+        #expect(offline.providers.isEmpty)
+        #expect(offline.buttons.map(\.intent) == [.recover(.retry)])
+        #expect(offline.picture == .waveform(.still, badge: .symbol("wifi.slash", .neutral)))
+    }
+
+    @Test("while the browser has the user, offers to open it again or give up")
+    func waitingOnTheBrowser() {
+        let waiting = page(OnboardingState(step: .signIn, detail: .signIn(.signingIn(.google))))
+        #expect(waiting.buttons.map(\.intent) == [.reopenBrowser, .cancelSignIn])
+        #expect(waiting.picture == .waveform(.idle, badge: .waitingOn(.google)))
+
+        let code = page(OnboardingState(step: .signIn, detail: .signIn(.enterCode(.google, code: "AB-CD"))))
+        #expect(code.picture == .code("AB-CD"))
+        #expect(code.buttons.map(\.intent) == [.reopenBrowser, .cancelSignIn])
+    }
+
+    @Test("a refusal says why and offers the providers again")
+    func aRefusalSaysWhy() {
+        let refused = page(OnboardingState(step: .signIn, detail: .signIn(.refused("Nobody answered."))))
+        #expect(refused.hint == "Nobody answered.")
+        #expect(refused.providers.filter(\.isEnabled).count == refused.providers.count)
+        #expect(refused.picture == .waveform(.still, badge: .symbol("xmark", .failure)))
+    }
+
+    @Test("offers no way past sign-in without an account")
+    func signInIsMandatory() {
+        for state in everyState where state.step == .signIn {
+            #expect(!intents(page(state)).contains(.continueOnThisMac), "\(state)")
+            #expect(!intents(page(state)).contains(.advance), "\(state)")
+        }
+    }
+
+    // MARK: Permissions
+
+    @Test("offers no way past a permission until it is granted, bar a device policy")
+    func permissionsAreMandatory() {
+        for step in [OnboardingStep.microphone, .accessibility] {
+            for detail in [
+                OnboardingDetail.permission(.notDetermined), .permission(.denied), .awaitingSystemSettings,
+            ] {
+                #expect(!intents(page(OnboardingState(step: step, detail: detail))).contains(.advance))
+            }
+            for status in [PermissionStatus.granted, .restricted] {
+                let page = page(OnboardingState(step: step, detail: .permission(status)))
+                #expect(page.buttons.map(\.intent) == [.advance], "\(step) at \(status)")
+            }
+        }
+    }
+
+    @Test("points at Allow on a first visit, and asks macOS")
+    func allowIsPointedAt() {
+        for step in [OnboardingStep.microphone, .accessibility] {
+            let kind: PermissionKind = step == .microphone ? .microphone : .accessibility
+            let first = page(OnboardingState(step: step, detail: .permission(.notDetermined)))
+            #expect(first.buttons.count == 1)
+            #expect(first.buttons.first?.isPointedAt == true)
+            #expect(first.buttons.first?.intent == .requestPermission(kind))
+        }
     }
 
     /// `AXIsProcessTrusted` answers false before anyone has been asked, so this page opens at `.denied`.
-    @Test("the Accessibility page opens without its warning, since nobody has refused yet")
+    @Test("the Accessibility page opens on the ask, since nobody has refused yet")
     func accessibilityIsQuietOnItsFirstVisit() {
         let first = page(OnboardingState(step: .accessibility, detail: .permission(.denied)))
-
-        #expect(first.note == nil)
         #expect(first.buttons.first?.intent == .requestPermission(.accessibility))
+        #expect(first.picture == .typing(.still, field: .placeholder("Your words go here")))
     }
 
-    /// The rule the whole flow is built on: no page is a dead end. See `Docs/ux-onboarding.md`.
-    @Test("offers a way past either permission, whatever the user has refused")
-    func eitherPermissionCanBeLeft() {
-        for step in [OnboardingStep.microphone, .accessibility] {
-            for status in [PermissionStatus.notDetermined, .denied] {
-                let page = page(OnboardingState(step: step, detail: .permission(status)))
-                #expect(
-                    page.buttons.contains { $0.intent == .advance },
-                    "\(step) at \(status) is a dead end")
-            }
-            let waiting = page(OnboardingState(step: step, detail: .awaitingSystemSettings))
-            #expect(waiting.buttons.contains { $0.intent == .advance })
-        }
-    }
-
-    /// Going on is never the prominent answer where the user could still say yes.
-    @Test("keeps granting the prominent answer, and going without it the quiet one")
-    func grantingStaysTheProminentAnswer() {
-        for step in [OnboardingStep.microphone, .accessibility] {
-            for detail in [
-                OnboardingDetail.permission(.notDetermined), .permission(.denied),
-                .awaitingSystemSettings,
-            ] {
-                let page = page(OnboardingState(step: step, detail: detail))
-                let without = page.buttons.first { $0.intent == .advance }
-                #expect(without?.isProminent == false, "\(step) at \(detail) pushes the user past")
-            }
-        }
-    }
-
-    /// A device policy is not the user's choice, so going on is the only thing left that is true.
-    @Test("leaves a policy-blocked Mac nothing but the way on")
-    func aPolicyLeavesOnlyTheWayOn() {
-        for step in [OnboardingStep.microphone, .accessibility] {
-            let blocked = page(OnboardingState(step: step, detail: .permission(.restricted)))
-            #expect(blocked.buttons.map(\.intent) == [.advance])
-        }
-    }
-
-    @Test("offers the prompt only where macOS would still show one")
-    func promptsOnlyWhereAPromptWouldAppear() {
-        let unasked = page(
-            OnboardingState(step: .microphone, detail: .permission(.notDetermined)))
-        #expect(unasked.buttons.first?.intent == .requestPermission(.microphone))
-
+    @Test("a refused microphone points at System Settings")
+    func aRefusedMicrophonePointsAtSettings() {
         let refused = page(OnboardingState(step: .microphone, detail: .permission(.denied)))
-        #expect(refused.buttons.first?.intent == .recover(.openSystemSettings(.microphone)))
+        #expect(refused.buttons.map(\.intent) == [.recover(.openSystemSettings(.microphone))])
+        #expect(refused.buttons.first?.isPointedAt == true)
+        #expect(refused.explanation == PermissionError.microphoneDenied.userMessage)
+    }
 
+    @Test("while System Settings is open, offers the pane and a look again, naming where to look")
+    func waitingOnSettings() {
+        for (step, pane) in [
+            (OnboardingStep.microphone, SystemSettingsPane.microphone), (.accessibility, .accessibility),
+        ] {
+            let waiting = page(OnboardingState(step: step, detail: .awaitingSystemSettings))
+            #expect(waiting.buttons.map(\.intent) == [.recover(.openSystemSettings(pane)), .recover(.retry)])
+            #expect(waiting.buttons.last?.isProminent == true)
+            #expect(waiting.hint?.hasPrefix("Privacy & Security › ") == true)
+        }
+    }
+
+    @Test("draws the microphone as a waveform and Accessibility as a field being typed into")
+    func eachPermissionHasItsPicture() {
+        let heard = page(OnboardingState(step: .microphone, detail: .permission(.granted)))
+        #expect(heard.picture == .waveform(.talking, badge: nil))
+        let typed = page(OnboardingState(step: .accessibility, detail: .permission(.granted)))
+        guard case .typing(.talking, .typing) = typed.picture else {
+            Issue.record("Accessibility granted draws \(typed.picture)")
+            return
+        }
         let blocked = page(OnboardingState(step: .microphone, detail: .permission(.restricted)))
-        #expect(blocked.buttons.map(\.intent) == [.advance])
+        #expect(blocked.picture == .waveform(.still, badge: .symbol("mic.slash", .caution)))
+        let waiting = page(OnboardingState(step: .accessibility, detail: .awaitingSystemSettings))
+        #expect(waiting.picture == .typing(.idle, field: .placeholder("Waiting for access…")))
+        let off = page(OnboardingState(step: .accessibility, detail: .permission(.restricted)))
+        #expect(off.picture == .typing(.still, field: .placeholder("Typing is turned off")))
     }
 
-    @Test("sends each permission to its own pane")
-    func eachPermissionHasItsOwnPane() {
-        let accessibility = page(
-            OnboardingState(step: .accessibility, detail: .awaitingSystemSettings))
-        #expect(
-            accessibility.buttons.first?.intent == .recover(.openSystemSettings(.accessibility)))
-
-        let microphone = page(OnboardingState(step: .microphone, detail: .permission(.denied)))
-        #expect(microphone.buttons.first?.intent == .recover(.openSystemSettings(.microphone)))
-    }
+    // MARK: The download
 
     @Test("keeps Continue in view while the download runs, and keeps it unpressable")
     func theDownloadPageWaits() {
         let downloading = page(OnboardingState(step: .setup, detail: .installing(0.64)))
-        #expect(downloading.progress == 0.64)
+        #expect(downloading.picture == .download(0.64, .running))
         #expect(downloading.buttons.map(\.title) == ["Cancel", "Continue"])
         #expect(downloading.buttons.last?.isEnabled == false)
         #expect(downloading.buttons.first?.intent == .cancelInstall)
     }
 
-    @Test("puts the reason a download stopped in front of the user")
+    @Test("puts the reason a download stopped in front of the user, where it stopped, with no way past")
     func aStoppedDownloadExplainsItself() {
         let message = SpeechEngineError.modelDownloadFailed(description: "offline").userMessage
-        let stopped = page(OnboardingState(step: .setup, detail: .installFailed(message)))
-        #expect(stopped.subtitle == message)
-        #expect(stopped.progress == nil)
-        #expect(stopped.buttons.last?.intent == .recover(.downloadSpeechModel))
+        let stopped = page(OnboardingState(step: .setup, detail: .installFailed(message, reached: 0.38)))
+        #expect(stopped.hint == message)
+        #expect(stopped.picture == .download(0.38, .stopped))
+        #expect(stopped.buttons.map(\.intent) == [.recover(.downloadSpeechModel)])
     }
 
-    @Test("only the page that is all set says so")
-    func onlyOneEndingIsAllSet() {
-        let endings: [OnboardingReadiness: String] = [
-            .ready: "You’re all set"
-        ]
-        for readiness in OnboardingReadiness.allCases {
-            let ending = page(OnboardingState(step: .ready, detail: .finishing(readiness)))
-            if let expected = endings[readiness] {
-                #expect(ending.title == expected)
-            } else {
-                #expect(ending.title != "You’re all set", "\(readiness) claims to be all set")
-            }
+    @Test("lets the user on once the model is on disk")
+    func aFinishedDownloadLetsThrough() {
+        for detail in [OnboardingDetail.installed, .reading] {
+            let done = page(OnboardingState(step: .setup, detail: detail))
+            #expect(done.picture == .download(1, .finished))
+            #expect(done.buttons.map(\.intent) == [.advance])
         }
     }
 
-    @Test("shows the keys to press only on an ending that can be tried")
-    func keycapsOnlyWhereTheyWouldWork() {
-        for readiness in OnboardingReadiness.allCases {
-            let ending = page(OnboardingState(step: .ready, detail: .finishing(readiness)))
-            let worksNow = readiness == .ready || readiness == .pastesManually
-            #expect(ending.keys.isEmpty != worksNow, "\(readiness) draws the wrong keycaps")
-        }
+    // MARK: The last page
+
+    @Test("asks for a first try with the keys the settings hold, and a way straight to the app")
+    func theFirstTry() {
+        let chord = HotkeyBinding(keyCode: 59, modifiers: [.control, .option])
+        let trying = page(OnboardingState(step: .ready, detail: .finishing(.ready)), hotkey: chord)
+        #expect(trying.title == "Hold ⌃ ⌥ and talk.")
+        #expect(
+            trying.picture == .keys(["⌃", "⌥"], isHeld: false, field: .placeholder("Your words appear here")))
+        #expect(trying.link == OnboardingLink(title: "Skip to dashboard", intent: .finish))
+        #expect(trying.hint == nil)
+
+        let pressed = page(
+            OnboardingState(step: .ready, detail: .finishing(.ready)), activation: .pressToToggle)
+        #expect(pressed.title == "Press ⌥ Space and talk.")
     }
 
-    @Test("offers the way to put right whatever is not right yet")
+    @Test("holds the keys down while listening, and shows the words that came back")
+    func theTryGoesOn() {
+        let listening = page(OnboardingState(step: .ready, detail: .finishing(.ready, trial: .listening)))
+        #expect(listening.title == "Listening…")
+        #expect(listening.mood == .live)
+        #expect(listening.hint == "Let go when you’re done")
+        guard case .keys(_, isHeld: true, _) = listening.picture else {
+            Issue.record("listening draws \(listening.picture)")
+            return
+        }
+        let toggled = page(
+            OnboardingState(step: .ready, detail: .finishing(.ready, trial: .listening)),
+            activation: .pressToToggle)
+        #expect(toggled.hint == "Press again when you’re done")
+
+        let heard = page(
+            OnboardingState(step: .ready, detail: .finishing(.ready, trial: .heard("Hi there."))))
+        #expect(heard.title == "That’s it.")
+        #expect(heard.picture == .keys(["⌥", "Space"], isHeld: false, field: .filled("Hi there.")))
+    }
+
+    @Test("says that words will be copied when Accessibility is missing")
+    func copyingIsSaid() {
+        let copying = page(OnboardingState(step: .ready, detail: .finishing(.pastesManually)))
+        #expect(copying.hint?.contains("copied") == true)
+    }
+
+    @Test("offers the way to put right an ending that cannot be tried")
     func everyEndingThatCanBeFixedOffersTheFix() {
         let fixes: [OnboardingReadiness: OnboardingIntent] = [
-            .pastesManually: .recover(.openSystemSettings(.accessibility)),
             .needsSpeechModel: .recover(.downloadSpeechModel),
             .needsMicrophone: .recover(.openSystemSettings(.microphone)),
         ]
         for (readiness, fix) in fixes {
             let ending = page(OnboardingState(step: .ready, detail: .finishing(readiness)))
-            #expect(ending.buttons.map(\.intent).contains(fix), "\(readiness) offers no way back")
-            #expect(ending.buttons.last?.intent == .finish)
+            #expect(ending.buttons.map(\.intent) == [fix, .finish], "\(readiness) offers no way back")
+            #expect(ending.buttons.last?.title == "Close")
         }
-    }
-
-    @Test("never invites the user to start something that cannot start")
-    func theWayOutIsWordedHonestly() {
-        let cannot = page(OnboardingState(step: .ready, detail: .finishing(.needsMicrophone)))
-        #expect(cannot.buttons.last?.title == "Close")
-
-        let can = page(OnboardingState(step: .ready, detail: .finishing(.ready)))
-        #expect(can.buttons.last?.title == "Start Using Uttrflow")
     }
 
     // MARK: Keycaps
@@ -358,9 +416,10 @@ struct OnboardingPresenterTests {
 
     // MARK: The dots
 
-    @Test("numbers the dots once each, from one")
+    @Test("numbers the dots once each, from one to five")
     func theDotsAreNumberedOnce() {
         let positions = OnboardingStep.allCases.map(\.position)
         #expect(positions == Array(1...OnboardingStep.count))
+        #expect(OnboardingStep.count == 5)
     }
 }

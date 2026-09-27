@@ -526,17 +526,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 settingsStore: settingsStore, installer: speechInstall, account: account
             ).isRequired
         else { return }
-        presentOnboarding(skippingWelcome: false)
+        presentOnboarding()
     }
 
     /// Brings forward the flow already open, else builds a fresh one so a finished flow never reopens on its last page.
-    private func presentOnboarding(skippingWelcome: Bool, askingToSignIn: Bool = false) {
+    private func presentOnboarding(askingToSignIn: Bool = false) {
         let (onboarding, isNew) = OnboardingWindowController.reusing(onboarding) {
             OnboardingWindowController(
                 settingsStore: settingsStore, installer: speechInstall, account: account)
         }
         guard isNew else {
-            onboarding.present(skippingWelcome: skippingWelcome, askingToSignIn: askingToSignIn)
+            onboarding.present(askingToSignIn: askingToSignIn)
             return
         }
         self.onboarding = onboarding
@@ -548,6 +548,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             updates.refresh()
             // The session is what onboarding changes that the settings store knows nothing about.
             refreshMainWindow()
+            // The last page promises the dashboard, so finishing opens it.
+            show(.main(.home))
         }
         // However the window goes, including the red button, which changes the Account page.
         onboarding.onClose = { [weak self, weak onboarding] in
@@ -558,7 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             refreshMainWindow()
             loadSpeechModelIfItArrived()
         }
-        onboarding.present(skippingWelcome: skippingWelcome, askingToSignIn: askingToSignIn)
+        onboarding.present(askingToSignIn: askingToSignIn)
     }
 
     /// How long quitting waits for a dictation to land. See `Docs/quitting.md`.
@@ -1616,6 +1618,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Kept here, where every change already arrives, so the updater need not ask the pipeline.
         lastDictationState = state
         updates.refresh()
+        // The last page of onboarding fills its field with the first dictation.
+        onboarding?.dictationChanged(to: state)
         // A dictation's own outcome is newer than any panel paste's report.
         if state != .idle { pasteReport = nil }
         DictationInProgress.shared.set(dictating: state.isBusy)
@@ -1775,7 +1779,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch destination {
         case .onboarding:
             // Not `presentOnboardingIfNeeded()`, which returns silently once the flow is finished.
-            presentOnboarding(skippingWelcome: true)
+            presentOnboarding()
         case .settings(let tab):
             settingsWindow.onClose = { [weak self] in self?.redrawMainWindow() }
             settingsWindow.show(tab, identity: signedInIdentity)
@@ -2151,7 +2155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         case .signIn:
             // Onboarding owns the whole sign-in conversation, so this asks for it explicitly.
-            presentOnboarding(skippingWelcome: true, askingToSignIn: true)
+            presentOnboarding(askingToSignIn: true)
         case .dismissNotice:
             actionNotice = nil
             redrawMainWindow()

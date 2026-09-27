@@ -1,126 +1,10 @@
-// The brand rail beside the onboarding pages, and the rail ground Settings shares.
+// The rail ground Settings draws, and the reproducible noise its grain and onboarding's are made from.
 
 import AppKit
 import UttrflowUX
 import SwiftUI
 
-/// The brand rail down the left of the onboarding window: the mark, the seven steps, and the current one.
-struct OnboardingRail: View {
-    let position: Int
-
-    private let steps = OnboardingStep.inOrder
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 9) {
-                UttrflowMarkView(height: 21)
-                Text("Uttrflow")
-                    .font(.system(size: 15, weight: .semibold))
-                    .kerning(-0.2)
-            }
-            .foregroundStyle(.white)
-            .padding(.leading, OnboardingMetrics.railRowInset)
-
-            list
-                .padding(.top, 32)
-
-            Spacer(minLength: 12)
-
-            Text("Step \(position) of \(steps.count)")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.52))
-                .padding(.leading, OnboardingMetrics.railRowInset)
-        }
-        .padding(.top, OnboardingMetrics.railTopInset)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 22)
-        .frame(width: OnboardingMetrics.railWidth, alignment: .leading)
-        .frame(maxHeight: .infinity)
-        .background(RailGround())
-        // One label for the whole rail; seven rows read out one at a time repeat the page.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            "Step \(position) of \(steps.count): \(steps[position - 1].railTitle)")
-    }
-
-    private var list: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                row(step, at: index + 1)
-            }
-        }
-        .background(alignment: .topLeading) { spine }
-    }
-
-    /// The line the indicators are threaded on, lit as far as the user has come, drawn behind the rows.
-    private var spine: some View {
-        ZStack(alignment: .top) {
-            Capsule()
-                .fill(.white.opacity(0.16))
-                .frame(width: 1, height: OnboardingMetrics.railRowHeight * CGFloat(steps.count - 1))
-            Capsule()
-                .fill(.white.opacity(0.55))
-                .frame(
-                    width: 1,
-                    height: OnboardingMetrics.railRowHeight * CGFloat(max(position - 1, 0)))
-        }
-        .offset(
-            x: OnboardingMetrics.railRowInset + OnboardingMetrics.railDotSize / 2 - 0.5,
-            y: OnboardingMetrics.railRowHeight / 2)
-    }
-
-    private func row(_ step: OnboardingStep, at index: Int) -> some View {
-        HStack(spacing: 11) {
-            indicator(for: index)
-            Text(step.railTitle)
-                .font(.system(size: 12.5, weight: index == position ? .semibold : .medium))
-                .foregroundStyle(label(for: index))
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, OnboardingMetrics.railRowInset)
-        .frame(height: OnboardingMetrics.railRowHeight)
-        .background(
-            index == position ? Color.white.opacity(0.10) : .clear,
-            in: .rect(cornerRadius: 8))
-    }
-
-    @ViewBuilder private func indicator(for index: Int) -> some View {
-        let size = OnboardingMetrics.railDotSize
-        if index < position {
-            Circle()
-                .fill(.white.opacity(0.92))
-                .frame(width: size, height: size)
-                .overlay(
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        // The rail's own deep end, so the tick reads as cut out of the ground.
-                        .foregroundStyle(Color(rgb: BrandPalette.Teal.railTick)))
-        } else if index == position {
-            Circle()
-                .strokeBorder(.white, lineWidth: 2)
-                .frame(width: size, height: size)
-                .overlay(Circle().fill(.white).frame(width: 7, height: 7))
-        } else {
-            Circle()
-                .strokeBorder(.white.opacity(0.30), lineWidth: 1.5)
-                .frame(width: size, height: size)
-        }
-    }
-
-    private func label(for index: Int) -> Color {
-        if index < position {
-            .white.opacity(0.74)
-        } else if index == position {
-            .white
-        } else {
-            .white.opacity(0.44)
-        }
-    }
-
-}
-
-/// The rail's ground, shared with Settings: the accent deepened until white sits on it, in both appearances.
+/// The Settings rail's ground: the accent deepened until white sits on it, in both appearances.
 struct RailGround: View {
     var body: some View {
         LinearGradient(
@@ -201,7 +85,7 @@ private struct Grain: View {
 }
 
 /// Sixty-four bits of reproducible noise, small enough to read.
-private struct SplitMix64 {
+struct SplitMix64 {
     private var state: UInt64
 
     init(seed: UInt64) { state = seed }
