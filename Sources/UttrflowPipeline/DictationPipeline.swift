@@ -646,7 +646,8 @@ public actor DictationPipeline {
         }
 
         // Snippets after the tidier, whose punctuation is what stops a trigger crossing a sentence.
-        let expanded = await expand(written)
+        let expanded = await expand(
+            written, laidOut: DestinationFormatter.standard(for: joining.destination).layout)
         guard !wasCancelled(mine) else { return }
 
         // Pads the words with a space where the field's surrounding text would otherwise join them.
@@ -828,8 +829,8 @@ public actor DictationPipeline {
                 cleaning: joined.cleaned.cleaning, entriesTaken: joined.cleaned.entriesTaken))
     }
 
-    /// Expands the user's snippets, treating a blank expansion as nothing to do.
-    private func expand(_ text: String) async -> ExpandedTranscript {
+    /// Expands the user's snippets under the destination's layout, treating a blank expansion as nothing to do.
+    private func expand(_ text: String, laidOut layout: LayoutPolicy) async -> ExpandedTranscript {
         do {
             let expanded = try await metrics.measuringInTime(.expansion, clock: clock) {
                 try await withStageTimeout(StageTimeout.quick, clock: clock) { [snippets] in
@@ -837,7 +838,8 @@ public actor DictationPipeline {
                 }
             }
             guard let expanded, !expanded.text.isBlank else { return .unchanged(text) }
-            return expanded
+            // A line break is Return in a single-line field, so an expansion's breaks join as the tidier's did.
+            return layout.contains(.singleLine) ? expanded.onOneLine : expanded
         } catch {
             return .unchanged(text)
         }

@@ -46,7 +46,8 @@ public struct FirstWordPass: CleaningPass {
                 cased = WordShape.capitalised(cased)
             }
             draft.replace(at: index, with: cased, by: Self.id)
-            startOfSentence = Self.endsSentence(cased)
+            // A word trailing off in an ellipsis is a pause, so the next keeps the case it was heard in.
+            startOfSentence = Self.endsSentence(cased) && !WordShape.trailsOff(WordShape(cased).suffix)
             isFirst = false
         }
         return draft

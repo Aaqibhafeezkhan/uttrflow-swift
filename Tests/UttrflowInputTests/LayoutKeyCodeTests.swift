@@ -50,6 +50,25 @@ struct LayoutKeyCodeTests {
         #expect(LayoutKeyCode.code(for: vCharacter, in: data) != 9)
     }
 
+    @Test("Dvorak with a QWERTY ⌘ map: with ⌘ held, V is back on key code 9")
+    func dvorakWithCommandMapHeld() throws {
+        let data = try layoutData(id: "com.apple.keylayout.DVORAK-QWERTYCMD")
+        #expect(LayoutKeyCode.code(for: vCharacter, in: data, modifiers: LayoutKeyCode.commandHeld) == 9)
+    }
+
+    @Test("plain Dvorak: with ⌘ held, V stays on key code 47, since its ⌘ table is Dvorak too")
+    func dvorakCommandHeld() throws {
+        let data = try layoutData(id: "com.apple.keylayout.Dvorak")
+        #expect(LayoutKeyCode.code(for: vCharacter, in: data, modifiers: LayoutKeyCode.commandHeld) == 47)
+    }
+
+    @Test("Russian: no key types V unmodified, and its ⌘ table puts V on key code 9")
+    func russianCommandHeld() throws {
+        let data = try layoutData(id: "com.apple.keylayout.Russian")
+        #expect(LayoutKeyCode.code(for: vCharacter, in: data) == nil)
+        #expect(LayoutKeyCode.code(for: vCharacter, in: data, modifiers: LayoutKeyCode.commandHeld) == 9)
+    }
+
     @Test("a character no key produces returns nil rather than a wrong key code")
     func unproducibleCharacterIsNil() throws {
         let data = try layoutData(id: "com.apple.keylayout.US")

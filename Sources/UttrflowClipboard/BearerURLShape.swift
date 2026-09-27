@@ -2,28 +2,43 @@
 
 /// A URL whose holder can act with it: a chat webhook, or one signed or carrying a token. See Docs/clipboard-secrets.md.
 enum BearerURLShape {
-    /// Whether any URL in the text is a bearer credential, reading each byte of it a bounded number of times.
+    /// Whether any URL in the text, or nested in one, is a bearer credential, reading each byte of it a bounded number of times.
     static func matches(_ text: String, read: inout Int) -> Bool {
         var count = 0
         defer { read += count }
         return ClipBytes.read(text) { _, bytes in
             var from = 0
-            while let separator = find(bytes, from: from) {
+            while let separator = find(bytes, from: from, to: bytes.count) {
                 let start = separator + 3
                 var end = start
                 while end < bytes.count, !endsURL(bytes[end]) { end += 1 }
-                count += end - separator
-                if isBearer(URLParts(bytes, from: start, to: end)) { return true }
+                count += 2 * (end - separator)
+                if hasCredentialParameter(urlText(bytes, from: start, to: end)) { return true }
+                if hasWebhook(bytes, from: start, to: end) { return true }
                 from = end
             }
             return false
         }
     }
 
-    /// Where the next `://` starts at or after `from`.
-    private static func find(_ bytes: UnsafeBufferPointer<UInt8>, from: Int) -> Int? {
+    /// Whether the address starting at `start`, or one nested after a later `://` before `end`, is a webhook.
+    private static func hasWebhook(_ bytes: UnsafeBufferPointer<UInt8>, from start: Int, to end: Int) -> Bool
+    {
+        var authority = start
+        while authority <= end {
+            let nested = find(bytes, from: authority, to: end)
+            let location = Location(urlText(bytes, from: authority, to: nested ?? end))
+            if isWebhook(host: location.host, path: location.path) { return true }
+            guard let nested else { return false }
+            authority = nested + 3
+        }
+        return false
+    }
+
+    /// Where the next `://` starts at or after `from` and before `limit`.
+    private static func find(_ bytes: UnsafeBufferPointer<UInt8>, from: Int, to limit: Int) -> Int? {
         var offset = from
-        while offset + 3 <= bytes.count {
+        while offset + 3 <= limit {
             if bytes[offset] == UInt8(ascii: ":"), bytes[offset + 1] == UInt8(ascii: "/"),
                 bytes[offset + 2] == UInt8(ascii: "/")
             {
@@ -40,11 +55,16 @@ enum BearerURLShape {
             || byte == UInt8(ascii: "<") || byte == UInt8(ascii: ">") || byte == UInt8(ascii: "`")
     }
 
-    private static func isBearer(_ url: URLParts) -> Bool {
-        isWebhook(host: url.host, path: url.path)
-            || url.parameters.contains { name, value in
-                value.count >= shortestValue && credentialParameters.contains(name)
-            }
+    /// Whether a query or fragment parameter, its name percent-decoded, carries a signature or a token.
+    private static func hasCredentialParameter(_ text: Substring) -> Bool {
+        let beforeQuery = text.prefix { $0 != "?" && $0 != "#" }
+        let rest = text.dropFirst(beforeQuery.count).dropFirst()
+        return rest.split { $0 == "&" || $0 == ";" || $0 == "#" || $0 == "?" }.contains { pair in
+            let name = pair.prefix { $0 != "=" }
+            let value = pair.dropFirst(name.count + 1)
+            return value.count >= shortestValue
+                && credentialParameters.contains(percentDecoded(name).lowercased())
+        }
     }
 
     /// The fewest characters a parameter's value needs to be a credential rather than a placeholder.
@@ -55,6 +75,35 @@ enum BearerURLShape {
         "sig", "signature", "x-amz-signature", "x-goog-signature",
         "access_token", "id_token", "refresh_token", "token",
     ]
+
+    /// The name with each `%XX` escape of an ASCII byte replaced by that byte; any other `%` stays as written.
+    private static func percentDecoded(_ name: Substring) -> String {
+        guard name.contains("%") else { return String(name) }
+        var decoded: [UInt8] = []
+        var bytes = name.utf8[...]
+        while let byte = bytes.popFirst() {
+            if byte == UInt8(ascii: "%"), bytes.count >= 2,
+                let high = hexValue(bytes[bytes.startIndex]),
+                let low = hexValue(bytes[bytes.index(after: bytes.startIndex)]), high < 8
+            {
+                decoded.append(high << 4 | low)
+                bytes = bytes.dropFirst(2)
+            } else {
+                decoded.append(byte)
+            }
+        }
+        return String(decoding: decoded, as: UTF8.self)
+    }
+
+    /// The value of one hexadecimal digit, either case.
+    private static func hexValue(_ byte: UInt8) -> UInt8? {
+        switch byte {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): byte - UInt8(ascii: "0")
+        case UInt8(ascii: "a")...UInt8(ascii: "f"): byte - UInt8(ascii: "a") + 10
+        case UInt8(ascii: "A")...UInt8(ascii: "F"): byte - UInt8(ascii: "A") + 10
+        default: nil
+        }
+    }
 
     /// Incoming-webhook addresses of the chat services, which post as whoever holds them.
     private static func isWebhook(host: String, path: [Substring]) -> Bool {
@@ -72,23 +121,22 @@ enum BearerURLShape {
     }
 }
 
-/// The pieces of one URL's bytes after `://`: its host lowercased, its path's segments and its parameters.
-private struct URLParts {
-    var host = ""
-    var path: [Substring] = []
-    var parameters: [(name: String, value: Substring)] = []
+/// The text of the bytes from `start` to `end`.
+private func urlText(_ bytes: UnsafeBufferPointer<UInt8>, from start: Int, to end: Int) -> Substring {
+    Substring(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self))
+}
 
-    init(_ bytes: UnsafeBufferPointer<UInt8>, from start: Int, to end: Int) {
-        let text = String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self)
+/// Where one URL's text after `://` points: its host lowercased without a closing dot, and its path's segments.
+private struct Location {
+    var host: String
+    var path: [Substring]
+
+    init(_ text: Substring) {
         let beforeQuery = text.prefix { $0 != "?" && $0 != "#" }
         let authority = beforeQuery.prefix { $0 != "/" }
         let hostAndPort = authority.split(separator: "@", omittingEmptySubsequences: false).last ?? ""
-        host = String(hostAndPort.prefix { $0 != ":" }).lowercased()
+        let name = hostAndPort.prefix { $0 != ":" }
+        host = String(name.hasSuffix(".") ? name.dropLast() : name).lowercased()
         path = beforeQuery.dropFirst(authority.count).split(separator: "/")
-        let rest = text.dropFirst(beforeQuery.count).dropFirst()
-        parameters = rest.split { $0 == "&" || $0 == ";" || $0 == "#" || $0 == "?" }.map { pair in
-            let name = pair.prefix { $0 != "=" }
-            return (name.lowercased(), pair.dropFirst(name.count + 1))
-        }
     }
 }

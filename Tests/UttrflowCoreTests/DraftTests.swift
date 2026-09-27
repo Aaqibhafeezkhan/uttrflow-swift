@@ -118,6 +118,10 @@ struct DraftTests {
             ("the build, um, failed", 2, "the build, failed"),
             // Nothing stands before it, so there is nowhere for the mark to go.
             ("uh? yes", 0, "yes"),
+            // An ellipsis is a pause too, so it never lands as a full stop.
+            ("we should um... move", 2, "we should move"),
+            ("we should um\u{2026} move", 2, "we should move"),
+            ("is it um...? yes", 2, "is it? yes"),
         ]
     )
     func carriesMarksOnRemoval(input: String, index: Int, expected: String) {

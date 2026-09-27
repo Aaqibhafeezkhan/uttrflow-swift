@@ -101,16 +101,16 @@ public struct Surroundings: Sendable, Equatable {
             timedTurnLines: walk.clockOnlyElements)
     }
 
-    /// The first occurrence of every line wins; later repeats are dropped. A text the focused element already holds is dropped too, so a mirror of the field's value cannot land in the prompt.
+    /// The copy of every line nearest the field (the last) wins, so the tail still ends on the newest message; the focused element's own text is dropped too.
     static func deduplicated(_ lines: [String], dropping duplicate: String?) -> [String] {
         var seen: Set<String> = []
         var kept: [String] = []
-        for line in lines {
+        for line in lines.reversed() {
             if let duplicate, !duplicate.isEmpty, line == duplicate { continue }
             guard seen.insert(line).inserted else { continue }
             kept.append(line)
         }
-        return kept
+        return kept.reversed()
     }
 
     /// One read's running state: how much it has visited and gathered, and when it has to stop.
