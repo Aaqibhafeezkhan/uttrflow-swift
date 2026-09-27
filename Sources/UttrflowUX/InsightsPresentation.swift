@@ -367,10 +367,11 @@ public enum InsightsPresenter {
                 """)
     }
 
-    /// "Charts appear on Tuesday", assuming the remaining days are spoken on, counted in flat days.
+    /// "Charts appear on Tuesday", or "next Tuesday" a week ahead, assuming each day left is spoken on.
     static func remaining(spoken: Int, now: Date, calendar: Calendar, locale: Locale) -> String {
         let left = max(daysBeforeCharting - spoken, 1)
         let day = now.addingTimeInterval(Double(left) * 86_400)
-        return "Charts appear on \(day.formatted(.dateTime.weekday(.wide).locale(locale)))"
+        let weekday = day.formatted(.dateTime.weekday(.wide).locale(locale))
+        return left % 7 == 0 ? "Charts appear next \(weekday)" : "Charts appear on \(weekday)"
     }
 }

@@ -14,8 +14,8 @@ enum MainMetrics {
     static let contentPadding: CGFloat = 22
     static let cardRadius: CGFloat = 10
     static let rowPadding: CGFloat = 13
-    /// The island as an icon rail: a 44pt target with room either side, and the margin that floats it.
-    static let iconRailWidth: CGFloat = 76
+    /// The island as an icon rail, wide enough that the traffic lights, which end at 79pt, stay inside it.
+    static let iconRailWidth: CGFloat = 88
     /// The sidebar with its names showing: the island and the margin that floats it off the window's edge.
     static let sidebarWidth: CGFloat = 232
     /// The figures rail down the right of a page, wide enough that "Words per minute" and "2.7K" fit.
