@@ -197,9 +197,9 @@ public enum SettingsPresenter {
             let binding = settings.shortcuts.first(for: .dictate)
         else { return nil }
         return SettingsRow(
-            id: "handsFree",
+            id: SettingsToggleField.handsFreeEnabled.rawValue,
             label: "Hands-free",
-            control: .status("On"),
+            control: .toggle(field: .handsFreeEnabled, isOn: settings.handsFreeEnabled),
             badge: "NEW",
             keyedExplanation: SettingsKeyedSentence(
                 before: "Double-tap", keys: SettingsShortcut.keycaps(for: binding),
@@ -518,7 +518,8 @@ public enum SettingsPresenter {
     private static func pageRow(_ page: MainTab, explanation: String) -> SettingsRow {
         SettingsRow(
             id: "page.\(page.rawValue)", label: SidebarPresenter.title(for: page),
-            explanation: explanation, control: .action(title: "Open", change: .openPage(page)))
+            explanation: explanation, control: .action(title: "Open", change: .openPage(page)),
+            icon: .symbol("text.badge.checkmark", .info))
     }
 
     /// One transcription quality, as a segmented option.
@@ -774,7 +775,8 @@ public enum SettingsPresenter {
                 "Forget \(counted(learned, "completion", "completions")) from "
                 + "\(application.name). Everywhere else is untouched.",
             control: .removal(SettingsRemoval(reset: reset, title: "Forget", confirmation: nil)),
-            unavailability: SettingsEditor.unavailability(of: reset, given: personalisation))
+            unavailability: SettingsEditor.unavailability(of: reset, given: personalisation),
+            style: .inset)
     }
 
     // MARK: - Privacy
@@ -802,9 +804,10 @@ public enum SettingsPresenter {
                         retentionRow(settings),
                         toggleRow(
                             .sharesUsageStatistics,
-                            label: "Share anonymous usage statistics",
+                            label: "Share usage statistics",
                             explanation:
-                                "Only counts and timings are sent, never what you dictate.",
+                                "Counts and timings, linked to your account when you are signed in. "
+                                + "Never what you dictate.",
                             settings, capabilities
                         ).with(icon: .symbol("chart.bar", .info)),
                         toggleRow(
@@ -1020,6 +1023,7 @@ public enum SettingsPresenter {
     static func value(of field: SettingsToggleField, in settings: Settings) -> Bool {
         switch field {
         case .dictationEnabled: settings.dictationEnabled
+        case .handsFreeEnabled: settings.handsFreeEnabled
         case .clipboardEnabled: settings.clipboardEnabled
         case .showsFloatingButton: settings.showsFloatingButton
         case .shrinksToGripWhenIdle: settings.shrinksToGripWhenIdle

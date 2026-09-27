@@ -410,6 +410,14 @@ struct SightingLedgerTests {
         ledger.refuse("PGVector")
         #expect(ledger.refusalCount == 1)
     }
+
+    @Test("Restores written-down refusals inside the same bound, keeping the newest")
+    func restoredRefusalsStayInsideTheBound() {
+        let written = (0...SightingLedger.maximumRefused).map { "refused\($0)word" }
+        let ledger = SightingLedger(refusing: written)
+        #expect(ledger.refusalCount == SightingLedger.maximumRefused)
+        #expect(ledger.refusals == Array(written.dropFirst()))
+    }
 }
 
 @Suite("Digits inside a learnable word")

@@ -6,10 +6,11 @@ public import UttrflowCore
 public enum OnboardingPresenter {
     /// The page for a state, with the shortcut and how it is pressed drawn on the last one.
     public static func page(
-        for state: OnboardingState, hotkey: HotkeyBinding, activation: HotkeyActivation = .holdToTalk
+        for state: OnboardingState, hotkey: HotkeyBinding, activation: HotkeyActivation = .holdToTalk,
+        signsInAsStandIn: Bool = false
     ) -> OnboardingPage {
         switch state.step {
-        case .signIn: signIn(state)
+        case .signIn: signIn(state, standIn: signsInAsStandIn)
         case .microphone: permission(.microphone, state)
         case .accessibility: permission(.accessibility, state)
         case .setup: setup(state)
@@ -26,8 +27,11 @@ public enum OnboardingPresenter {
         entirely on this Mac.
         """
 
+    /// Said under the providers in a development build, whose sign-in asks nobody.
+    static let standInHint = "Development build: signs in as a stand-in, no browser"
+
     /// The sign-in page in its five forms: offering, unreachable, in the browser, entering a code, refused.
-    private static func signIn(_ state: OnboardingState) -> OnboardingPage {
+    private static func signIn(_ state: OnboardingState, standIn: Bool = false) -> OnboardingPage {
         let signIn = state.detail.signIn
         let providers = SignInProvider.offered.map {
             OnboardingProviderButton(provider: $0, isEnabled: signIn.acceptsAProvider)
@@ -40,7 +44,8 @@ public enum OnboardingPresenter {
         case .offering:
             return page(
                 state, mood: .brand, picture: .waveform(.talking, badge: nil), title: "Just talk.",
-                providers: providers, showsTerms: true, explanation: pitch)
+                providers: providers, hint: standIn ? standInHint : nil, showsTerms: true,
+                explanation: pitch)
         case .refused(let message):
             return page(
                 state, mood: .failure, picture: .waveform(.still, badge: .symbol("xmark", .failure)),

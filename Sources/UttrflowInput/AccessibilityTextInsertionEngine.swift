@@ -19,6 +19,7 @@ public struct AccessibilityTextInsertionEngine: TextInsertionEngine {
 
     /// Answers `.notReported`: the field verifies the write and does not say whether it could.
     public func insert(_ text: String) async throws(TextInsertionError) -> InsertionArrival {
+        try refuseIfSelfFrontmost()
         let focus = focus
         guard let field = await AccessibilityThread.run(orElse: nil, { focus.focusedTextField() })
         else { throw .noFocusedTextField }
@@ -26,6 +27,7 @@ public struct AccessibilityTextInsertionEngine: TextInsertionEngine {
         guard !Task.isCancelled else {
             throw .insertionRejected(description: TextInsertion.dictationEnded)
         }
+        try refuseIfSelfFrontmost()
         try await AccessibilityThread.run { () throws(TextInsertionError) in
             try field.replaceSelection(with: text)
         }
@@ -38,11 +40,20 @@ extension AccessibilityTextInsertionEngine: CompletionWriting {
 
     /// One write, so the field's own undo sees one edit rather than a delete and a typing run.
     public func write(_ text: String, replacing replaced: String) async throws(TextInsertionError) {
+        try refuseIfSelfFrontmost()
         let focus = focus
         guard let field = await AccessibilityThread.run(orElse: nil, { focus.focusedTextField() })
         else { throw .noFocusedTextField }
+        try refuseIfSelfFrontmost()
         try await AccessibilityThread.run { () throws(TextInsertionError) in
             try field.replaceSelection(replacing: replaced, with: text)
         }
+    }
+}
+
+extension AccessibilityTextInsertionEngine {
+    /// Re-checked at the write rather than trusted from `canInsert()`, whose answer can go stale by now.
+    private func refuseIfSelfFrontmost() throws(TextInsertionError) {
+        guard !focus.isSelfFrontmost() else { throw .noFocusedTextField }
     }
 }

@@ -32,6 +32,13 @@ struct InMemoryAuthenticationServiceTests {
         #expect(profile.currentDevice != nil)
     }
 
+    @Test("says it is a stand-in, and asks for no browser")
+    func isAStandIn() async throws {
+        let service = service()
+        #expect(service.signsInAsStandIn)
+        #expect(try await service.beginSignIn(with: .google).method == .standIn)
+    }
+
     /// The challenge carries no secret; its fields are named, not counted, so adding one is decided here.
     @Test("carries no secret of any kind")
     func challengeIsNotACredential() async throws {

@@ -11,6 +11,7 @@ private final class EndlessChain: ElementTree {
     init(cycle: Int? = nil) { self.cycle = cycle }
 
     func role(of element: Int) -> String? { element == 2 ? "AXStaticText" : "AXGroup" }
+    func isSecure(_ element: Int) -> Bool { false }
     func text(of element: Int) -> String? { element == 2 ? "Nearby message" : nil }
     func children(of element: Int) -> [Int] { element == 1 ? [2, 0] : [] }
     func parent(of element: Int) -> Int? {

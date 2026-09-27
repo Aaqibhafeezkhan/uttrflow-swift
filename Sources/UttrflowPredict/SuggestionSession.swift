@@ -163,6 +163,24 @@ public struct SuggestionSession: Sendable, Equatable {
         keystrokes += 1
     }
 
+    /// Follows a key that typed the next characters of the ghost on screen, keeping the offer drawn and current; nothing when it typed anything else.
+    public mutating func typedThrough(_ characters: String) -> SuggestionUpdate? {
+        guard isCurrent, !characters.isEmpty, !selection.hasMoved, let line = suggestion.accepting,
+            let edit = Acceptance.edit(accepting: line, after: typed), !edit.isReplacement,
+            edit.inserted.count > characters.count, edit.inserted.hasPrefix(characters)
+        else { return nil }
+        // The key is counted and the offer is carried past it, so an answer read before it is still dropped.
+        keystrokes += 1
+        drawnAtKeystroke = keystrokes
+        generation += 1
+        typed += characters
+        if case .choice(let leader, let others) = suggestion {
+            let still = Array(Self.drawable([leader] + others, past: typed).dropFirst())
+            suggestion = still.isEmpty ? .certain(leader) : .choice(leader: leader, others: still)
+        }
+        return armed(showing: suggestion, silence: nil)
+    }
+
     /// Whether what was last settled was worked out from a read that saw every key and move since, which is all that may stay on screen.
     public var isCurrent: Bool { drawnAtKeystroke == keystrokes }
 

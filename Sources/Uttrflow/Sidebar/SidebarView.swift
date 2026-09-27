@@ -26,6 +26,8 @@ struct SidebarView: View {
     var picture: Data?
     /// Whether the names are showing. Remembered across launches by the window.
     var isExpanded: Bool = false
+    /// The page on screen, which lights its row ahead of the presentation catching up; `nil` defers to the presentation.
+    var selection: SidebarDestination?
     var onSelect: (SidebarDestination) -> Void
     var onAccount: () -> Void = {}
     var onToggle: () -> Void = {}
@@ -43,7 +45,8 @@ struct SidebarView: View {
             rows(.footer)
             SidebarAccountCard(
                 account: account, picture: picture, version: presentation.version,
-                isSelected: presentation.isAccountSelected, isExpanded: isExpanded,
+                isSelected: selection.map { $0 == .page(.account) } ?? presentation.isAccountSelected,
+                isExpanded: isExpanded,
                 onOpen: onAccount
             )
             .padding(.top, 10)
@@ -132,9 +135,18 @@ struct SidebarView: View {
         }
     }
 
+    /// Whether a row is lit: by the page on screen when it is known, by the presentation otherwise.
+    static func isLit(_ item: SidebarItem, given selection: SidebarDestination?) -> Bool {
+        selection.map { SidebarPresenter.isSelected(item.destination, given: $0) } ?? item.isSelected
+    }
+
     private func rows(_ section: SidebarSection) -> some View {
         ForEach(presentation.items(in: section)) { item in
-            SidebarRow(item: item, isExpanded: isExpanded) { onSelect(item.destination) }
+            SidebarRow(
+                item: item,
+                isSelected: Self.isLit(item, given: selection),
+                isExpanded: isExpanded
+            ) { onSelect(item.destination) }
         }
     }
 }
@@ -187,6 +199,7 @@ struct SidebarIslandBackground: View {
 /// One destination: icon and name, lit with a teal wash and a bar at its leading edge when selected.
 struct SidebarRow: View {
     let item: SidebarItem
+    let isSelected: Bool
     let isExpanded: Bool
     let onSelect: () -> Void
 
@@ -195,14 +208,14 @@ struct SidebarRow: View {
     var body: some View {
         Button(action: onSelect) {
             content
-                .foregroundStyle(IslandPalette.ink.opacity(item.isSelected ? 1 : 0.72))
-                .background { SidebarSelection(isSelected: item.isSelected, isHovered: isHovered) }
+                .foregroundStyle(IslandPalette.ink.opacity(isSelected ? 1 : 0.72))
+                .background { SidebarSelection(isSelected: isSelected, isHovered: isHovered) }
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .help(item.title)
-        .accessibilityAddTraits(item.isSelected ? [.isSelected] : [])
+        .accessibilitySelection(isSelected)
         .accessibilityLabel(item.badge.map { "\(item.title), \($0) changes today" } ?? item.title)
     }
 
@@ -231,10 +244,10 @@ struct SidebarRow: View {
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: 44, height: 40)
                 .overlay(alignment: .topTrailing) {
-                    // The count, as a dot, for the width that has no room for a number.
+                    // The count, as an amber dot, for the width that has no room for a number.
                     if item.badge != nil {
                         Circle()
-                            .fill(IslandPalette.accent)
+                            .fill(PagePalette.clipboard)
                             .frame(width: 6, height: 6)
                             .padding(.top, 8)
                             .padding(.trailing, 9)
@@ -306,7 +319,7 @@ struct SidebarAccountCard: View {
                     }
                     .padding(12)
                 } else {
-                    avatar(size: 32)
+                    avatar(size: 30)
                         .padding(7)
                         .frame(maxWidth: .infinity)
                 }
@@ -316,6 +329,9 @@ struct SidebarAccountCard: View {
                 // Lit exactly as a selected row is, so Profile reads as the current page.
                 if isSelected {
                     SidebarSelection(isSelected: true, cornerRadius: 14)
+                } else if !isExpanded {
+                    // The rail shows the disc alone, with a faint wash under the pointer.
+                    SidebarSelection(isSelected: false, isHovered: isHovered, cornerRadius: 14)
                 } else {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(IslandPalette.ink.opacity(isHovered ? 0.1 : 0.06))
@@ -330,7 +346,7 @@ struct SidebarAccountCard: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .help(account.open.title)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilitySelection(isSelected)
         .accessibilityLabel(spokenLabel)
     }
 
@@ -338,24 +354,7 @@ struct SidebarAccountCard: View {
     @ViewBuilder private func avatar(size: CGFloat) -> some View {
         switch account {
         case .signedIn(let initials, _, _):
-            if let picture, let image = NSImage(data: picture) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: size, height: size)
-                    .clipShape(.circle)
-            } else {
-                Text(initials)
-                    .font(BrandFont.display(size: size * 0.39, weight: .semibold))
-                    .foregroundStyle(IslandPalette.avatarInk)
-                    .frame(width: size, height: size)
-                    .background(
-                        LinearGradient(
-                            colors: IslandPalette.avatar, startPoint: .topLeading,
-                            endPoint: .bottomTrailing),
-                        in: .circle)
-            }
+            SidebarAvatar(initials: initials, picture: picture, size: size)
         case .signedOut:
             Image(systemName: "person.crop.circle")
                 .font(.system(size: size * 0.6, weight: .regular))
@@ -379,5 +378,13 @@ struct SidebarAccountCard: View {
             case .signedOut(let open): open.title
             }
         return version.isKnown ? "\(who). Version \(version.full)" : who
+    }
+}
+
+extension View {
+    /// Says selected, and takes the trait away again when it is not, so VoiceOver never keeps a stale one.
+    func accessibilitySelection(_ isSelected: Bool) -> some View {
+        accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityRemoveTraits(isSelected ? [] : .isSelected)
     }
 }

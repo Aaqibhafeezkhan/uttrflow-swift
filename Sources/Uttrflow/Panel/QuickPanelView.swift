@@ -82,7 +82,7 @@ struct QuickPanelView: View {
             logo
             HStack(spacing: 9) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.panelLabelDim)
                     .accessibilityHidden(true)
                 field
@@ -96,7 +96,7 @@ struct QuickPanelView: View {
                 onIntent(.dictate)
             } label: {
                 Image(systemName: presentation.microphone.symbolName)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(
                         presentation.microphone.isEnabled
                             ? Color.panelLabelSoft : Color.panelLabelDim
@@ -167,7 +167,7 @@ struct QuickPanelView: View {
 
     /// The mark at the head of the search bar, or nothing when the bundle lacks the resource.
     @ViewBuilder private var logo: some View {
-        if let mark = Bundle.module.image(forResource: "uttrflow-logo") {
+        if let mark = Self.logoMark {
             // The resource is an alpha shape, so the tint here is what draws it.
             Image(nsImage: mark)
                 .renderingMode(.template)
@@ -179,6 +179,9 @@ struct QuickPanelView: View {
                 .accessibilityLabel("Uttrflow")
         }
     }
+
+    /// The mark, read once, since `Bundle.image(forResource:)` does not cache and `body` runs on every key.
+    private static let logoMark = Bundle.module.image(forResource: "uttrflow-logo")
 
     /// One scrolling row: the kind filters as a segmented control, then the collection chips.
     private var chipRow: some View {
@@ -371,7 +374,7 @@ struct QuickPanelView: View {
 
     private func groupHeading(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 9.5, weight: .semibold))
             .kerning(0.6)
             .foregroundStyle(Color.panelLabelDim)
             .padding(.horizontal, 10)
@@ -420,7 +423,8 @@ struct QuickPanelView: View {
                     .font(
                         .system(
                             size: row.isMasked ? 12 : 12.5,
-                            design: row.isMonospaced ? .monospaced : .default)
+                            // The mask is drawn in the text face, whose bullets are the design's size.
+                            design: row.isMonospaced && !row.isMasked ? .monospaced : .default)
                     )
                     .foregroundStyle(row.isMasked ? Color.panelLabelDim : Color.panelLabel)
                     .lineLimit(1)
@@ -484,14 +488,14 @@ struct QuickPanelView: View {
         let colour = tint(for: row.kind)
         if QuickPanelSpeech.hasTile(row.kind) {
             glyph
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(colour)
                 .frame(width: 22, height: 22)
                 .background(colour.opacity(0.15), in: .rect(cornerRadius: 6))
         } else {
             // Small and dim: four rows in five carry this glyph, so it must read as texture, not signal.
             glyph
-                .font(.system(size: 11, weight: .regular))
+                .font(.system(size: 10, weight: .regular))
                 .foregroundStyle(colour.opacity(0.62))
                 .frame(width: 17)
         }
@@ -499,24 +503,12 @@ struct QuickPanelView: View {
 
     /// The picture, decoded once at drawn size; a file that has gone shows the card colour.
     private func thumbnail(_ file: URL) -> some View {
-        Group {
-            // Decoded once and at the size it is drawn; see `PanelThumbnails`.
-            if let picture = PanelThumbnails.shared.thumbnail(for: file) {
-                Image(nsImage: picture)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Color.panelCard
-            }
-        }
-        .frame(width: 34, height: 24)
-        .clipShape(.rect(cornerRadius: 4))
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.panelLine, lineWidth: 1))
-        // Kicks the off-main decode on appearance and again if the row reuses the same view for a different file.
-        .task(id: file) {
-            PanelThumbnails.shared.prepare(file)
-        }
-        .accessibilityHidden(true)
+        // Its own view, so a decode landing redraws this picture and not the whole panel; see `PanelThumbnails`.
+        PanelThumbnailView(file: file)
+            .frame(width: 34, height: 24)
+            .clipShape(.rect(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.panelLine, lineWidth: 1))
+            .accessibilityHidden(true)
     }
 
     /// Drawn only when the detector is confident, and quieter than the alias chip beside it.
@@ -546,8 +538,8 @@ struct QuickPanelView: View {
         HStack(spacing: 6) {
             // Only state that belongs to this clip: a pin. Time and actions live in the ⋯ menu.
             if row.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 10))
+                Image(systemName: "pin")
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Color.panelAccentBright)
             }
             Button {
@@ -716,13 +708,13 @@ struct QuickPanelView: View {
         .overlay(alignment: .top) { hairline }
     }
 
-    /// A tab's glyph: a symbol, or the mark at 13 points so it sits level with 15-point symbols.
+    /// A tab's glyph: a symbol, or the mark at 13 points so it sits level with the 13-point symbols.
     @ViewBuilder
     private func tabGlyph(_ glyph: PanelTabGlyph) -> some View {
         switch glyph {
         case .symbol(let name):
             Image(systemName: name)
-                .font(.system(size: 15, weight: .regular))
+                .font(.system(size: 13, weight: .regular))
         case .brandMark:
             UttrflowMarkView(height: 13)
         }

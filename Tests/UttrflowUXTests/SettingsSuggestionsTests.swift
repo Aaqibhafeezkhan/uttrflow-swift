@@ -354,6 +354,7 @@ struct SettingsForgetSuggestionsTests {
         #expect(forget.explanation?.contains("214 completions") == true)
         #expect(forget.explanation?.contains("Xcode") == true)
         #expect(forget.isEnabled)
+        #expect(forget.style == .inset, "it belongs to the application row above it")
 
         #expect(row("forgetSuggestions.\(xcode)", in: pane(settings)) == nil)
     }

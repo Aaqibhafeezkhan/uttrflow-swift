@@ -140,6 +140,16 @@ struct SettingsTests {
         #expect(!restored.sharesUsageStatistics)
     }
 
+    /// Hands-free stays on for a file written before the switch, and off once somebody turns it off.
+    @Test("hands-free is on by default and keeps the user's choice")
+    func handsFreeDefaultsOnAndSticks() throws {
+        #expect(Settings.default.handsFreeEnabled)
+        #expect(try JSONDecoder().decode(Settings.self, from: Data("{}".utf8)).handsFreeEnabled)
+        let restored = try JSONDecoder().decode(
+            Settings.self, from: JSONEncoder().encode(Settings(handsFreeEnabled: false)))
+        #expect(!restored.handsFreeEnabled)
+    }
+
     /// Crash reports stay off for anyone who never chose, and on for anyone who did.
     @Test("crash reports are off by default and keep the user's choice")
     func crashReportsAreOptIn() throws {
