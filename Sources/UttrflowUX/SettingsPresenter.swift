@@ -562,7 +562,8 @@ public enum SettingsPresenter {
                 applicationGroup(settings, personalisation),
                 acceptKeyGroup(settings, personalisation),
             ].compactMap(\.self),
-            callout: SettingsCallout(symbolName: "lock", message: suggestionsPromise, tint: .suggestion))
+            callout: SettingsCallout(symbolName: "lock", message: suggestionsPromise, tint: .suggestion),
+            unavailability: settings.suggestions.isEnabled ? nil : SettingsEditor.suggestionsAreOff)
     }
 
     /// What switching suggestions on lets Uttrflow read, write and keep.

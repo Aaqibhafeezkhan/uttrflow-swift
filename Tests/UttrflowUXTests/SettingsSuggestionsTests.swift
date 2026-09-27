@@ -121,6 +121,27 @@ struct SettingsSuggestionsPaneTests {
         #expect(on.isEnabled)
     }
 
+    @Test("says once, above the cards, that suggestions are off, and each row keeps its own words")
+    func theReasonIsSaidOnce() throws {
+        let off = pane(.default)
+        #expect(off.unavailability == SettingsEditor.suggestionsAreOff)
+        let quiet = try #require(row("quietSuggestions", in: off))
+        #expect(!quiet.isEnabled)
+        #expect(quiet.explanation == "Never offers a list to choose between.")
+        #expect(quiet.unavailability(besides: off.unavailability) == nil)
+        let listed = try #require(row("suggestionsIn.\(vscode)", in: off))
+        #expect(listed.explanation == "Off here by default (it has its own suggestions)")
+        #expect(listed.unavailability(besides: off.unavailability) == nil)
+        #expect(pane(switchedOn()).unavailability == nil)
+    }
+
+    @Test("a row whose reason the pane does not give still says it")
+    func anUnsharedReasonIsStillSaid() throws {
+        let quiet = try #require(row("quietSuggestions", in: pane(.default)))
+        #expect(quiet.unavailability(besides: nil) == SettingsEditor.suggestionsAreOff)
+        #expect(quiet.unavailability(besides: "Something else.") == SettingsEditor.suggestionsAreOff)
+    }
+
     @Test("offers a half-hour pause, and offers to lift it while one is running")
     func thePauseIsOfferedBothWays() throws {
         var settings = switchedOn()

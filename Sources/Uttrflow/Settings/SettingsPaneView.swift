@@ -17,6 +17,11 @@ struct SettingsPaneView: View {
             if let rejection = model.session.rejection {
                 SettingsRejectionView(reason: rejection)
             }
+            if let unavailability = pane.unavailability {
+                Label(unavailability, systemImage: "info.circle")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(PagePalette.faint)
+            }
             if let empty = pane.emptySearch {
                 Text(empty)
                     .font(.system(size: 13))
@@ -26,7 +31,7 @@ struct SettingsPaneView: View {
             }
             ForEach(pane.groups) { group in
                 VStack(alignment: .leading, spacing: 12) {
-                    SettingsGroupView(group: group, model: model)
+                    SettingsGroupView(group: group, model: model, paneUnavailability: pane.unavailability)
                     if let example = pane.example, example.groupID == group.id {
                         SettingsTidyExampleView(example: example)
                     }
@@ -88,6 +93,8 @@ struct SettingsCard<Content: View>: View {
 struct SettingsGroupView: View {
     let group: SettingsGroup
     let model: SettingsViewModel
+    /// The reason the pane already gives once, which no row repeats.
+    var paneUnavailability: String?
 
     /// Whether a shortcut in this card is listening, which lights the card's edge.
     private var isRecording: Bool {
@@ -110,7 +117,7 @@ struct SettingsGroupView: View {
                     ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
                         // An inset row belongs to the row above it, so no line comes between them.
                         let ruled = index > 0 && row.style != .inset
-                        SettingsRowView(row: row, model: model)
+                        SettingsRowView(row: row, model: model, paneUnavailability: paneUnavailability)
                             .overlay(alignment: .top) {
                                 if ruled {
                                     Rectangle().fill(SettingsPalette.ink(0.07)).frame(height: 1)
@@ -127,6 +134,8 @@ struct SettingsGroupView: View {
 struct SettingsRowView: View {
     let row: SettingsRow
     let model: SettingsViewModel
+    /// The reason the pane already gives once, so this row keeps its own explanation instead.
+    var paneUnavailability: String?
 
     var body: some View {
         Group {
@@ -214,7 +223,7 @@ struct SettingsRowView: View {
                 }
             }
             // The reason a row is off replaces its explanation; two grey lines is a row nobody reads.
-            if let unavailability = row.unavailability {
+            if let unavailability = row.unavailability(besides: paneUnavailability) {
                 secondary(unavailability, size: explanationSize)
             } else if recordsHere {
                 secondary(SettingsShortcutRecorder.listeningHint, size: explanationSize)
