@@ -33,6 +33,10 @@ public actor CaptureSession {
     private var unwrittenCommits: [UnwrittenCommit] = []
     /// The most finished values held for a retry, beyond which the oldest is dropped.
     static let unwrittenCommitLimit = 32
+    /// Acceptances whose write failed, oldest first, retried before the next event or acceptance.
+    private var unwrittenAcceptances: [UnwrittenAcceptance] = []
+    /// The most acceptances held for a retry, beyond which the oldest is dropped.
+    static let unwrittenAcceptanceLimit = 32
 
     /// A session writing to this sink, remembering its answers in this file.
     public init(
@@ -47,6 +51,7 @@ public actor CaptureSession {
     /// Takes one event in one field and answers with what it came to.
     public func handle(_ event: CaptureEvent, in reading: FieldReading) async throws -> CaptureOutcome {
         await retryUnwrittenCommits()
+        await retryUnwrittenAcceptances()
         // The application leaving is the one still focused here, whatever field the caller last read in it.
         if case .applicationDeactivated = event, !isFocused(reading) {
             defer { focused = nil }
@@ -76,17 +81,17 @@ public actor CaptureSession {
         if let refusal = CaptureGate.refusal(toRecord: text, from: reading, given: preferences) {
             return .refused(refusal)
         }
-        // Claimed before the await, so a write admitted while this one is suspended follows it.
-        let previous = claimLast(text, in: surface)
-        do {
-            // Recorded before the acceptance is counted, so a new line's first acceptance is not lost.
-            try await sink.record(text, in: surface, after: previous, selfSourced: true, at: moment)
-        } catch {
-            releaseLast(text, in: surface, restoring: previous)
-            throw error
-        }
-        try await sink.recordAccepted(text, in: surface)
+        await retryUnwrittenAcceptances()
         if isFocused(reading) { detector.accepted(text) }
+        // Claimed before the await, so a write admitted while this one is suspended follows it.
+        let acceptance = UnwrittenAcceptance(
+            text: text, surface: surface, previous: claimLast(text, in: surface), moment: moment)
+        do {
+            try await write(acceptance)
+        } catch let failure as AcceptanceWriteFailure {
+            hold(failure.remaining)
+            throw failure.underlying
+        }
         return .recorded(text)
     }
 
@@ -151,6 +156,7 @@ public actor CaptureSession {
         let application = Surface(bundleIdentifier: bundleIdentifier, role: "").bundleIdentifier
         lastRecorded = lastRecorded.filter { $0.key.bundleIdentifier != application }
         unwrittenCommits.removeAll { $0.surface.bundleIdentifier == application }
+        unwrittenAcceptances.removeAll { $0.surface.bundleIdentifier == application }
         if focused?.surface?.bundleIdentifier == application { detector.reset() }
     }
 
@@ -158,6 +164,7 @@ public actor CaptureSession {
     public func forgetEverythingLearned() throws {
         lastRecorded = [:]
         unwrittenCommits = []
+        unwrittenAcceptances = []
         detector.reset()
         try forgetEveryAnswer()
     }

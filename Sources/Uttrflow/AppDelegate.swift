@@ -678,13 +678,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func memoryPressureChanged(to level: MemoryPressureLevel) {
         switch level {
         case .warning, .critical:
+            pressureReload?.cancel()
+            pressureReload = nil
             releaseSpeechModelIfIdle()
             guard settings.suggestions.isEnabled, isModelPreparing else { return }
             memoryPressure.released(at: .now)
             releaseTheModel()
             suggestionModel = .releasedForMemory
         case .normal:
-            guard memoryPressure.isReleased, pressureReload == nil else { return }  // a repeated calm keeps the countdown already running
+            // A repeated calm keeps the countdown already running.
+            guard memoryPressure.isReleased, pressureReload == nil else { return }
             let wait = memoryPressure.wait
             pressureReload = Task { [weak self] in
                 try? await Task.sleep(for: wait)

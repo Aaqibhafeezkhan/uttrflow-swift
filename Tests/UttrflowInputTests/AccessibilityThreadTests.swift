@@ -25,9 +25,11 @@ private final class BlockingFocus: AccessibilityFocus, @unchecked Sendable {
 
     private func message() {
         let label = String(cString: __dispatch_queue_get_label(nil))
-        offPool.withLock { $0 = $0 && label == "com.uttrflow.input.accessibility" }
+        let fromQueue = label == "com.uttrflow.input.accessibility"
+        offPool.withLock { $0 = $0 && fromQueue }
         sent.withLock { $0 += 1 }
-        while blocks, !opened.withLock({ $0 }) { Thread.sleep(forTimeInterval: 0.005) }
+        // Parks only on the Accessibility queue, so a message sent from the pool fails the test rather than hanging it.
+        while blocks, fromQueue, !opened.withLock({ $0 }) { Thread.sleep(forTimeInterval: 0.005) }
     }
 
     func focusedTextField() -> (any FocusedTextField)? { message(); return nil }
@@ -66,10 +68,10 @@ struct AccessibilityThreadTests {
     func blockedInsertionsDoNotStarveThePool() async throws {
         let focus = BlockingFocus()
         let stuck = ProcessInfo.processInfo.activeProcessorCount * 2
-        // Released by a thread of its own, since a starved pool also starves the global queues and would hang the test.
+        // A last-resort release on a thread of its own, since a starved pool also starves the global queues.
         let released = Flag()
         Thread.detachNewThread {
-            Thread.sleep(forTimeInterval: 20)
+            Thread.sleep(forTimeInterval: 60)
             released.set()
             focus.release()
         }
