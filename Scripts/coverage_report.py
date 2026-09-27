@@ -141,6 +141,10 @@ EXCLUDED_FILES = {
     "Uttrflow/Main/OrbitPalette.swift": "colour values; the two decidable parts are tested in OrbitPaletteTests",
     "Uttrflow/Main/DictationPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/DictionaryPageView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Main/PageParts.swift": "SwiftUI parts of the redesigned pages, drawn from tested presentations",
+    "Uttrflow/Main/PageTable.swift": (
+        "SwiftUI layout; the one sum in it, PageColumns.cellWidths, is tested in PageTableTests"
+    ),
     "Uttrflow/Main/CorrectionsPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/InsightsPageView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Main/SnippetsPageView.swift": "SwiftUI, drawn from a tested presentation",
