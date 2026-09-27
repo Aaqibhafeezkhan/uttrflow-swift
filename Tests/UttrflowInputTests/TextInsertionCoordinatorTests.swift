@@ -155,6 +155,36 @@ struct AccessibilityTextInsertionEngineTests {
         #expect(await engine.canInsert() == false)
     }
 
+    @Test("refuses the write itself when Uttrflow is in front, whatever canInsert said earlier")
+    func insertRefusesWhenUttrflowIsInFront() async {
+        let field = FakeTextField()
+        let engine = AccessibilityTextInsertionEngine(focus: FakeFocus(field: field, isSelf: true))
+
+        await #expect(throws: TextInsertionError.noFocusedTextField) {
+            try await engine.insert("hello")
+        }
+        await #expect(throws: TextInsertionError.noFocusedTextField) {
+            try await engine.write("hello", replacing: "")
+        }
+        #expect(field.replacements.isEmpty)
+    }
+
+    @Test("leaves a dictation made over Uttrflow's own field to the clipboard, not to that field")
+    func coordinatorFallsPastUttrflowsOwnField() async throws {
+        let field = FakeTextField()
+        let keystrokes = FakeKeystrokeSender()
+        let pasteboard = FakePasteboard()
+        let coordinator = TextInsertion.coordinator(
+            focus: FakeFocus(field: field, isSelf: true), pasteboard: pasteboard,
+            keystrokes: keystrokes)
+
+        let attempt = try await coordinator.insert("hello there")
+
+        #expect(attempt.method != .accessibility)
+        #expect(field.replacements.isEmpty)
+        #expect(keystrokes.pasteCount == 0)
+    }
+
     @Test("reports that there is no text field rather than dropping the words")
     func insertWithoutAFocusedField() async {
         let engine = AccessibilityTextInsertionEngine(focus: FakeFocus(field: nil))
