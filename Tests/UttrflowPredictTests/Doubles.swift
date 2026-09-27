@@ -109,10 +109,16 @@ actor NoncooperativeScoring: CandidateScoring {
 
     var isReady: Bool { true }
 
-    /// Blocks with `usleep`, a plain C call with no cancellation check, unlike `Task.sleep`.
+    /// Waits out `usleep` on a thread of its own, ignoring cancellation, so the hold starves no cooperative thread.
     func logLikelihood(of candidate: String, following context: String) async -> Double? {
         advancing?.advance(by: .seconds(3_600))
-        usleep(useconds_t(holdForMilliseconds * 1_000))
+        let hold = useconds_t(holdForMilliseconds * 1_000)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            Thread.detachNewThread {
+                usleep(hold)
+                continuation.resume()
+            }
+        }
         return score
     }
 }
