@@ -40,9 +40,12 @@ milliseconds, not hundreds.
    put back into reading order afterwards, so when a thread outruns the allowance it is the
    newest messages that survive, not the oldest. An element is read only where its frame meets
    the window's: no frame is trusted, zero size is hidden, off-window is pruned with its whole
-   subtree; a label a container already carries is not read again from its children. Every
-   element costs one Accessibility message — role, frame, value, title, description, children
-   and parent in a single multiple-attribute call. `Surroundings.collect` stops at 60 ms,
+   subtree; a label a container already carries is not read again from its children. A field
+   that declares itself secure — the secure role or subrole, or a name `SecureField` recognises —
+   is passed over whole before its text is asked for, one whose text is mask characters alone is
+   dropped, and nothing at all is read around a focused secure field. Every
+   element costs one Accessibility message — role, subrole, identifier, placeholder, frame,
+   title, description, children and parent in a single multiple-attribute call, the value apart. `Surroundings.collect` stops at 60 ms,
    400 elements, 400 characters per element and 1 200 in all — the moment the characters are
    gathered, not a ring later — and returns what it has. Every label is read without its control
    and direction marks and without its timestamp parts: a chat labels each message "text,

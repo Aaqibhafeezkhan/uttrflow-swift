@@ -29,6 +29,16 @@ struct PanelUndoHintTests {
         #expect(PanelPresenter.present(Self.panel(canUndo: false)).hint == PanelPresenter.hint)
     }
 
+    @Test("the presentation says ⌘Z restores exactly while the footer offers it")
+    func offersUndoFollowsTheHint() {
+        var sheeted = Self.panel(canUndo: true)
+        sheeted.sheet = .aliasing(Self.clip.id, draft: "")
+
+        #expect(PanelPresenter.present(Self.panel(canUndo: true)).offersUndo)
+        #expect(!PanelPresenter.present(Self.panel(canUndo: false)).offersUndo)
+        #expect(!PanelPresenter.present(sheeted).offersUndo)
+    }
+
     /// A sheet has its own keys, and teaching ⌘Z over a field where Return saves is the wrong key.
     @Test("a sheet still outranks the undo offer")
     func theSheetWins() {

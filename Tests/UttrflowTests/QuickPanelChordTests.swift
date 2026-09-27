@@ -79,4 +79,40 @@ struct QuickPanelChordTests {
         #expect(!panel.performKeyEquivalent(with: try key("w", .command, in: panel)))
         #expect(recorder.keys.isEmpty)
     }
+
+    @Test("⌘Z restores a clip while the offer shows, and otherwise only when the field has no typing to undo")
+    func undoGoesToTheOfferThenTheField() throws {
+        let undo = try key("z", .command)
+
+        #expect(QuickPanel.claimsUndo(undo, offersRestore: true, fieldCanUndo: true))
+        #expect(QuickPanel.claimsUndo(undo, offersRestore: true, fieldCanUndo: false))
+        #expect(QuickPanel.claimsUndo(undo, offersRestore: false, fieldCanUndo: false))
+        #expect(!QuickPanel.claimsUndo(undo, offersRestore: false, fieldCanUndo: true))
+    }
+
+    @Test("Redo and other chords are never taken as the restore")
+    func redoIsLeftAlone() throws {
+        #expect(
+            !QuickPanel.claimsUndo(
+                try key("Z", [.command, .shift]), offersRestore: true, fieldCanUndo: false))
+        #expect(
+            !QuickPanel.claimsUndo(
+                try key("z", [.command, .option]), offersRestore: true, fieldCanUndo: false))
+        #expect(!QuickPanel.claimsUndo(try key("z", []), offersRestore: true, fieldCanUndo: false))
+        #expect(!QuickPanel.claimsUndo(try key("x", .command), offersRestore: true, fieldCanUndo: false))
+    }
+
+    @Test("⌘Z reaches the panel's own key handler ahead of Edit › Undo while a restore is offered")
+    func commandZReachesThePanel() throws {
+        let panel = QuickPanel(
+            contentRect: CGRect(x: 0, y: 0, width: 200, height: 100),
+            styleMask: [.nonactivatingPanel], backing: .buffered, defer: true)
+        let recorder = KeyRecorder()
+        panel.contentView = recorder
+        panel.makeFirstResponder(recorder)
+        panel.offersRestore = true
+
+        #expect(panel.performKeyEquivalent(with: try key("z", .command, in: panel)))
+        #expect(recorder.keys == ["z"])
+    }
 }
