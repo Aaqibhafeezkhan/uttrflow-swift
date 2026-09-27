@@ -345,11 +345,7 @@ struct MainActionButton: View {
 
     var body: some View {
         Button {
-            if let confirmation = action.confirmation, let confirmations {
-                confirmations.ask(confirmation, before: action.intent)
-            } else {
-                onIntent(action.intent)
-            }
+            MainConfirmationCenter.press(action, in: confirmations, onIntent: onIntent)
         } label: {
             if let symbol = action.symbolName {
                 Label(action.title, systemImage: symbol)

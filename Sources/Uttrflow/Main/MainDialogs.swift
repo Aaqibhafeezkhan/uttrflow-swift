@@ -173,6 +173,17 @@ final class MainConfirmationCenter {
         defer { pending = nil }
         return confirming ? pending?.intent : nil
     }
+
+    /// Presses `action`: asks through `center` first when the action needs a yes, otherwise sends it.
+    static func press(
+        _ action: MainAction, in center: MainConfirmationCenter?, onIntent: (MainIntent) -> Void
+    ) {
+        if let confirmation = action.confirmation, let center {
+            center.ask(confirmation, before: action.intent)
+        } else {
+            onIntent(action.intent)
+        }
+    }
 }
 
 extension View {
