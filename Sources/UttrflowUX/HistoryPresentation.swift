@@ -150,6 +150,8 @@ public struct HistorySnapshot: Sendable, Equatable {
     public let playing: UUID?
     /// The clock the page is drawn against.
     public let now: Date
+    /// Whether ``entries`` has been read from the store yet; false only before the first reading.
+    public let hasReadHistory: Bool
 
     /// Builds a snapshot; everything but entries and the clock has a default.
     public init(
@@ -160,7 +162,8 @@ public struct HistorySnapshot: Sendable, Equatable {
         recordings: [KeptRecording] = [],
         retrying: UUID? = nil,
         playing: UUID? = nil,
-        now: Date
+        now: Date,
+        hasReadHistory: Bool = true
     ) {
         self.entries = entries
         self.query = query
@@ -170,6 +173,7 @@ public struct HistorySnapshot: Sendable, Equatable {
         self.retrying = retrying
         self.playing = playing
         self.now = now
+        self.hasReadHistory = hasReadHistory
     }
 }
 
@@ -177,7 +181,7 @@ public struct HistorySnapshot: Sendable, Equatable {
 public struct HistoryPresentation: Sendable, Equatable {
     /// The dictations, grouped by day.
     public let days: [HistoryDay]
-    /// Set when — and only when — ``days`` is empty, saying which of three reasons nothing survived.
+    /// Set when ``days`` is empty once the history is read, saying which of three reasons nothing survived.
     public let emptyState: MainEmptyState?
     /// The promise under the list.
     public let retentionNotice: HistoryRetentionNotice
@@ -185,6 +189,8 @@ public struct HistoryPresentation: Sendable, Equatable {
     public let showsSearch: Bool
     /// The four stat tiles across the top, the same figures home shows; empty when nothing is kept.
     public let tiles: [HomeStatTile]
+    /// Set until the history has first been read, when the page shows only its header.
+    public let isReading: Bool
 
     /// Builds the page from its parts; no tiles unless given.
     public init(
@@ -192,13 +198,15 @@ public struct HistoryPresentation: Sendable, Equatable {
         emptyState: MainEmptyState?,
         retentionNotice: HistoryRetentionNotice,
         showsSearch: Bool,
-        tiles: [HomeStatTile] = []
+        tiles: [HomeStatTile] = [],
+        isReading: Bool = false
     ) {
         self.days = days
         self.emptyState = emptyState
         self.retentionNotice = retentionNotice
         self.showsSearch = showsSearch
         self.tiles = tiles
+        self.isReading = isReading
     }
 }
 
@@ -215,6 +223,12 @@ public enum HistoryPresenter {
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = .autoupdatingCurrent
     ) -> HistoryPresentation {
+        // Nothing is said about an empty history before the store has answered.
+        guard snapshot.hasReadHistory else {
+            return HistoryPresentation(
+                days: [], emptyState: nil, retentionNotice: notice(for: snapshot), showsSearch: false,
+                isReading: true)
+        }
         let kept = retained(
             snapshot.entries, days: snapshot.settings.transcriptRetentionDays, now: snapshot.now)
         let matching = matches(kept, query: snapshot.query, locale: locale)

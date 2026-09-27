@@ -132,18 +132,22 @@ public struct InsightsSnapshot: Sendable, Equatable {
     public let range: InsightsRange?
     /// The clock the page is drawn against.
     public let now: Date
+    /// Whether ``entries`` has been read from the store yet; false only before the first reading.
+    public let hasReadHistory: Bool
 
     /// Builds a snapshot; entries and settings default to empty, the range to the presenter's choice.
     public init(
         entries: [HistoryEntry] = [],
         settings: Settings = .default,
         range: InsightsRange? = nil,
-        now: Date
+        now: Date,
+        hasReadHistory: Bool = true
     ) {
         self.entries = entries
         self.settings = settings
         self.range = range
         self.now = now
+        self.hasReadHistory = hasReadHistory
     }
 }
 
@@ -151,9 +155,9 @@ public struct InsightsSnapshot: Sendable, Equatable {
 public struct InsightsPresentation: Sendable, Equatable {
     /// The title and caption across the top.
     public let chrome: MainPageChrome
-    /// The range switch. Empty exactly when ``emptyState`` is set.
+    /// The range switch. Empty when ``emptyState`` is set or the history is still being read.
     public let ranges: [InsightsRangeOption]
-    /// The calendar. Absent exactly when ``emptyState`` is set.
+    /// The calendar. Absent when ``emptyState`` is set or the history is still being read.
     public let calendar: InsightsCalendar?
     /// Words, dictations, words per minute and the streak, in that order.
     public let figures: [MainStatistic]
@@ -193,6 +197,11 @@ public enum InsightsPresenter {
         let chrome = MainPageChrome(
             title: "Insights",
             caption: "Where the words went, and how fast they arrived. Measured on this Mac.")
+        // Before the store has answered, only the header is drawn, not "0 of 7 days".
+        guard snapshot.hasReadHistory else {
+            return InsightsPresentation(
+                chrome: chrome, ranges: [], calendar: nil, figures: [], emptyState: nil)
+        }
 
         guard spoken.count >= daysBeforeCharting else {
             return InsightsPresentation(

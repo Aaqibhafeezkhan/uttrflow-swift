@@ -380,6 +380,15 @@ struct InsightsFiguresTests {
 
 @Suite("Insights before there is enough to show")
 struct InsightsWaitingTests {
+    @Test("before the history is read, there is no empty state and no range switch")
+    func beforeTheFirstReading() {
+        let page = InsightsPresenter.page(
+            for: InsightsSnapshot(now: HistoryFixture.now, hasReadHistory: false))
+        #expect(page.emptyState == nil)
+        #expect(page.ranges.isEmpty && page.calendar == nil && page.figures.isEmpty)
+        #expect(page.chrome.title == "Insights")
+    }
+
     /// A baseline drawn from three days is noise wearing a number's clothes, so the page waits.
     @Test("fewer than seven days of speaking means the calendar waits")
     func waits() {

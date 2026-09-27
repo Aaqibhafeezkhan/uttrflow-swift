@@ -312,6 +312,16 @@ struct HistoryEmptyTests {
         #expect(expired.emptyState?.message.contains("7 days") == true)
     }
 
+    @Test("before the history is read, the page claims nothing about it")
+    func beforeTheFirstReading() {
+        let page = HistoryPresenter.page(
+            for: HistorySnapshot(entries: [], now: HistoryFixture.now, hasReadHistory: false))
+        #expect(page.isReading)
+        #expect(page.emptyState == nil)
+        #expect(page.days.isEmpty && page.tiles.isEmpty && !page.showsSearch)
+        #expect(!HistoryFixture.page(entries: []).isReading)
+    }
+
     @Test("an empty page still has no false day sections")
     func noPhantomSections() {
         #expect(HistoryFixture.page(entries: []).days.isEmpty)

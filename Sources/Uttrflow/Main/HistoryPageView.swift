@@ -18,10 +18,12 @@ struct HistoryPageView: View {
 
     var body: some View {
         // Only with no search field, so typing a query that matches nothing never rebuilds the field.
-        if let empty = presentation.emptyState, !presentation.showsSearch {
+        if presentation.isReading || (presentation.emptyState != nil && !presentation.showsSearch) {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                MainEmptyStateView(state: empty, onIntent: onIntent)
+                if let empty = presentation.emptyState {
+                    MainEmptyStateView(state: empty, onIntent: onIntent)
+                }
             }
             .padding(.horizontal, 28)
             .padding(.top, 34)

@@ -2100,7 +2100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 for: HistorySnapshot(
                     entries: entries, query: query(for: .history), settings: settings,
                     keepsRecordings: true, recordings: knownRecordings,
-                    retrying: retryingRecording, playing: playback.playing, now: now)),
+                    retrying: retryingRecording, playing: playback.playing, now: now,
+                    hasReadHistory: hasReadHistory)),
             dictionary: DictionaryPresenter.page(
                 for: DictionarySnapshot(
                     entries: knownWords, draft: wordDraft, refusal: wordRefusal,
@@ -2116,7 +2117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             insights: InsightsPresenter.page(
                 for: InsightsSnapshot(
                     entries: entries, settings: settings,
-                    range: InsightsRange(rawValue: scope(for: .insights)), now: now)),
+                    range: InsightsRange(rawValue: scope(for: .insights)), now: now,
+                    hasReadHistory: hasReadHistory)),
             snippets: SnippetsPresenter.page(
                 for: SnippetsSnapshot(
                     snippets: knownSnippets, draft: snippetDraft, refusal: snippetRefusal,
