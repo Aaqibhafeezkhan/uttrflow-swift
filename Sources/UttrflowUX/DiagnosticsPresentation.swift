@@ -247,11 +247,12 @@ public enum DiagnosticsPresenter {
 
     // MARK: - The verdict
 
-    /// What to say above the table: the first thing wrong, in the order permissions, engines, storage.
+    /// What to say above the table: the first thing wrong, in the order permissions, storage, engines.
     static func summary(
         engines: [DiagnosticsRow], permissions: [DiagnosticsRow], storage: [DiagnosticsRow]
     ) -> DiagnosticsSummary {
-        let ordered = permissions + engines + storage
+        // Storage before engines, so a missing model is named by the row that offers the download.
+        let ordered = permissions + storage + engines
         guard let problem = ordered.first(where: { $0.state == .attention }) else {
             // An unanswered check is not an all-clear, so the line names it without raising a warning.
             if let pending = ordered.first(where: { $0.state == .unknown }) {
@@ -362,9 +363,13 @@ public enum DiagnosticsPresenter {
         let ordered = snapshot.engines.resolvedTransformerPreference
         let inUse = ordered.first { snapshot.transformerAvailability[$0] == true }
 
+        let recogniser = snapshot.speechInUse ?? snapshot.engines.speech
+        // The downloaded recogniser cannot run without its files, so it is not green while they are missing.
+        let lacksModel = recogniser == .whisperKit && snapshot.speechModel?.isInstalled == false
         let speech = DiagnosticsRow(
-            title: "Speech", detail: name(for: snapshot.speechInUse ?? snapshot.engines.speech),
-            state: .good)
+            title: "Speech",
+            detail: lacksModel ? "\(name(for: recogniser)), not downloaded yet" : name(for: recogniser),
+            state: lacksModel ? .attention : .good)
 
         return [speech]
             + ordered.map { kind in
