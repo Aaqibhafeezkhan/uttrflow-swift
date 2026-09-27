@@ -247,7 +247,7 @@ public enum SidebarPresenter {
             case .history: "clock"
             case .dictionary: "square.split.1x2"
             case .corrections: "arrow.left.arrow.right"
-            case .insights: "chart.bar"
+            case .insights: "chart.bar.xaxis"
             case .snippets: "chevron.left.forwardslash.chevron.right"
             case .account: "person.crop.circle"
             }

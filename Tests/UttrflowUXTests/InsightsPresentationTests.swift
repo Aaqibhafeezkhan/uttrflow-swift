@@ -376,7 +376,7 @@ struct InsightsWaitingTests {
         #expect(empty?.progress?.fraction == 2.0 / 7.0)
         #expect(empty?.progress?.steps == 7)
         #expect(empty?.progress?.stepsDone == 2)
-        #expect(empty?.message.contains("Uttrflow has 2.") == true)
+        #expect(empty?.message == "Dictate on 7 different days and your charts appear. 2 of 7 days so far.")
     }
 
     @Test("a whole week ahead is next week's day, not today's name")
@@ -410,10 +410,8 @@ struct InsightsWaitingTests {
         #expect(empty?.progress?.fraction == 0)
     }
 
-    @Test("the closing line says the rest is waiting rather than missing")
-    func footnote() {
-        #expect(
-            HistoryFixture.insights().emptyState?.footnote?.contains("rather than guessing")
-                == true)
+    @Test("the empty page has no closing line under it")
+    func noFootnote() {
+        #expect(HistoryFixture.insights().emptyState?.footnote == nil)
     }
 }

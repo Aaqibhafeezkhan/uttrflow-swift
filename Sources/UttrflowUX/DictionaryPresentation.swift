@@ -439,15 +439,7 @@ public enum DictionaryPresenter {
         return MainEmptyState(
             symbolName: "character.book.closed",
             title: "No words of your own yet",
-            message: """
-                Uttrflow learns the names, products and jargon a general model has never heard. \
-                Select a word it spelt wrong, say it again, and the spelling you keep lands \
-                here. So does a term the title of your window keeps showing while you say it.
-                """,
-            action: MainAction(title: "Add a Word", symbolName: "plus", intent: .addWord),
-            footnote: """
-                Nothing is pre-loaded. An empty dictionary means Uttrflow has not yet changed a \
-                single word of yours.
-                """)
+            message: "Add names and terms Uttrflow would otherwise get wrong.",
+            action: MainAction(title: "Add Word", symbolName: "plus", intent: .addWord))
     }
 }

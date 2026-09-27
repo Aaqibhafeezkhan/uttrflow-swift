@@ -280,7 +280,7 @@ struct HomeAccountTests {
             systemName: "Somebody Else"
         ).account
 
-        #expect(corner == .signedIn(initials: "NB", name: "Naveen", open: .account))
+        #expect(corner == .signedIn(initials: "N", name: "Naveen", open: .account))
     }
 
     @Test("uses the same first two name words as the Account page")
@@ -289,7 +289,7 @@ struct HomeAccountTests {
             account: HistoryFixture.account(name: "Naveen Kumar Bhatt")
         ).account
 
-        #expect(corner == .signedIn(initials: "NK", name: "Naveen", open: .account))
+        #expect(corner == .signedIn(initials: "N", name: "Naveen", open: .account))
     }
 
     @Test("uses whitespace-separated words consistently")
@@ -298,7 +298,7 @@ struct HomeAccountTests {
             account: HistoryFixture.account(name: "Nadia\tStone")
         ).account
 
-        #expect(corner == .signedIn(initials: "NS", name: "Nadia\tStone", open: .account))
+        #expect(corner == .signedIn(initials: "N", name: "Nadia\tStone", open: .account))
     }
 
     @Test("uses the Account page fallback for names without letters")
@@ -358,7 +358,7 @@ struct HomeAccountTests {
             systemName: "Naveen Bhatt"
         ).account
 
-        #expect(corner == .onThisMac(initials: "NB", name: "Naveen", open: .account))
+        #expect(corner == .onThisMac(initials: "N", name: "Naveen", open: .account))
         #expect(corner.open.intent == .show(.account), "there is a page there to open now")
     }
 
@@ -401,7 +401,7 @@ struct HomeAccountTests {
             local: LocalAccount(name: "Somebody Else", since: HistoryFixture.now)
         ).account
 
-        #expect(corner == .signedIn(initials: "NB", name: "Naveen", open: .account))
+        #expect(corner == .signedIn(initials: "N", name: "Naveen", open: .account))
     }
 
     @Test("the chip leads to the Account page")

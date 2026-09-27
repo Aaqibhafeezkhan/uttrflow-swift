@@ -400,7 +400,7 @@ struct MainEmptyStateView: View {
                 )
                 .frame(height: 56)
                 Text(state.title)
-                    .font(BrandFont.display(size: 20, weight: .semibold))
+                    .font(BrandFont.display(size: 24, weight: .semibold))
                     .foregroundStyle(PagePalette.text)
                     .multilineTextAlignment(.center)
                 Text(state.message)

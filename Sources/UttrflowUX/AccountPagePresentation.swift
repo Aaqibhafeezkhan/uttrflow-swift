@@ -282,13 +282,12 @@ public enum AccountPagePresenter {
             picture: picture)
     }
 
-    /// The first letter of the first two words; one word gives one letter, and an email is one word.
+    /// The first letter of the first word that starts with one, or "?" when no word does.
     static func initials(of name: String?) -> String {
         guard let name, !name.isEmpty else { return "?" }
         let words = name.split(whereSeparator: \.isWhitespace).filter { $0.first?.isLetter == true }
-        let letters = words.prefix(2).compactMap(\.first)
-        guard !letters.isEmpty else { return "?" }
-        return String(letters).uppercased()
+        guard let letter = words.first?.first else { return "?" }
+        return String(letter).uppercased()
     }
 
     /// The providers' own names for themselves, capitalisation included: "GitHub", not "Github".
