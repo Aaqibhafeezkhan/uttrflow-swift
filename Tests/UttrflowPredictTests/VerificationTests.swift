@@ -128,11 +128,13 @@ struct VerificationTests {
     }
 
     @Test("Programs and their verbs name everything there is; paths and branches never do.")
-    func closedVocabularies() {
+    func closedVocabularies() throws {
         #expect(Verification.isClosedVocabulary([.executable, .alias]))
         #expect(Verification.isClosedVocabulary([.subcommand(of: "make")]))
         #expect(!Verification.isClosedVocabulary([.branch]))
         #expect(!Verification.isClosedVocabulary([.directories(under: "Sources")]))
+        #expect(!Verification.isClosedVocabulary([]))
+        #expect(!Verification.isClosedVocabulary(for: try #require(CompletionToken("ls -la"))))
     }
 }
 
