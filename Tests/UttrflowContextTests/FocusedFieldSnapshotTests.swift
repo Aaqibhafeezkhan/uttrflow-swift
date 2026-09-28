@@ -348,6 +348,32 @@ struct FullScreenProgramTests {
         #expect(terminalLine("➜  vimrc git sta", title: "vimrc — -zsh — 80×24").currentLine == "git sta")
     }
 
+    @Test(
+        "A listed word that is only the directory, host or tab name leaves the shell prompt readable.",
+        arguments: [
+            "watch — -zsh — 80×24", "view — -zsh — 80×24", "top — bash — 120×40", "man — fish — 80×24",
+            "less (-zsh)", "watch (zsh)", "me@top: ~/src/watch", "~/notes/view", "me@view: ~",
+        ])
+    func directoryWordsAreNotThePrograms(_ title: String) {
+        let reading = terminalLine("user@host watch % git st", title: title)
+        #expect(reading.placement == .inlineGhost, "\(title)")
+        #expect(reading.currentLine == "git st", "\(title)")
+    }
+
+    @Test(
+        "A listed program in front is found in every title shape a terminal writes.",
+        arguments: [
+            "~ — vim notes.md — 80×24", "watch — vim notes.md — 80×24", "tools — top — 80×24",
+            "Default (vim)",
+            "top (htop)", "vim notes.md", "sudo vim /etc/hosts", "fzf", "man ls", "watch -n1 git status",
+            "me@host: less build.log",
+        ])
+    func frontProgramsAreFound(_ title: String) {
+        let reading = terminalLine("git sta", title: title)
+        #expect(reading.placement == nil, "\(title)")
+        #expect(reading.currentLine.isEmpty, "\(title)")
+    }
+
     @Test("Outside a terminal a window title naming an editor changes nothing.")
     func otherApplicationsAreUnaffected() {
         let reading = FocusedFieldSnapshot(
