@@ -114,6 +114,8 @@ enum SuggestionTurnStep: String, Sendable {
     case generate
     /// Checking the model's lines against the machine.
     case attest
+    /// Scoring the model's lines for the confidence floor.
+    case score
     /// Reading the field again before drawing.
     case redraw
     /// Waiting on a model pass for the list behind the drawn line.

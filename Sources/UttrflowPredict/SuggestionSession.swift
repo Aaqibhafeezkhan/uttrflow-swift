@@ -292,7 +292,8 @@ public struct SuggestionSession: Sendable, Equatable {
     /// Draws the model's invented continuations in its own order, since a generated line has no history to weigh.
     public mutating func resolveGenerated(
         _ completions: [String], for query: SuggestionQuery, elapsedMilliseconds: Int,
-        whenEmpty silence: Quieting.Reason = .nothingOffered
+        whenEmpty silence: Quieting.Reason = .nothingOffered,
+        scores: [String: Double] = [:]
     ) -> SuggestionUpdate? {
         guard query.generation == generation, query.surface == surface, answersTheLatestRead,
             let pending
@@ -300,20 +301,58 @@ public struct SuggestionSession: Sendable, Equatable {
         guard elapsedMilliseconds <= Self.turnBudgetInMilliseconds else {
             return settle(.silent, silence: .overBudget)
         }
-        let usable = Self.drawable(completions.filter(isOfferable), past: pending.typed).map {
+        let offerable = completions.filter(isOfferable)
+        let drawable = Self.drawable(offerable, past: pending.typed)
+        let usable = drawable.map {
             Self.keepingTypedCase($0, typed: pending.typed)
         }
         guard let leader = usable.first else { return settle(.silent, silence: silence) }
         let others = Array(usable.dropFirst().prefix(Self.verifiedDepth - 1))
-        let update = settle(
-            others.isEmpty ? .certain(leader) : .choice(leader: leader, others: others), silence: nil)
+        // A turn with no scores is a turn the gate has not reached yet, so the legacy draw stands.
+        guard !scores.isEmpty else {
+            let update = settle(
+                others.isEmpty ? .certain(leader) : .choice(leader: leader, others: others), silence: nil)
+            shownIsGenerated = true
+            return update
+        }
+        let leaderScore = scores[drawable[0]]
+        if others.isEmpty {
+            // A lone leader has to clear the strictest bar; below it the turn goes quiet.
+            guard Self.passesFloor(leaderScore, floor: Verification.certainFloor) else {
+                return settle(.silent, silence: silence)
+            }
+            let update = settle(.certain(leader), silence: nil)
+            shownIsGenerated = true
+            return update
+        }
+        // A list's leader only has to clear the choice bar, and so does every alternative that survives.
+        guard Self.passesFloor(leaderScore, floor: Verification.choiceFloor) else {
+            return settle(.silent, silence: silence)
+        }
+        var kept: [String] = []
+        for (drawableIndex, drawn) in zip(1..<drawable.count, others) {
+            if Self.passesFloor(scores[drawable[drawableIndex]], floor: Verification.choiceFloor) {
+                kept.append(drawn)
+            }
+        }
+        if kept.isEmpty {
+            // No alternative clears the choice bar: fall back to a lone .certain only when the leader clears the stricter bar.
+            guard Self.passesFloor(leaderScore, floor: Verification.certainFloor) else {
+                return settle(.silent, silence: silence)
+            }
+            let update = settle(.certain(leader), silence: nil)
+            shownIsGenerated = true
+            return update
+        }
+        let update = settle(.choice(leader: leader, others: kept), silence: nil)
         shownIsGenerated = true
         return update
     }
 
     /// Adds the alternatives that arrived after the one line was drawn, so Down has a list to open without redrawing the line.
-    public mutating func expandGenerated(_ others: [String], for query: SuggestionQuery) -> SuggestionUpdate?
-    {
+    public mutating func expandGenerated(
+        _ others: [String], for query: SuggestionQuery, scores: [String: Double] = [:]
+    ) -> SuggestionUpdate? {
         // Quiet mode never draws a list, so the alternatives have nothing to add and the line stays as it is.
         guard query.generation == generation, query.surface == surface, isCurrent, let pending,
             shownIsGenerated, !isQuiet,
@@ -321,14 +360,31 @@ public struct SuggestionSession: Sendable, Equatable {
         else { return nil }
         // The leader goes through the same sieve first, so an alternative repeating it in any case is dropped with the other repeats.
         let alternatives = others.filter(isOfferable)
-        let usable = Self.drawable([leader] + alternatives, past: pending.typed).dropFirst().map {
+        let drawable = Self.drawable([leader] + alternatives, past: pending.typed)
+        let usable = drawable.dropFirst().map {
             Self.keepingTypedCase($0, typed: pending.typed)
         }
         guard !usable.isEmpty else { return nil }
+        let kept: [String]
+        if scores.isEmpty {
+            kept = Array(usable.prefix(Self.verifiedDepth - 1))
+        } else {
+            // Each alternative must clear the choice bar; the leader already cleared the strict bar to be drawn.
+            kept = zip(drawable.dropFirst(), usable).compactMap { scored, drawn in
+                Self.passesFloor(scores[scored], floor: Verification.choiceFloor) ? drawn : nil
+            }
+            guard !kept.isEmpty else { return nil }
+        }
         let update = settle(
-            .choice(leader: leader, others: Array(usable.prefix(Self.verifiedDepth - 1))), silence: nil)
+            .choice(leader: leader, others: Array(kept.prefix(Self.verifiedDepth - 1))), silence: nil)
         shownIsGenerated = true
         return update
+    }
+
+    /// Whether a scored line clears the bar, missing score treated as no opinion and therefore passing.
+    private static func passesFloor(_ score: Double?, floor: Double) -> Bool {
+        guard let score else { return true }
+        return score >= floor
     }
 
     /// Whether a line may be offered here, which one the person took and undid in this field may not.

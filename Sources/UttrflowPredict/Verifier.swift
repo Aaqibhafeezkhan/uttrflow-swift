@@ -201,6 +201,20 @@ public actor Verifier {
         return standing
     }
 
+    /// Every model's mean log-likelihood per token past the typed text, absent where the model has no opinion or none is loaded.
+    public func scoreCompletions(
+        _ completions: [String], following typed: String
+    ) async -> [String: Double] {
+        guard let scoring else { return [:] }
+        var scores: [String: Double] = [:]
+        for completion in completions {
+            if let value = await scoring.logLikelihood(of: completion, following: typed) {
+                scores[completion] = value
+            }
+        }
+        return scores
+    }
+
     /// Whether every word the model added is one the machine names, or one no listing could deny; a listing not yet answered vouches for nothing.
     private func stands(
         _ completion: String, after typed: String, in surface: Surface, now: Date

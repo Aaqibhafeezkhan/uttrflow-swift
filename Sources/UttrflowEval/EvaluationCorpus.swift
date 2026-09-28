@@ -451,6 +451,12 @@ public enum EvaluationCorpus {
             mustKeep: ["trial period", "last week"]
         ),
         .init(
+            id: "right-homophones-kept", category: .everyday,
+            spoken: "I can hear you from here and I knew the new build would ship next week",
+            expected: "I can hear you from here, and I knew the new build would ship next week.",
+            mustKeep: ["hear you from here", "knew the new build", "next week"]
+        ),
+        .init(
             id: "spoken-period", category: .everyday,
             spoken: "ship it period",
             expected: "Ship it.",
@@ -470,6 +476,12 @@ public enum EvaluationCorpus {
             expected: "The build is green.\n\nThanks everyone.",
             mustKeep: ["build is green", "thanks everyone"],
             mustNotAdd: ["paragraph", "full stop"]
+        ),
+        .init(
+            id: "new-line-after-a-modifier-kept", category: .everyday,
+            spoken: "our best new line got a laugh",
+            expected: "Our best new line got a laugh.",
+            mustKeep: ["best new line", "got a laugh"]
         ),
         .init(
             id: "question-mark-new-line", category: .everyday,
