@@ -3,11 +3,10 @@
 <!-- release-policy:v4 -->
 ## Branching & Release Policy — NON-NEGOTIABLE
 
-**Effective 2026-09-23. Supersedes release-policy:v3, which said agents may merge their
-own green pull requests. The live `main` ruleset requires independent review, so agents
-stop at a green pull request and leave the branch for a reviewer. Everything else stands,
-including that this repository is the only home for the project and that the `beta` branch
-in any agent's memory belonged to the private one and does not exist here.**
+`AGENTS.md` is the one rulebook for every agent — Claude, Codex, Cursor, Copilot or any
+other. `CLAUDE.md`, `.cursor/rules/` and `.github/copilot-instructions.md` only point here;
+put new rules in this file, never in theirs. There is no `beta` branch, and agents do not
+merge their own pull requests.
 
 **One long-lived branch, `main`, always releasable. A release is a tag, not a branch.**
 
@@ -37,8 +36,8 @@ branch / fork  ──PR──>  main  ──tag v26.0926.0-rc.1──>  prerelea
    you merge past a failing or unfinished check, you are doing it because the operator
    said to, and you say so plainly when you report it — never silently with `--admin`.
 7. **Your implementation task is done when the pull request is open, green, and documented
-   for review.** Keep the worktree and branch while the PR is open; clean them only after
-   GitHub shows the pull request was merged. Do not tag, and do not release.
+   for review — and the session has ended clean** (next section). Do not tag, and do not
+   release.
 
 **Releases stay batched and infrequent.** That has not changed; only the mechanism has.
 `main` accumulates merged work, and the operator decides when a commit on it becomes
@@ -58,6 +57,77 @@ propose things that have already been rejected here for reasons the code does no
 
 `PLAN.md` is the live phase tracker. Read it rather than reconstructing the state of the
 project from `git log`.
+
+## Every session ends clean — NON-NEGOTIABLE
+
+**A session that starts work finishes it: it leaves no worktree, no local branch, no build
+output and no running process behind.** Dozens of agents work here; each worktree carries
+its own `.build` (0.5–5 GB), and 185 abandoned ones once held 89 GB of disk. An abandoned
+worktree is indistinguishable from work in progress, so the next session cannot safely
+remove it — only the session that made it can.
+
+1. **Worktrees live in `.claude/worktrees/<name>` and nowhere else** — not beside the repo,
+   not in a scratchpad or `/tmp`. One place is what makes leftovers findable.
+2. **Never end with work only on this disk.** Commit and push it to `origin/<name>` — a
+   draft pull request is fine — or, if it is abandoned, say so and discard it. Uncommitted
+   work in a worktree is lost work that nobody else may delete.
+3. **Once the branch is pushed, remove the worktree and the local branch** — as soon as the
+   pull request is open, not when it merges. `origin/<name>` is what keeps it reachable.
+4. **Stop what you started** — dev servers, `make` runs in the background, simulators,
+   monitors, scheduled loops — and delete scratch output outside the worktree.
+5. **Close the thread.** In the Claude desktop app, archive the session; in any other tool,
+   end the conversation. An open idle thread holds its worktree and its slot.
+6. **Check before you say done.** `git worktree list` shows nothing of yours, and
+   `git branch --list <name>` prints nothing.
+
+**Never remove a worktree you did not create** unless it is clean, every commit on it is on
+`origin`, and no process is working in it (`lsof -a -d cwd | grep <path>`). If any of the
+three fails, it is somebody's work: leave it and report it.
+
+**Every feature is built in a worktree cut from `origin/main`, then merged into `main` by
+PR.** The feature branch exists only for the length of the work, and nothing reaches `main`
+except through a reviewed pull request — see the release policy at the top of this file.
+
+```bash
+git fetch origin
+git worktree add .claude/worktrees/<name> -b <name> origin/main   # from main, not from HEAD
+cd .claude/worktrees/<name>                                       # and stay there
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+… work, commit by name, `make verify` before every push …
+# the pre-push hook runs `make verify` for main; CI runs it once more on the PR
+git push -u origin <name>
+gh pr create --base main --head <name>
+cd "$(git rev-parse --git-common-dir)/.."                        # back to the main checkout
+git worktree remove .claude/worktrees/<name>                      # refuses if anything is unsaved
+git branch -d <name> 2>/dev/null || git branch -D <name>          # safe: the commits are on origin
+# no `git push origin --delete` — the remote branch stays, always
+```
+
+**Remote branches are never deleted, merged or not.** `origin/<name>` is the pull request's
+source ref, and it is what makes the local copies disposable. When CI or review asks for a
+change after cleanup, re-fetch it rather than opening a new branch or pull request:
+
+```bash
+git fetch origin
+git worktree add .claude/worktrees/<name> origin/<name>
+```
+
+The isolation is the point, and it is not bureaucracy: more than one agent works in this
+repository at once and a shared `.build` corrupts under two concurrent builds, which is
+why `swift build` in the main checkout while anyone else is working is separately
+forbidden next. A worktree gives the work its own `.build`, its own index, and a `git
+status` that shows only what this task changed — which is what makes staging paths by
+name possible at all.
+
+**Never run `swift build` or `swift test` in the main checkout while subagents are
+working.** They share `.build` and corrupt each other. Give parallel agents
+`isolation: "worktree"` — or, when the session's working directory is not itself a git
+repository and that fails, cut the worktrees by hand with the recipe above and point each
+agent at one by absolute path.
+
+**`export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`** before any swift
+command, in every shell and in every agent prompt. A hook or a subagent does not inherit
+it from an interactive profile.
 
 ## Comments: one line, present tense — NON-NEGOTIABLE
 
@@ -346,8 +416,9 @@ not pay for standard runners.** The constraint was cost, the cost is gone, and t
 gate — `.githooks/pre-push`, installed with `make hooks` — is still worth having because it
 is still the fastest answer.
 
-There are five workflows and each earns its keep: CI, release, CodeQL, dependency review,
-Scorecard. Do not add a sixth without asking.
+There are eight workflows and each earns its keep: CI, quality (text and disclosure
+checks), security, dependency review, release, CodeQL (weekly), Scorecard, and the oracle
+sweep (nightly). Do not add another without asking.
 
 **Never run `git add -A`, `git add .`, or `git commit -a`.** More than one agent works in
 this repository at once, and a blanket add sweeps another session's half-finished work
@@ -356,54 +427,6 @@ touched, by name.
 
 **Never rewrite pushed history, and never rebase while another session is committing.**
 Check first: `ps aux | grep -c '[c]laude.*--add-dir'`.
-
-**Every feature is built in a worktree cut from `origin/main`, then merged into `main` by
-PR.** The feature branch exists only for the length of the work, and nothing reaches `main`
-except through a reviewed pull request — see the release policy at the top of this file.
-
-```bash
-git fetch origin
-git worktree add .claude/worktrees/<name> -b <name> origin/main   # from main, not from HEAD
-cd .claude/worktrees/<name>                                       # and stay there
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-… work, commit by name, `make verify` before every push …
-# the pre-push hook runs `make verify` for main; CI runs it once more on the PR
-git push -u origin <name>
-gh pr create --base main --head <name>
-```
-
-**Remote branches are never deleted, merged or not.** `origin/<name>` is the pull request's
-source ref for as long as the pull request exists, open or merged, and deleting it is how a
-branch stops being reconstructible. Once `origin/<name>` exists, the local worktree and local
-branch are disposable: `origin/<name>` alone is enough to pick the work back up.
-
-So, once `git push -u origin <name>` and `gh pr create` have both succeeded, the local
-worktree and local branch may be removed right away — there is no need to wait for merge:
-
-```bash
-cd -                                                              # back to the main checkout
-git worktree remove .claude/worktrees/<name>
-git branch -d <name> 2>/dev/null || git branch -D <name>
-# no `git push origin --delete` — the remote branch stays, always
-```
-
-If CI fails or review asks for a change after that cleanup, re-fetch the same ref rather than
-opening a new branch or a new pull request:
-
-```bash
-git fetch origin
-git worktree add .claude/worktrees/<name> origin/<name>
-cd .claude/worktrees/<name>
-… fix, commit, `make verify` …
-git push origin <name>
-```
-
-The isolation is the point, and it is not bureaucracy: more than one agent works in this
-repository at once and a shared `.build` corrupts under two concurrent builds, which is
-why `swift build` in the main checkout while anyone else is working is separately
-forbidden below. A worktree gives the work its own `.build`, its own index, and a `git
-status` that shows only what this task changed — which is what makes staging paths by
-name possible at all.
 
 **Rebase onto `origin/main` before opening the pull request.** `main` moves under you while
 you work — it is where everything lands — so a branch cut this morning is behind by
@@ -425,27 +448,6 @@ you write down what you would have wanted a reviewer to know: what was measured,
 was assumed, and what you are least sure of. A merge that ends the conversation is worse
 than no merge at all.
 
-**Clear the local worktree and local branch as soon as the pull request is open** — pushed to
-`origin/<name>` and created with `gh pr create` — rather than waiting on merge; the remote
-branch is what keeps the work reachable, not the local copies. Four stale worktrees once sat
-holding pre-rename copies of the whole tree, and an abandoned one is indistinguishable from
-work in progress to the next session that finds it. `.claude/worktrees/` is gitignored, so
-nothing warns you.
-
-**The remote branch itself is never deleted, before or after merge.** It costs nothing to
-leave it, and it is the one ref that survives every local cleanup — if CI or a reviewer asks
-for a repair, re-fetch it into a fresh worktree (see above) instead of opening a new branch.
-
-**Never run `swift build` or `swift test` in the main checkout while subagents are
-working.** They share `.build` and corrupt each other. Give parallel agents
-`isolation: "worktree"` — or, when the session's working directory is not itself a git
-repository and that fails, cut the worktrees by hand with the recipe above and point each
-agent at one by absolute path.
-
-**`export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`** before any swift
-command, in every shell and in every agent prompt. A hook or a subagent does not inherit
-it from an interactive profile.
-
 ## Building and releasing
 
 `Docs/releasing.md` is the only correct description. In short:
@@ -464,8 +466,8 @@ leading zero kept, so versions sort in date order. `2026.9.14` (`YEAR.MONTH.DAY`
 it, semver up to 0.5.0 are retired. See `Docs/releasing.md`. `CFBundleVersion` is what the updater compares, so it goes up by one every
 release. The five-part `YEAR.MONTH.DAY.HOUR.PATCH` scheme stays rejected, as `Docs/releasing.md` says.
 
-Downloads go to the public **uttrflow/releases** repository. Source repositories stay
-private. The published asset is `Uttrflow.dmg` with **no version in the name** — that is
+Downloads go to the public **uttrflow/releases** repository, separate from this source
+repository. The published asset is `Uttrflow.dmg` with **no version in the name** — that is
 what makes the `/releases/latest/download/` URL permanent.
 
 **The tag names the release, and notarisation has nothing to do with it.** A run
