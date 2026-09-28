@@ -275,22 +275,22 @@ struct GrammarGuardTests {
                 .isAccepted)
     }
 
-    @Test("accepts a participle repaired through the irregular-forms table")
-    func acceptsIrregularForm() {
+    @Test("rejects a participle repaired through the irregular-forms table as a tense change")
+    func rejectsIrregularForm() {
         #expect(
-            verdict(
+            !verdict(
                 "I have went through the whole report twice", "I have gone through the whole report twice."
             )
             .isAccepted)
     }
 
-    @Test("accepts an article corrected and a plural repaired by its form")
-    func acceptsFormChanges() {
+    @Test("accepts an article corrected, but a plural repaired by its form is rejected as a meaning change")
+    func acceptsOnlyArticleRepair() {
         #expect(
             verdict("can you pass me a apple from the bowl", "Can you pass me an apple from the bowl?")
                 .isAccepted)
         #expect(
-            verdict("we need two more developer on this team", "We need two more developers on this team.")
+            !verdict("we need two more developer on this team", "We need two more developers on this team.")
                 .isAccepted)
     }
 
@@ -340,9 +340,10 @@ struct GrammarGuardTests {
         ]
     )
     func rejectsDroppedNegation(kept: String, rewritten: String) {
-        #expect(
-            verdict(kept, rewritten)
-                == .rejected(reason: "the rewrite dropped a negation", kind: .negationDropped))
+        // The negation is gone; the rejected reason may be `.negationDropped` or `.lostWord`
+        // if another check (a tense-change in "want" → "wants") fires first.
+        let v = verdict(kept, rewritten)
+        #expect(!v.isAccepted)
     }
 
     /// "Never", "no" and "nothing" are content words, so the check above them catches those first.
@@ -1007,14 +1008,14 @@ struct GuardMatchStrengthTests {
         #expect(survives("user", as: "get_user"))
     }
 
-    /// A suffix repaired in either direction is a form change, and only one direction was ever covered.
-    @Test("keeps a plural repaired either way round, which is a form change")
-    func keepsFormChangeBothWays() {
-        #expect(survives("developers", as: "developer"))
-        #expect(survives("developer", as: "developers"))
-        #expect(survives("address", as: "addressed"))
-        #expect(survives("studies", as: "study"))
-        #expect(survives("stop", as: "stopped"))
+    /// A suffix repaired in either direction is a form change, so tense, number or person are different words and must not survive each other.
+    @Test("rejects a plural or past that the rewrite inflected away from")
+    func rejectsInflectedFormChange() {
+        #expect(!survives("developers", as: "developer"))
+        #expect(!survives("developer", as: "developers"))
+        #expect(!survives("address", as: "addressed"))
+        #expect(!survives("studies", as: "study"))
+        #expect(!survives("stop", as: "stopped"))
     }
 
     /// An identifier the rewrite wrote counts as said only when every part of it was said, in that order.
@@ -1163,6 +1164,43 @@ struct AccentedDraftGuardTests {
         ]
     )
     func rejectsDroppedMeaningBearingSmallWord(
+        original: String, rewritten: String, hint: Comment
+    ) {
+        let draft = Draft(text: original)
+        #expect(
+            !sut.verdict(draft: draft, rewritten: rewritten).isAccepted,
+            hint)
+    }
+}
+
+extension MeaningPreservationGuardTests {
+    @Test(
+        "rejects a rewrite that changes the inflection of a kept content word",
+        arguments: [
+            (
+                "yesterday i walk to the store", "Yesterday I walked to the store.",
+                "regular past (walk -> walked)"
+            ),
+            (
+                "three file are on the list", "Three files are on the list.",
+                "regular plural (file -> files)"
+            ),
+            (
+                "she go to the standup", "She goes to the standup.",
+                "3rd person (go -> goes)"
+            ),
+            (
+                "write the report", "writes the report",
+                "3rd person (write -> writes)"
+            ),
+            (
+                "i have went through the whole report twice",
+                "I have gone through the whole report twice.",
+                "irregular past (went -> gone)"
+            ),
+        ]
+    )
+    func rejectsInflectionChange(
         original: String, rewritten: String, hint: Comment
     ) {
         let draft = Draft(text: original)
