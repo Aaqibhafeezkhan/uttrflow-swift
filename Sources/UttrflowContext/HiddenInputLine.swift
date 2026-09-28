@@ -86,7 +86,12 @@ enum HiddenInputLine {
                     guard let bounds, bounds.height < frame.height * 1.8 else { break }
                     container = ancestor
                 }
-                if let index = rows.firstIndex(where: { $0.container == container }) {
+                // WebKit lays a line's runs straight into the tall editor, so there they share a row by their parent and their band.
+                let flat = container == element
+                if flat, let parent = here.dropLast().last?.0 { container = parent }
+                if let index = rows.firstIndex(where: {
+                    $0.container == container && (!flat || sharesBand($0.row.frame, frame))
+                }) {
                     rows[index].row.runs.append((text, frame))
                 } else {
                     rows.append((container, Row(runs: [(text, frame)])))
@@ -97,6 +102,11 @@ enum HiddenInputLine {
             for child in tree.children(of: element).reversed() { stack.append((child, here)) }
         }
         return rows.map(\.row)
+    }
+
+    /// Whether a run sits on the same line as a row, its top and height alike.
+    static func sharesBand(_ row: CGRect, _ run: CGRect) -> Bool {
+        abs(row.minY - run.minY) <= tolerance && abs(row.height - run.height) <= tolerance
     }
 
     /// The row the stub is parked on, split at the stub, or nothing when none lines up with it.
