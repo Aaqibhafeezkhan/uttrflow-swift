@@ -268,10 +268,10 @@ struct GrammarGuardTests {
         sut.verdict(draft: Draft(text: kept), rewritten: rewritten)
     }
 
-    @Test("accepts an agreement repair that changes only the verb's form")
-    func acceptsAgreementRepair() {
+    @Test("rejects an agreement repair that changes a verb's number")
+    func rejectsAgreementRepair() {
         #expect(
-            verdict("there is three of them waiting outside", "There are three of them waiting outside.")
+            !verdict("there is three of them waiting outside", "There are three of them waiting outside.")
                 .isAccepted)
     }
 
