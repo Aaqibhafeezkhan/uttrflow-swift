@@ -87,30 +87,65 @@ named, a remembered line may teach the model this person's voice but may never b
 line itself. Fixtures for it: a corpus holding another thread's lines, where the right answer uses
 none of them.
 
-**P6 — Say how sure it is. Done.** The 32 wrong lines that remain are prose: notes at 89.8 % precision
-is now the worst category, and no list can vouch for a sentence. The scorer already reads a line's likelihood; a generated line is
-drawn today without ever being scored. Scoring it and drawing only what clears a floor turns
-precision into a dial rather than an argument.
+**P6 — Say how sure it is. Done.** Most wrong lines are the model's own, in places no list can
+vouch for: a sentence, a shopping-list item, a reply. Scoring each generated line and drawing
+only what clears a floor turns precision into a dial rather than an argument.
 
-A generated line is now scored in context before any is drawn, and a line below a set floor is
-not drawn. A line that is drawn as `.certain` has cleared a stricter floor than a line offered
-in a `.choice`. The two floors live in `Verification`:
+A generated line is scored by the pass that wrote it, and a line below a set floor is not drawn.
+While the model decodes, `RecordingSampler` keeps the log-probability of every token it chose,
+and `GeneratedConfidence` averages the tokens that wrote the line's own words past the typing: a
+word the typing still owed and anything the parser cut off the line are left out. No second
+model pass is spent. A line no pass scored, such as one whose model was released since it was
+written, is never drawn. A line drawn as `.certain` clears a stricter floor than one offered in a
+`.choice`:
 
 | Floor | Value | What clears it |
 |---|---|---|
-| `choiceFloor` | −6.0 | a line offered as one of several in a `.choice` |
-| `certainFloor` | −3.0 | the leader drawn alone as `.certain` |
+| `certainFloor` | −0.9 | the one line drawn alone as `.certain` |
+| `choiceFloor` | −1.5 | a line offered as one of several in a `.choice` |
 
-The gap between real and nonsense scores in [`Docs/predict.md`](predict.md) is [−9.15, −4.65]
-on gemma-3-4b-it-qat-4bit: the weakest real line scored −4.65 (`git c` → `git checkout main`)
-and the nearest nonsense −9.15 (`ls --zzqx-bogus`). `choiceFloor` at −6.0 is the established
-plausibility floor; `certainFloor` at −3.0 sits 1.65 above the weakest measured real line and
-rules out every score between −6.0 and −3.0 that was being drawn `.certain` today. Precision
-and coverage at the two floors are recorded by `uttrflow-bakeoff complete --fixtures` once
-the runner's scoring gate is wired into the fixture harness in a follow-up; until then, the
-unit tests in `SuggestionScoringTests` pin the contract — a single line below `certainFloor`
-leaves the turn quiet, the same line below `choiceFloor` with an alternative that clears the
-choice floor becomes a `.choice`, and all lines below the choice floor quiet the turn.
+Both are mean log-probability per generated token on gemma-3-4b-it-qat-4bit, which is a
+different scale from `plausibilityFloor`: that one reads a remembered line with no context, and
+stays −6.0.
+
+`certainFloor` is set from the 1,173-fixture catalogue (`uttrflow-bakeoff complete --fixtures
+--judge`, which prints this table). Coverage is the share of fixtures that drew a line:
+
+| Floor on the pass's own score | Precision | Wrong drawn | Coverage |
+|---|---|---|---|
+| none | 87.15 % (217/249) | 32 | 77.75 % |
+| −1.5 | 87.85 % (217/247) | 30 | 77.15 % |
+| −1.0 | 88.57 % (217/245) | 28 | 75.87 % |
+| **−0.9** | **90.04 % (217/241)** | **24** | **74.68 %** |
+| −0.75 | 90.38 % (216/239) | 23 | 71.44 % |
+| −0.6 | 91.77 % (212/231) | 19 | 67.01 % |
+| −0.5 | 92.48 % (209/226) | 17 | 61.04 % |
+
+−0.9 is the lowest floor that keeps every judged right line. The eight judged lines it holds
+back were all wrong, and it costs 3 points of coverage. Above it, each step loses right lines as
+fast as wrong ones.
+
+The scorer's own second pass separates right from wrong about as well at the same coverage
+(90.27 % at 72.63 % with a −8.0 floor, 90.83 % at 67.95 % with −6.0), but it costs one more
+pass per line, a median of about 100 ms on this machine under load. It is not used for
+generated lines. A −3.0 floor on that second pass reached 97.20 % precision, but at 40.58 %
+coverage.
+
+The eight it holds back are `npx esl` → `npx eslinit`, `def subtr` → `def subtrack`, two
+Hinglish replies, and four shopping-list items (`to` → `toppings` twice, `di` → `diets`, `pan` →
+`pan cakes`). The 24 wrong lines that remain are ones the model writes with confidence: nine
+shopping-list items (`ba` → `bacon`, `yog` → `yogurt`), five commands (`npx pret` → `npx
+pretify`), three SQL lines, three replies, two code lines, one mail line and one robustness case.
+The pass's own score cannot see these, so they need another check.
+
+`choiceFloor` is not set from the catalogue, because the catalogue draws one line per fixture.
+−1.5 refuses only the two least likely of the 32 wrong lines, and a person chooses from a list on
+purpose.
+
+`SuggestionScoringTests` pins the contract. A line under `certainFloor` leaves the turn quiet
+(`modelUnsure`). A line over it is drawn. An unscored line is never drawn. An unscored
+alternative is dropped, and a value the machine listed needs no score. `GeneratedConfidenceTests`
+pins which tokens score a line.
 
 **P7 — A generated line keeps to this person's shape. Done, not yet measured.** Both models'
 lines pass through `CompletionText.finished`, so the rules hold on either path. Prose — a reply

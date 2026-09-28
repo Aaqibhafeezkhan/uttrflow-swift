@@ -50,6 +50,8 @@ private actor SlowLoad: ReleasableModel {
     ) async throws -> [String] { [] }
 
     func logLikelihood(of candidate: String, following context: String) async -> Double? { nil }
+
+    func confidence(ofGenerated line: String) async -> Double? { nil }
 }
 
 @Suite("A release stops the load in flight", .timeLimit(.minutes(1)))

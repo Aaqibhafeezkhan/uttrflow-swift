@@ -1,4 +1,5 @@
 import Foundation
+import UttrflowPredict
 
 /// One fixture's outcome, as the table prints it and the JSON records it.
 struct FixtureResult: Encodable {
@@ -20,11 +21,25 @@ struct FixtureResult: Encodable {
     let rescued: Bool
     /// What the second pass cost, recorded only when one was spent.
     let secondOpinionMs: Int?
+    /// What the confidence floor made of the first line.
+    let gate: Gate
+
+    /// The first line's score from its own pass, whether the floor held it back, and the scorer's second opinion when asked for.
+    struct Gate: Encodable {
+        let confidence: Double?
+        let held: Bool
+        /// Whether the line would have been a hit had it been drawn, which is what a lower floor would change.
+        let hitIfDrawn: Bool
+        let judgeScore: Double?
+        let judgeMs: Int?
+
+        static let open = Gate(confidence: nil, held: false, hitIfDrawn: false, judgeScore: nil, judgeMs: nil)
+    }
 
     init(
         name: String, category: String, typed: String, hit: Bool, judged: Bool, conforms: Bool,
         elapsedMs: Int, first: String?,
-        raw: String?, invented: Bool, rescued: Bool = false, secondOpinionMs: Int? = nil
+        raw: String?, invented: Bool, rescued: Bool = false, secondOpinionMs: Int? = nil, gate: Gate = .open
     ) {
         self.name = name
         self.category = category
@@ -38,10 +53,14 @@ struct FixtureResult: Encodable {
         self.invented = invented
         self.rescued = rescued
         self.secondOpinionMs = secondOpinionMs
+        self.gate = gate
     }
 
     /// Whether anything at all was put in front of the person, which is what a wrong answer needs to be wrong.
-    var shown: Bool { (first?.isEmpty == false) && first?.hasPrefix("error:") != true }
+    var shown: Bool { offered && !gate.held }
+
+    /// Whether the model offered a line, drawn or held back by the floor.
+    var offered: Bool { (first?.isEmpty == false) && first?.hasPrefix("error:") != true }
 
     /// Whether this row belongs in the failures section.
     var failed: Bool { !hit || !conforms }
@@ -149,6 +168,41 @@ struct FixtureReport: Encodable {
         print(
             "second opinion  spent \(summary.secondOpinions)  rescued \(summary.rescued)"
                 + "  p50 \(summary.secondOpinionP50Ms)ms")
+    }
+
+    /// Precision and coverage had every first line been held to each floor, from the model's own score and from the scorer's when it was asked for.
+    func printFloors() {
+        let offered = results.filter(\.offered)
+        guard offered.contains(where: { $0.gate.confidence != nil }) else { return }
+        let held = offered.filter(\.gate.held)
+        let heldWrong = held.filter { $0.judged && !$0.gate.hitIfDrawn }.count
+        print(
+            "\nheld under the floor \(held.count) (judged: \(heldWrong) wrong,"
+                + " \(held.filter { $0.judged && $0.gate.hitIfDrawn }.count) right)")
+        print(
+            "floors on the pass's own score (the app holds a lone line under \(Verification.certainFloor)):")
+        for floor in [-0.5, -0.6, -0.75, -0.9, -1.0, -1.5] {
+            printFloor(floor, kept: offered.filter { Verification.clears($0.gate.confidence, floor: floor) })
+        }
+        guard offered.contains(where: { $0.gate.judgeScore != nil }) else { return }
+        print("floors on the scorer's second pass:")
+        for floor in [-3.0, -4.0, -5.0, -6.0, -8.0] {
+            printFloor(floor, kept: offered.filter { Verification.clears($0.gate.judgeScore, floor: floor) })
+        }
+        let times = offered.compactMap(\.gate.judgeMs).sorted()
+        guard !times.isEmpty else { return }
+        print(
+            "second pass p50 \(times[times.count / 2])ms  p95 \(times[min(times.count - 1, times.count * 95 / 100)])ms"
+        )
+    }
+
+    /// One floor's row: of the judged lines kept, how many were right, and how many lines were kept at all.
+    private func printFloor(_ floor: Double, kept: [FixtureResult]) {
+        let judged = kept.filter(\.judged)
+        let right = judged.filter(\.gate.hitIfDrawn).count
+        print(
+            "  \(String(format: "%5.2f", floor))  precision \(Self.rate(right, of: judged.count)) (\(right)/\(judged.count),"
+                + " \(judged.count - right) wrong)  coverage \(Self.rate(kept.count, of: results.count))")
     }
 
     /// Every miss and every line out of register, each with what was typed and what came back first.

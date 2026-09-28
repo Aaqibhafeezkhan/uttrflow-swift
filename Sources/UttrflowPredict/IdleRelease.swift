@@ -151,6 +151,10 @@ public actor IdleReleasingModel<Model: ReleasableModel>: ReleasableModel {
         return await model.logLikelihood(of: candidate, following: context)
     }
 
+    public func confidence(ofGenerated line: String) async -> Double? {
+        await model.confidence(ofGenerated: line)
+    }
+
     /// Lets the model go when it has not been asked for in the window; returns whether it is still held.
     @discardableResult
     func releaseIfIdle(at now: ContinuousClock.Instant) async -> Bool {

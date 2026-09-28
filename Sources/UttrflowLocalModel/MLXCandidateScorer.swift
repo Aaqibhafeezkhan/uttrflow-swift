@@ -139,6 +139,14 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         vocabulary = nil
         kept = nil
         judgementCache.forgetEverything()
+        confidenceMemory.forgetEverything()
+    }
+
+    /// How sure each recent pass was of the lines it wrote.
+    private var confidenceMemory = ConfidenceMemory()
+
+    public func confidence(ofGenerated line: String) -> Double? {
+        confidenceMemory.confidence(of: line)
     }
 
     /// Per-candidate log-softmax rows the model has already produced, so a keystroke only re-averages from the new `start`.
@@ -266,9 +274,11 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         guard let run = try await run(typed: typed, in: situation, asking: .one, tokenShare: 1) else {
             return nil
         }
+        let completions = Self.completions(from: run, typed: typed, asking: .one, in: situation)
+        confidenceMemory.remember(Self.confidences(of: completions, from: run, typed: typed))
         return GenerationPass(
             text: run.text, stopReason: run.stop.map { String(describing: $0) } ?? "none",
-            completions: Self.completions(from: run, typed: typed, asking: .one, in: situation))
+            completions: completions)
     }
 
     public func alternatives(
@@ -286,7 +296,10 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         guard let run = try await run(typed: typed, in: situation, asking: ask, tokenShare: tokenShare) else {
             return []
         }
-        return Self.completions(from: run, typed: typed, asking: ask, in: situation)
+        let lines = Self.completions(from: run, typed: typed, asking: ask, in: situation)
+        // Measured from the pass that wrote them, so the gate never runs the model a second time.
+        confidenceMemory.remember(Self.confidences(of: lines, from: run, typed: typed))
+        return lines
     }
 
     /// The model's words, how the pass ended, and the opening of its turn handed to it.
@@ -294,6 +307,17 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let text: String
         let stop: GenerateStopReason?
         let written: String
+        /// Every token the decode sampled, in order, with how likely the model found it.
+        let tokens: [Int]
+        let logProbabilities: [Double]
+        let bytes: [[UInt8]]
+    }
+
+    /// Each line's confidence as the pass that wrote it measured it, so no second pass is spent scoring it.
+    private static func confidences(of lines: [String], from run: Run, typed: String) -> [String: Double] {
+        GeneratedConfidence.confidences(
+            of: lines, typed: typed, written: run.written, text: run.text, tokens: run.tokens,
+            logProbabilities: run.logProbabilities, bytes: run.bytes)
     }
 
     /// What the parser makes of a pass, each line cut where it starts copying the screen and then finished; one line the budget cut is kept to its last whole word, which is still the line's own start.
@@ -340,6 +364,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let stream: AsyncStream<Generation>
         let generation: Task<Void, Never>
         let read: KeptPrefix?
+        let ledger = SampleLedger()
         do {
             (stream, generation, read) = try await container.perform { loaded in
                 try Task.checkCancellation()
@@ -395,10 +420,13 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
                         }
                     iterator = try TokenIterator(
                         input: feed, model: context.model, cache: cache, processor: processor,
-                        sampler: parameters.sampler(), maxTokens: parameters.maxTokens)
+                        sampler: RecordingSampler(inner: parameters.sampler(), ledger: ledger),
+                        maxTokens: parameters.maxTokens)
                 } else {
                     iterator = try TokenIterator(
-                        input: feed, model: context.model, cache: cache, parameters: parameters)
+                        input: feed, model: context.model, cache: cache, processor: parameters.processor(),
+                        sampler: RecordingSampler(inner: parameters.sampler(), ledger: ledger),
+                        prefillStepSize: parameters.prefillStepSize, maxTokens: parameters.maxTokens)
                 }
                 let (stream, generation) = generateTask(
                     promptTokenCount: feed.text.tokens.size, modelConfiguration: context.configuration,
@@ -430,7 +458,11 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
                 "PASS prompt=\(info.promptTokenCount) promptMs=\(Int(info.promptTime * 1_000)) generated=\(info.generationTokenCount) generateMs=\(Int(info.generateTime * 1_000))"
             )
         }
-        return Run(text: text, stop: info?.stopReason, written: choice?.written ?? opening?.written ?? "")
+        let sampled = ledger.read()
+        return Run(
+            text: text, stop: info?.stopReason, written: choice?.written ?? opening?.written ?? "",
+            tokens: sampled.tokens, logProbabilities: sampled.logProbabilities, bytes: vocabulary?.bytes ?? []
+        )
     }
 
     /// One instruction for every field: infer the kind of input from the words, then continue it.

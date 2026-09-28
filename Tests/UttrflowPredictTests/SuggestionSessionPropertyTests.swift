@@ -201,7 +201,7 @@ private struct Script {
         let budget = SuggestionSession.turnBudgetInMilliseconds
         let elapsed = random.chance(0.05) ? budget + 1 : Int.random(in: 0...budget, using: &random)
         let completions = invented(for: query.typed)
-        guard let update = session.resolveGenerated(completions, for: query, elapsedMilliseconds: elapsed)
+        guard let update = session.resolveSure(completions, for: query, elapsedMilliseconds: elapsed)
         else {
             Issue.record("a live query must take the model's answer")
             return
@@ -228,7 +228,7 @@ private struct Script {
     private mutating func expand(_ query: SuggestionQuery, behind leader: String) {
         let alternatives = invented(for: query.typed) + (random.chance(0.3) ? [leader] : [])
         let before = session.suggestion
-        let expanded = session.expandGenerated(alternatives, for: query)
+        let expanded = session.expandSure(alternatives, for: query)
         let usable = distinct(
             alternatives.filter {
                 $0.lowercased() != leader.lowercased() && $0 != query.typed
@@ -305,8 +305,8 @@ private struct Script {
         guard let query = stale.randomElement(using: &random) else { return }
         #expect(
             session.resolve(stored(for: query.typed), for: query, now: moment, elapsedMilliseconds: 0) == nil)
-        #expect(session.resolveGenerated([query.typed + "x"], for: query, elapsedMilliseconds: 0) == nil)
-        #expect(session.expandGenerated([query.typed + "y"], for: query) == nil)
+        #expect(session.resolveSure([query.typed + "x"], for: query, elapsedMilliseconds: 0) == nil)
+        #expect(session.expandSure([query.typed + "y"], for: query) == nil)
     }
 
     /// The live question, if any, is now stale.

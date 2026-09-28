@@ -16,7 +16,7 @@ the suggestion in one of two ways:
 - **Generation.** When the corpus and the machine have nothing for the situation, the model
   writes the continuation itself — `git c` in a shell offers `checkout`, then `commit`,
   `cherry-pick` behind it. The corpus never held these; the model knows them. A generated
-  line is the model's own and is not scored again.
+  line is scored by the pass that wrote it and drawn only over `Verification.certainFloor`.
 
 Context decides both. The model is told where the caret is (the application, and what kind of
 field — a shell, a SQL editor, a URL bar, prose), what surrounds the caret (the line, the text

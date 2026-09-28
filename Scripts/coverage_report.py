@@ -208,6 +208,10 @@ EXCLUDED_FILES = {
         "builds a model's layers on MLX and loads gigabytes of weights; which layers it builds quantized "
         "is QuantizedLayerPlan, tested against safetensors headers"
     ),
+    "UttrflowLocalModel/RecordingSampler.swift": (
+        "reads MLX logits inside a real decode; which tokens score a line is GeneratedConfidence, "
+        "tested without a model"
+    ),
     "UttrflowLocalModel/MLXCandidateScorer.swift": (
         "loads a model and runs GPU inference; the text its answers are read through is "
         "CompletionText, and what is done with a score is Verification and Verifier, all tested"

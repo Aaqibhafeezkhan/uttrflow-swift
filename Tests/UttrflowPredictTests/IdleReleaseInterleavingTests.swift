@@ -85,6 +85,8 @@ private actor InterleavedModel: ReleasableModel {
     func logLikelihood(of candidate: String, following context: String) async -> Double? {
         isLoaded ? -1 : nil
     }
+
+    func confidence(ofGenerated line: String) async -> Double? { nil }
 }
 
 @Suite("A stale load never clobbers newer state", .timeLimit(.minutes(1)))

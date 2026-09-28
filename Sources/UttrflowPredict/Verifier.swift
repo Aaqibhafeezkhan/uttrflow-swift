@@ -201,14 +201,12 @@ public actor Verifier {
         return standing
     }
 
-    /// Every model's mean log-likelihood per token past the typed text, absent where the model has no opinion or none is loaded.
-    public func scoreCompletions(
-        _ completions: [String], following typed: String
-    ) async -> [String: Double] {
+    /// Each generated line's mean log-probability per token from the pass that wrote it, absent where no pass measured it or no model is loaded.
+    public func scoreCompletions(_ completions: [String]) async -> [String: Double] {
         guard let scoring else { return [:] }
         var scores: [String: Double] = [:]
         for completion in completions {
-            if let value = await scoring.logLikelihood(of: completion, following: typed) {
+            if let value = await scoring.confidence(ofGenerated: completion) {
                 scores[completion] = value
             }
         }
