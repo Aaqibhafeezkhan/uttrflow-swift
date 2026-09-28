@@ -400,4 +400,31 @@ struct DestructiveCommandTests {
     func datastoreReadsAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A container or release command that removes workloads or their data is destructive.",
+        arguments: [
+            "docker rm -f db", "docker rm -fv db", "docker container rm -f db", "docker rmi -f app:latest",
+            "docker image rm --force app", "docker compose down -v",
+            "docker compose -f prod.yml down --volumes",
+            "docker-compose down -v", "podman rm -f db", "docker -c remote rm -f db", "docker volume rm data",
+            "docker system prune -a", "helm uninstall prod", "helm delete prod", "helm -n prod uninstall api",
+            "helm --kube-context prod uninstall api",
+        ])
+    func workloadRemovalIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A container or release command that lists, runs or stops is ordinary.",
+        arguments: [
+            "docker ps", "docker rm db", "docker container rm db", "docker run --rm -it app",
+            "docker rmi app:old", "docker compose down",
+            "docker compose up -d", "docker-compose down", "podman images", "helm list", "helm -n prod list",
+            "helm upgrade --install api ./chart",
+        ])
+    func workloadReadsAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
