@@ -104,10 +104,10 @@ public struct ArmedKeys: OptionSet, Sendable, Equatable {
     public static let escape = ArmedKeys(rawValue: 1 << 4)
     /// ⌥Escape, which turns the feature off everywhere.
     public static let optionEscape = ArmedKeys(rawValue: 1 << 5)
-    /// The down arrow, which opens the list.
-    public static let downArrow = ArmedKeys(rawValue: 1 << 6)
-    /// The up arrow, claimed only once the list has been walked.
-    public static let upArrow = ArmedKeys(rawValue: 1 << 7)
+    /// ⌥↓, which opens the list and walks it; a bare ↓ is always the application's.
+    public static let optionDownArrow = ArmedKeys(rawValue: 1 << 6)
+    /// ⌥↑, claimed only once the list has been walked; a bare ↑ is always the application's.
+    public static let optionUpArrow = ArmedKeys(rawValue: 1 << 7)
 
     /// Every slot with the keystroke that fills it, so arming can be derived from the decision itself.
     public static let slots: [(stroke: KeyStroke, slot: ArmedKeys)] = [
@@ -117,8 +117,8 @@ public struct ArmedKeys: OptionSet, Sendable, Equatable {
         (KeyStroke(.return), .return),
         (KeyStroke(.escape), .escape),
         (KeyStroke(.escape, modifiers: .option), .optionEscape),
-        (KeyStroke(.downArrow), .downArrow),
-        (KeyStroke(.upArrow), .upArrow),
+        (KeyStroke(.downArrow, modifiers: .option), .optionDownArrow),
+        (KeyStroke(.upArrow, modifiers: .option), .optionUpArrow),
     ]
 
     /// The one slot a keystroke occupies, in integer work only because the tap's callback may not allocate.
@@ -127,6 +127,8 @@ public struct ArmedKeys: OptionSet, Sendable, Equatable {
             switch stroke.key {
             case .tab: return .optionTab
             case .escape: return .optionEscape
+            case .downArrow: return .optionDownArrow
+            case .upArrow: return .optionUpArrow
             default: return []
             }
         }
@@ -136,9 +138,7 @@ public struct ArmedKeys: OptionSet, Sendable, Equatable {
         case .rightArrow: return .rightArrow
         case .return: return .return
         case .escape: return .escape
-        case .downArrow: return .downArrow
-        case .upArrow: return .upArrow
-        case .other: return []
+        case .downArrow, .upArrow, .other: return []
         }
     }
 

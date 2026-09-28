@@ -8,6 +8,47 @@ public enum FunctionWords {
     /// Whether the word carries meaning, so a restatement may be anchored on it or replace it.
     public static func isContent(_ word: String) -> Bool { !word.isEmpty && !holds(word) }
 
+    /// Whether a sentence cannot end on the word, since it leads into what follows ("the", "and", "is", "let's").
+    public static func leadsOn(_ word: String) -> Bool {
+        let key = word.lowercased()
+        return leadingOn.contains(key) || Restatement.contractedSubjects.contains(key)
+    }
+
+    /// Whether the small word carries meaning the rewrite must keep: who acts, whether it is possible or required, or where it goes.
+    public static func isMeaningBearing(_ word: String) -> Bool {
+        let key = word.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
+        return meaningBearing.contains(key)
+    }
+
+    /// Pronouns, modals, copula and perfect aux, and prepositions that set a direction; their removal or substitution changes what was said.
+    public static let meaningBearing: Set<String> = [
+        "i", "you", "he", "she", "it", "we", "they",
+        "me", "him", "her", "us", "them",
+        "my", "your", "his", "its", "our", "their",
+        "mine", "yours", "hers", "ours", "theirs",
+        "this", "these", "those", "there",
+        "who", "whom", "whose", "which", "what",
+        "myself", "yourself", "himself", "herself", "itself",
+        "ourselves", "yourselves", "themselves",
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "having",
+        "will", "would", "shall", "should",
+        "can", "could", "may", "might", "must", "ought",
+        "to", "from", "without", "into", "onto",
+        "through", "across", "behind", "beyond",
+        "toward", "towards", "between", "against",
+    ]
+
+    /// Articles, possessives, conjunctions, prepositions that take an object, and the copula.
+    static let leadingOn: Set<String> = [
+        "a", "an", "the", "my", "your", "our", "their", "its",
+        "and", "or", "but", "nor", "because", "although", "though", "if", "unless", "than", "whether",
+        "of", "to", "into", "onto", "from", "with", "for",
+        "is", "are", "was", "were",
+        "let's", "let\u{2019}s", "what's", "what\u{2019}s", "who's", "who\u{2019}s", "here's",
+        "here\u{2019}s",
+    ]
+
     /// Articles, determiners, prepositions, conjunctions, auxiliaries and pronouns; dialect stays content.
     public static let all: Set<String> = [
         "a", "an", "the",

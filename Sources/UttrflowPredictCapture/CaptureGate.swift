@@ -2,6 +2,7 @@
 private import Foundation
 private import UttrflowClipboard
 private import UttrflowPredict
+public import UttrflowPredictStore
 
 /// Why a value the user finished entering was not remembered.
 public enum CaptureRefusal: String, Sendable, Equatable, CaseIterable {
@@ -39,11 +40,21 @@ public enum CaptureGate {
         case .refuseQuietly: return .consentDeclined
         case .proceed: break
         }
-        guard text.count >= minimumLength else { return .tooShort }
+        // A list marker alone, such as `- ` or `1.` ending a list, is too short to be an item.
+        guard text.count >= minimumLength, !ListMarker.isAlone(text) else { return .tooShort }
         if looksLikeSensitiveValue(text, from: reading) { return .sensitiveValue }
         if looksLikeSecret(text) { return .looksLikeSecret }
         // A destructive command is never stored, so it can never be one keystroke from running.
         return DestructiveCommand.matches(text, failClosedOnUnresolved: true) ? .destructive : nil
+    }
+
+    /// The version of the credential rules, raised whenever they widen so lines learned before are swept once.
+    public static let secretRulesVersion = 1
+
+    /// Removes every learned line the credential rules now recognise, once per `secretRulesVersion`, and counts them.
+    @discardableResult
+    public static func sweepSecrets(from store: PredictStore) async throws(PredictStoreError) -> Int {
+        try await store.sweep("looksLikeSecret", version: secretRulesVersion, removing: looksLikeSecret)
     }
 
     /// Whether a value has the shape of a credential, asked of the rules the clipboard already uses.

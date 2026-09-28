@@ -59,11 +59,11 @@ struct SuggestionSessionScriptTests {
     func generatedNonLatinIsDropped() throws {
         var session = SuggestionSession()
         let query = try asked(session.turn(in: composer, at: PredictionContext(typed: "kal ")))
-        let silent = session.resolveGenerated(["kal मिलते हैं"], for: query, elapsedMilliseconds: 0)
+        let silent = session.resolveSure(["kal मिलते हैं"], for: query, elapsedMilliseconds: 0)
         #expect(silent == .quiet(because: .nothingOffered))
-        _ = session.resolveGenerated(["kal मिलते हैं", "kal milte hain"], for: query, elapsedMilliseconds: 0)
+        _ = session.resolveSure(["kal मिलते हैं", "kal milte hain"], for: query, elapsedMilliseconds: 0)
         #expect(session.suggestion == .certain("kal milte hain"))
-        let expanded = session.expandGenerated(["kal 见", "kal pakka"], for: query)
+        let expanded = session.expandSure(["kal 见", "kal pakka"], for: query)
         #expect(expanded?.suggestion == .choice(leader: "kal milte hain", others: ["kal pakka"]))
     }
 }

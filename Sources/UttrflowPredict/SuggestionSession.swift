@@ -131,6 +131,9 @@ public struct SuggestionSession: Sendable, Equatable {
     /// The line as of the last read, which is what an accepted suggestion continues.
     public private(set) var typed = ""
 
+    /// Lines taken and then undone in this field, in lower case, never offered again until the line ends or the field changes.
+    public private(set) var undoneHere: Set<String> = []
+
     /// Whether ⎋ has left only the dot in this field.
     private var isMinimised = false
     /// The key this application accepts with, told to the session each turn.
@@ -149,6 +152,8 @@ public struct SuggestionSession: Sendable, Equatable {
     private var drawnAtKeystroke = 0
     /// The same count for the turn still being answered, which becomes the drawn one's only once it draws.
     private var pendingKeystroke = 0
+    /// The last line taken here and the line it was taken over, watched for an undo until the line moves on.
+    private var taken: TakenLine?
 
     /// A session following nothing, with the feature on and nothing drawn.
     public init() {}
@@ -156,6 +161,12 @@ public struct SuggestionSession: Sendable, Equatable {
     /// Notes one key typed in the field, which makes whatever is on offer stale until a turn reads the line again.
     public mutating func keystrokeArrived() {
         invalidate()
+    }
+
+    /// Notes a Return that ended the line, so the empty line after it is a new one and not an undo of what was taken.
+    public mutating func lineEnded() {
+        taken = nil
+        undoneHere = []
     }
 
     /// Notes a click, scroll, switch or anything else that may have moved the caret, so neither the offer drawn nor an answer in flight is drawn again.
@@ -212,6 +223,9 @@ public struct SuggestionSession: Sendable, Equatable {
             return settled(.minimised, because: .minimised, rejected: rejected)
         }
         guard !context.typed.isEmpty else { return settled(because: .emptyLine, rejected: rejected) }
+        guard !ListMarker.isAlone(context.typed) else {
+            return settled(because: .listMarkerOnly, rejected: rejected)
+        }
         guard context.typed.count <= Self.maximumTypedLength else {
             return settled(because: .lineTooLong, rejected: rejected)
         }
@@ -243,7 +257,9 @@ public struct SuggestionSession: Sendable, Equatable {
             return .settled(settle(.silent, silence: .overBudget))
         }
         // A candidate the user has already finished typing adds nothing, and one in another script is never written.
-        let offerable = candidates.filter { $0.text != pending.typed && LatinScript.writes($0.text) }
+        let offerable = candidates.filter {
+            $0.text != pending.typed && LatinScript.writes($0.text) && isOfferable($0.text)
+        }
         let decided = PredictionEngine.ranked(from: offerable, in: pending, now: now)
         // A turn with nothing on offer has nothing to be wrong about, so the gates are never troubled.
         guard decided.suggestion.accepting != nil, let ranking = decided.ranking else {
@@ -268,14 +284,16 @@ public struct SuggestionSession: Sendable, Equatable {
             return settle(.silent, silence: .overBudget)
         }
         let decided = PredictionEngine.decision(
-            from: verified.filter { LatinScript.writes($0.text) }, in: pending, now: now)
+            from: verified.filter { LatinScript.writes($0.text) && isOfferable($0.text) }, in: pending,
+            now: now)
         return settle(decided.suggestion, silence: decided.silence)
     }
 
-    /// Draws the model's invented continuations in its own order, since a generated line has no history to weigh.
+    /// Draws the model's invented continuations in its own order, each only as sure as the pass that wrote it; a line it could not score is never drawn.
     public mutating func resolveGenerated(
         _ completions: [String], for query: SuggestionQuery, elapsedMilliseconds: Int,
-        whenEmpty silence: Quieting.Reason = .nothingOffered
+        whenEmpty silence: Quieting.Reason = .nothingOffered,
+        scores: [String: Double]
     ) -> SuggestionUpdate? {
         guard query.generation == generation, query.surface == surface, answersTheLatestRead,
             let pending
@@ -283,34 +301,59 @@ public struct SuggestionSession: Sendable, Equatable {
         guard elapsedMilliseconds <= Self.turnBudgetInMilliseconds else {
             return settle(.silent, silence: .overBudget)
         }
-        let usable = Self.drawable(completions, past: pending.typed).map {
+        let offerable = completions.filter(isOfferable)
+        let drawable = Self.drawable(offerable, past: pending.typed)
+        let usable = drawable.map {
             Self.keepingTypedCase($0, typed: pending.typed)
         }
         guard let leader = usable.first else { return settle(.silent, silence: silence) }
-        let others = Array(usable.dropFirst().prefix(Self.verifiedDepth - 1))
+        let leaderScore = scores[drawable[0]]
+        // A list's leader has to clear the choice bar, and so does every alternative kept beside it.
+        guard Verification.clears(leaderScore, floor: Verification.choiceFloor) else {
+            return settle(.silent, silence: .modelUnsure)
+        }
+        let others = zip(drawable.dropFirst(), usable.dropFirst()).compactMap { scored, drawn in
+            Verification.clears(scores[scored], floor: Verification.choiceFloor) ? drawn : nil
+        }
+        let kept = Array(others.prefix(Self.verifiedDepth - 1))
+        // A lone leader has to clear the stricter bar; below it the turn goes quiet.
+        guard !kept.isEmpty || Verification.clears(leaderScore, floor: Verification.certainFloor) else {
+            return settle(.silent, silence: .modelUnsure)
+        }
         let update = settle(
-            others.isEmpty ? .certain(leader) : .choice(leader: leader, others: others), silence: nil)
+            kept.isEmpty ? .certain(leader) : .choice(leader: leader, others: kept), silence: nil)
         shownIsGenerated = true
         return update
     }
 
-    /// Adds the alternatives that arrived after the one line was drawn, so Down has a list to open without redrawing the line.
-    public mutating func expandGenerated(_ others: [String], for query: SuggestionQuery) -> SuggestionUpdate?
-    {
+    /// Adds the alternatives that arrived after the one line was drawn, so Down has a list to open without redrawing the line; nil scores mean the machine listed them.
+    public mutating func expandGenerated(
+        _ others: [String], for query: SuggestionQuery, scores: [String: Double]?
+    ) -> SuggestionUpdate? {
         // Quiet mode never draws a list, so the alternatives have nothing to add and the line stays as it is.
         guard query.generation == generation, query.surface == surface, isCurrent, let pending,
             shownIsGenerated, !isQuiet,
             case .certain(let leader) = suggestion
         else { return nil }
         // The leader goes through the same sieve first, so an alternative repeating it in any case is dropped with the other repeats.
-        let usable = Self.drawable([leader] + others, past: pending.typed).dropFirst().map {
-            Self.keepingTypedCase($0, typed: pending.typed)
+        let alternatives = others.filter(isOfferable)
+        let drawable = Self.drawable([leader] + alternatives, past: pending.typed)
+        // A model's alternative must clear the choice bar; a value the machine listed exists, so it needs no score.
+        let kept = drawable.dropFirst().compactMap { scored -> String? in
+            let floor = Verification.choiceFloor
+            let stands = scores.map { Verification.clears($0[scored], floor: floor) } ?? true
+            return stands ? Self.keepingTypedCase(scored, typed: pending.typed) : nil
         }
-        guard !usable.isEmpty else { return nil }
+        guard !kept.isEmpty else { return nil }
         let update = settle(
-            .choice(leader: leader, others: Array(usable.prefix(Self.verifiedDepth - 1))), silence: nil)
+            .choice(leader: leader, others: Array(kept.prefix(Self.verifiedDepth - 1))), silence: nil)
         shownIsGenerated = true
         return update
+    }
+
+    /// Whether a line may be offered here, which one the person took and undid in this field may not.
+    private func isOfferable(_ line: String) -> Bool {
+        !undoneHere.contains(line.lowercased())
     }
 
     /// The model's lines that can be drawn over what is typed: each extending it in the Latin alphabet, none repeated in any case, in the model's order.
@@ -343,6 +386,7 @@ public struct SuggestionSession: Sendable, Equatable {
             // The offer is gone the moment it is taken, and so is any answer still in flight for it.
             generation += 1
             clearDrawing()
+            taken = TakenLine(line: text, over: typed)
             typed = text
             return .accept(text)
         case .moveSelection(let moved):
@@ -355,7 +399,7 @@ public struct SuggestionSession: Sendable, Equatable {
         }
     }
 
-    /// Applies one rung of the escape ladder and says what is left on screen.
+    /// Applies one rung of the escape ladder and says what is left on screen; it asks for quiet, so the store is not told the line was wrong.
     private mutating func dismiss(_ dismissal: Dismissal) -> SuggestionUpdate {
         generation += 1
         switch dismissal {
@@ -380,9 +424,12 @@ public struct SuggestionSession: Sendable, Equatable {
             isSilencedHere = false
             isMinimised = false
             rejectionsHere = 0
+            taken = nil
+            undoneHere = []
             clearDrawing()
             return nil
         }
+        watchTaken(typing: typing)
         // An emptied line is a fresh start, so neither the suggestions typed past before it nor the ⎋ still binds the field.
         if typing.isEmpty {
             rejectionsHere = 0
@@ -406,6 +453,22 @@ public struct SuggestionSession: Sendable, Equatable {
         return shownIsGenerated ? nil : offered
     }
 
+    /// Ends the watch on the last line taken once the line moves, marking it undone when the line went back inside it or to what it was taken over.
+    private mutating func watchTaken(typing: String) {
+        guard let taken else { return }
+        let line = typing.lowercased()
+        let whole = taken.line.lowercased()
+        // The read that shows the taken line in place is still inside the watch.
+        guard line != whole else { return }
+        self.taken = nil
+        // A field emptied after a take was sent by a button or shortcut the tap never sees, which is not an undo.
+        guard !line.isEmpty else { return }
+        // A fuzzy line rewrote what was typed, so its undo lands on the typo rather than inside the line.
+        if whole.hasScalarPrefix(line) || taken.over.lowercased().hasScalarPrefix(line) {
+            undoneHere.insert(whole)
+        }
+    }
+
     /// The moment with the three facts only this session knows filled in.
     private func contextualised(_ moment: PredictionContext) -> PredictionContext {
         PredictionContext(
@@ -413,7 +476,8 @@ public struct SuggestionSession: Sendable, Equatable {
             isComposing: moment.isComposing, isSecure: moment.isSecure, isProse: moment.isProse,
             millisecondsSinceKeystroke: moment.millisecondsSinceKeystroke,
             isEnabledHere: isEnabled && !isSilencedHere, isMinimised: isMinimised,
-            rejectionsThisSession: rejectionsHere, canDraw: moment.canDraw, markedText: moment.markedText)
+            rejectionsThisSession: rejectionsHere, canDraw: moment.canDraw, markedText: moment.markedText,
+            isCommandLine: moment.isCommandLine, showsOwnList: moment.showsOwnList)
     }
 
     /// Records what is now on screen and reports it with the keys it claims and, when nothing is offered, why.
@@ -455,4 +519,12 @@ public struct SuggestionSession: Sendable, Equatable {
         selection = .untouched
         shownIsGenerated = false
     }
+}
+
+/// A line the person took and the line it was taken over, which is what an undo goes back to.
+private struct TakenLine: Sendable, Equatable {
+    /// The whole line the acceptance wrote.
+    let line: String
+    /// The line as typed when the key was pressed.
+    let over: String
 }

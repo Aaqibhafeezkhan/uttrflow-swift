@@ -26,6 +26,11 @@ public struct DiscretionaryModel<Model: ReleasableModel>: CandidateScoring {
         }
     }
 
+    /// A lookup of what a pass already measured, so it runs whatever the Mac's conditions.
+    public func confidence(ofGenerated line: String) async -> Double? {
+        await model.confidence(ofGenerated: line)
+    }
+
     /// Loads the weights at utility priority, whatever the Mac's conditions, since somebody asked for the feature.
     public func prepare(onProgress: @escaping @Sendable (Double) -> Void) async throws {
         try await DiscretionaryGenerator.discretionary { [model] in

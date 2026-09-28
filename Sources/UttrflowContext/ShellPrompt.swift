@@ -25,8 +25,32 @@ public enum ShellPrompt {
 
     /// What the user typed on this line, or the whole line where no prompt stands in front of it.
     public static func input(in line: String) -> String {
+        if let typed = afterArrowPrompt(in: line) { return typed }
         guard let terminator = promptEnd(in: line) else { return line }
         return String(line[line.index(after: terminator)...].drop(while: \.isWhitespace))
+    }
+
+    /// The marks an arrow prompt draws after the branch when the tree has changes, or has none.
+    private static let changeMarks: Set<Character> = ["✗", "✔", "✓"]
+
+    /// What follows a leading `➜  directory` prompt, with the `git:(branch)` and change mark a repository adds; absent where the line does not begin with one.
+    private static func afterArrowPrompt(in line: String) -> String? {
+        var rest = line.drop(while: \.isWhitespace)
+        guard rest.first == "➜" else { return nil }
+        rest = rest.dropFirst()
+        // The theme draws the arrow and then two spaces, which a lone arrow typed as text never has.
+        guard rest.prefix(while: \.isWhitespace).count >= 2 else { return nil }
+        rest = rest.drop(while: \.isWhitespace).drop { !$0.isWhitespace }.drop(while: \.isWhitespace)
+        let branch = rest.prefix { !$0.isWhitespace }
+        if branch.hasSuffix(")"), let open = branch.firstIndex(of: "("), branch[..<open].hasSuffix(":"),
+            branch[..<open].dropLast().allSatisfy(\.isLetter)
+        {
+            rest = rest.dropFirst(branch.count).drop(while: \.isWhitespace)
+        }
+        if let mark = rest.first, changeMarks.contains(mark), rest.dropFirst().first?.isWhitespace ?? true {
+            rest = rest.dropFirst().drop(while: \.isWhitespace)
+        }
+        return String(rest)
     }
 
     /// What has been read of the line so far, carried forward so no terminator rereads the text before it.

@@ -170,6 +170,14 @@ public final class OnboardingFlow {
         }
     }
 
+    /// Goes back to the sign-in page after a sign-out; a download in flight keeps going but stops drawing here.
+    public func signedOut() async {
+        guard !isFinished else { return }
+        abandonSignIn()
+        installGeneration += 1
+        await enter(.signIn)
+    }
+
     /// Shows how the first try on the last page is going; words that arrive close onboarding after a moment.
     public func tried(_ trial: OnboardingTrial) async {
         guard case .finishing(let readiness, let current) = state.detail,

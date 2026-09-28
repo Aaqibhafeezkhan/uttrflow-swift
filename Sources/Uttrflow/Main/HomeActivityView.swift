@@ -221,20 +221,25 @@ struct HomeActivityRowView: View {
 /// The View and ⋯ buttons: a faint fill, a hairline edge, and a little more fill when pressed.
 struct HomeQuietButtonStyle: ButtonStyle {
     var isSquare = false
+    /// Whether the glyph and chrome are drawn; the button itself is never hidden, since SwiftUI drops a transparent view from VoiceOver.
+    var isShown = true
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(PagePalette.text)
+            .opacity(isShown ? 1 : 0)
             .padding(.horizontal, isSquare ? 0 : 18)
             .frame(width: isSquare ? 34 : nil, height: isSquare ? 34 : 30)
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(PagePalette.controlFill.opacity(configuration.isPressed ? 2 : 1))
+                    .opacity(isShown ? 1 : 0)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(PagePalette.controlEdge, lineWidth: 1)
+                    .opacity(isShown ? 1 : 0)
             }
             .contentShape(.rect)
     }

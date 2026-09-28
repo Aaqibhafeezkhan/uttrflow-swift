@@ -31,11 +31,50 @@ struct ScriptGuardTests {
             ("वो क्या है ना, यानि मुझे थोड़ा टाइम चाहिए.", "Woh kya hai na, yaani mujhe thoda time chahiye."),
             ("हाँ ठीक है", "Haan theek hai."),
             ("मैं meeting के लिए बीस मिनट late हो जाऊंगा", "Main meeting ke liye 20 minute late ho jaunga."),
-            ("कल सुबह, सौरी, परशो सुबह, कॉल करना.", "Kal subah, sorry, parson subah, call karna."),
+            ("कल सुबह, सौरी, परशो सुबह, कॉल करना.", "Kal subah, sorry, parsho subah, call karna."),
             ("धन्यवाद", "Dhanyawad."),
         ])
     func acceptsARomanisation(draft: String, rewritten: String) {
         #expect(sut.scriptVerdict(draft: draft, rewritten: rewritten, examples: examples) == .accepted)
+    }
+
+    /// A fluent romanisation that says something else is a rewrite, and the rules' faithful one costs little. Issues #2087 and #2416.
+    @Test(
+        "refuses a romanisation that changes, drops or adds a content word or a number",
+        arguments: [
+            ("मैंने खाना खा लिया", "Maine khana khila."),
+            ("हम धाई बजे मिलते हैं.", "Hum doh baje milte hain."),
+            ("देर घंटे में वापस आएंगा.", "Der hour mein wapas aayega."),
+            ("आज बारिश हो रही है, देर हो जाएगी.", "Aaj baarish ho rahi hai, der ho gayi hai."),
+            ("गोड रिव्यू कब तक हो जाएगा?", "God review kab tak hoga?"),
+            ("मीरा को इमेल भेज दो.", "Mira ko email bhejo."),
+            ("टेस्स केसेस फाल हो रहे हैं, मैं इन देखता हूं.", "Tess keses phaal ho rahe hain, main in dekhunga."),
+        ])
+    func refusesAChangedWord(draft: String, rewritten: String) {
+        let verdict = sut.scriptVerdict(draft: draft, rewritten: rewritten, examples: examples)
+        #expect(!verdict.isAccepted, "\(rewritten)")
+    }
+
+    /// A loanword the rules romanise is the same word in its English spelling, and Hindi grammar may be set right. Issue #2376.
+    @Test(
+        "accepts an English loanword in its English spelling, a verb's form, and a filler or a stammer dropped",
+        arguments: [
+            ("कल की मीटिंग कैंसल हो गई है", "Kal ki meeting cancel ho gayi hai."),
+            (
+                "मेरा लैपटॉप बहुत स्लो चल रहा है, क्या तुम टीम को टिकट भेज सकते हो?",
+                "Mera laptop bahut slow chal raha hai, kya tum team ko ticket bhej sakte ho?"
+            ),
+            ("आज ओफिस में बहुत काम है", "Aaj office mein bahut kaam hai."),
+            ("कल सुबह, सौरी, परसों सुबह, कॉल करना.", "Kal subah, sorry, parson subah, call karna."),
+            ("मुझे यह build ठीक नहीं लग रहा", "Mujhe is build theek nahi lag raha."),
+            ("मैं late हूँ sorry मैं अभी आता हूँ", "Main late hoon, sorry, main abhi aa raha hoon."),
+            ("अरे सुनो ज़रा वो report भेज देना", "are suno zara vo report bhej dena"),
+            ("उम मैं कल आऊंगा", "Main kal aaunga."),
+            ("मैं मैं कल आऊंगा", "Main kal aaunga."),
+        ])
+    func acceptsAFaithfulRomanisation(draft: String, rewritten: String) {
+        let verdict = sut.scriptVerdict(draft: draft, rewritten: rewritten, examples: examples)
+        #expect(verdict == .accepted, "\(rewritten): \(verdict)")
     }
 
     @Test(

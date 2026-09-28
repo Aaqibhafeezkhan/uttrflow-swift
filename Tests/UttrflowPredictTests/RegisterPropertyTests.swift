@@ -96,12 +96,11 @@ struct RegisterPropertyTests {
     func theBudgetStaysInRange(sample: RegisterCase) {
         let register = Register.infer(from: sample.situation, typed: sample.typed)
         #expect(Register.tokenRange.contains(register.maxTokens))
-        // A reply is always given a whole message's room, whatever this person's typical line.
-        let floor = register.isConversational ? Register.replyTokens : 0
+        // A typical line sets the budget in a reply too, so a terse person is not given a paragraph's room.
         if let typical = register.typicalLength {
-            #expect(register.maxTokens == max(min(max(typical / 2, 24), 96), floor))
+            #expect(register.maxTokens == min(max(typical / 2, 24), 96))
         } else if register.symbolShare > Register.symbolicShare {
-            #expect(register.maxTokens == max(32, floor))
+            #expect(register.maxTokens == 32)
         } else {
             #expect(register.maxTokens == (register.isConversational ? 48 : 64))
         }
@@ -150,7 +149,7 @@ struct RegisterPropertyTests {
         #expect((0.0...1.0).contains(register.symbolShare))
         let visible = ([sample.situation.preceding ?? "", sample.typed] + sample.situation.recentLines)
             .joined()
-            .filter { !$0.isWhitespace }
+            .filter { !$0.isWhitespace && !Register.isPictograph($0) }
         let symbols = visible.filter { !$0.isLetter && !$0.isNumber }.count
         let expected = visible.isEmpty ? 0 : Double(symbols) / Double(visible.count)
         #expect(register.symbolShare == expected)

@@ -65,6 +65,11 @@ Offline, the sign-in page offers only Try again.
 `OnboardingFlow.onSignIn` fires as soon as the profile is kept, so the rest of the app is
 switched on before the remaining setup pages, whose last one asks for a first dictation.
 
+A sign-out while the window is still open, from the menu bar or the Account page, sends the
+flow back to this page through `OnboardingFlow.signedOut()`, whichever page it was on. A
+download in flight keeps going, but stops drawing; signing in again joins it on the
+download page.
+
 ## The first try
 
 The last page asks the user to hold their shortcut and talk. `OnboardingWindowController`

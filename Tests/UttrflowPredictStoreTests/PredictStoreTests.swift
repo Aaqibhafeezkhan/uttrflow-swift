@@ -283,6 +283,19 @@ struct StoreMatchingTests {
         #expect(found.first?.editDistance == 1)
     }
 
+    @Test(
+        "A typed amount is never matched to a different learned amount.",
+        arguments: [
+            ("12.60", "12.50"), ("1,250", "1,350.00"), ("$130", "$120"),
+        ])
+    func amountsAreNotCorrected(typed: String, learned: String) async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record(learned, in: terminal, at: moment)
+        #expect(try await store.candidates(for: terminal, matching: typed).isEmpty)
+        #expect(try await store.candidates(for: terminal, matching: String(learned.prefix(3))).count == 1)
+    }
+
     @Test("A query that matches exactly never reaches the fuzzy tier, so its neighbours stay out.")
     func exactSuppressesFuzzy() async throws {
         let corpus = Corpus()
@@ -304,6 +317,25 @@ struct StoreMatchingTests {
         let found = try await store.candidates(for: terminal, matching: "gti ")
         #expect(found.count == 16)
         #expect(found.first?.text == "git status")
+    }
+
+    @Test("A line used lately reaches ranking however many older, more frequent lines share its opening.")
+    func aRecentLineOutranksStaleFrequentOnes() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        let monthsAgo = moment - 200 * 86_400
+        for index in 0..<(PredictStore.candidateLimit + 4) {
+            for _ in 0..<5 {
+                try await store.record(
+                    String(format: "git stash-%03d end", index), in: terminal, at: monthsAgo)
+            }
+        }
+        for _ in 0..<2 { try await store.record("git switch feature-x", in: terminal, at: moment) }
+        let found = try await store.candidates(for: terminal, matching: "git s")
+        #expect(found.count == PredictStore.candidateLimit)
+        #expect(found.first?.text == "git switch feature-x")
+        let scores = found.map { Frecency.score($0, now: moment) }
+        #expect(scores.first == scores.max())
     }
 
     @Test("Two characters are too few to correct, or everything would match.")
@@ -473,14 +505,15 @@ struct RetentionTests {
         #expect(try await store.candidates(for: terminal, matching: "kept").count == 1)
     }
 
-    @Test("A superseded entry goes before any live one, however much it once had behind it.")
-    func evictsSupersededFirst() async throws {
+    @Test(
+        "A fragment a longer line grew out of goes before any live one, however much it once had behind it.")
+    func evictsFragmentsFirst() async throws {
         let corpus = Corpus()
         let store = try store(corpus)
-        for _ in 0..<50 { try await store.record("git comit", in: terminal, at: moment) }
-        try await store.supersede("git comit", with: "git commit", in: terminal)
+        for _ in 0..<50 { try await store.record("git comm", in: terminal, at: moment) }
+        try await store.record("git commit --amend", in: terminal, at: moment)
         // Each filler ends in a word so none is a fragment of another, which would supersede it too.
-        for index in 0..<(PredictStore.entriesPerSurface + 1) {
+        for index in 0..<(PredictStore.entriesPerSurface) {
             try await store.record("filler \(index) end", in: terminal, at: moment)
         }
         let superseded = try Database(path: corpus.path).rows(
@@ -488,6 +521,26 @@ struct RetentionTests {
         ) { $0.integer(0) }
         #expect(superseded == [0])
         #expect(try await store.entryCount() == PredictStore.entriesPerSurface)
+    }
+
+    @Test("A correction or a refusal outlasts every live entry, so a full field never brings the line back.")
+    func retirementsOutlastLiveEntries() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record("deploy prod", in: folderTwo, at: moment)
+        for index in 0..<(PredictStore.entriesPerSurface - 1) {
+            try await store.record("filler \(index) end", in: folderOne, at: moment)
+        }
+        try await store.record("git comit", in: folderOne, at: moment + 10)
+        try await store.supersede("deploy prod", with: "deploy staging", in: folderOne)
+        await store.recordRejection(of: "git comit", in: folderOne)
+        #expect(try await store.candidates(for: folderOne, matching: "dep").isEmpty)
+        for index in 0..<5 {
+            try await store.record("another \(index) end", in: folderOne, at: moment + 20)
+        }
+        #expect(try await store.candidates(for: folderOne, matching: "dep").isEmpty)
+        #expect(try await store.candidates(for: folderOne, matching: "git c").isEmpty)
+        #expect(try await store.candidates(for: folderTwo, matching: "dep").count == 1)
     }
 
     @Test("What follows what stops growing at the same cap, and keeps the pairs followed most.")
@@ -702,6 +755,17 @@ struct QueryPlanTests {
         #expect(!plan.contains("SCAN entry"), "the plan was: \(plan)")
     }
 
+    @Test("The newest-first prefix query narrows on the text as well as the field.")
+    func recentPrefixUsesBothIndexColumns() throws {
+        let corpus = Corpus()
+        try seed(corpus.path, surfaces: 4, each: 500)
+        let database = try Database(path: corpus.path)
+        let plan = try database.plan(of: PredictStore.recentPrefixQuery).joined(separator: " | ")
+        #expect(plan.contains("USING INDEX entry_prefix"), "the plan was: \(plan)")
+        #expect(plan.contains("text_lower>?"), "the plan was: \(plan)")
+        #expect(!plan.contains("SCAN entry"), "the plan was: \(plan)")
+    }
+
     @Test("The recency read has an index of its own, so it does not walk the field's rows by hand.")
     func recentReadUsesItsIndex() throws {
         let corpus = Corpus()
@@ -799,6 +863,20 @@ struct BorrowedFeedbackTests {
         let found = try await store.candidates(for: folderTwo, matching: "git s")
         #expect(found.first?.evidence?.rejected == 1)
         #expect(found.first?.evidence?.accepted == 1)
+    }
+
+    @Test("A line refused in another folder keeps its refusals until the person types it again by hand.")
+    func typingALineByHandForgivesItsRefusals() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        for _ in 0..<3 { try await store.record("git status --short", in: folderOne, at: moment) }
+        for _ in 0..<3 { try await store.recordRejected("git status --short", in: folderTwo) }
+        #expect(try await store.candidates(for: folderTwo, matching: "git s").first?.evidence?.rejected == 3)
+        try await store.record("git status --short", in: folderOne, selfSourced: true, at: moment)
+        #expect(try await store.candidates(for: folderTwo, matching: "git s").first?.evidence?.rejected == 3)
+        try await store.record("git status --short", in: folderTwo, at: moment)
+        #expect(try await store.candidates(for: folderTwo, matching: "git s").first?.evidence?.rejected == 0)
+        #expect(try await store.candidates(for: folderOne, matching: "git s").first?.evidence?.rejected == 0)
     }
 
     @Test("A line known in both folders is counted once, against this folder's own entry.")

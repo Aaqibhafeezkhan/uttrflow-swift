@@ -65,6 +65,27 @@ struct SpeechModelLoadingSurfacesTests {
             status.accessibilityLabel == "Almost ready. Only after a restart. Everything else already works.")
     }
 
+    @Test("the hero carries the load's start, so its own clock moves the estimate without a window redraw")
+    func homeCarriesTheStart() throws {
+        let status = try #require(home(.loading(elapsed: .seconds(30))).hero.modelStatus)
+        let since = try #require(status.loadingSince)
+        let later = HomeModelStatus.loading(since: since, at: since.addingTimeInterval(90))
+
+        #expect(since == HistoryFixture.now.addingTimeInterval(-30))
+        #expect(later.title == "Getting ready · about 1 min left")
+        #expect(later.progress == .fraction(SpeechModelLoadEstimate(elapsed: .seconds(90)).fraction))
+        #expect(later.loadingSince == since)
+        #expect(HomeModelStatus.loading(since: since, at: since.addingTimeInterval(1)).progress == .sliding)
+    }
+
+    @Test("only a load under way carries a start; a failed, damaged, missing or downloading model does not")
+    func onlyALoadCarriesAStart() throws {
+        for load in [SpeechModelLoad.failed, .broken, .missing] {
+            #expect(try #require(home(load).hero.modelStatus).loadingSince == nil)
+        }
+        #expect(try #require(home(downloading: 0.42).hero.modelStatus).loadingSince == nil)
+    }
+
     @Test("the menu bar says the same time left as the hero, over a bar filled to the estimate")
     func menuBarGivesTheEstimate() throws {
         let state = MenuBarState(speechModel: .loading, speechLoadElapsed: .seconds(90))

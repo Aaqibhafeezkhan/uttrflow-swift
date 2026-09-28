@@ -276,11 +276,11 @@ struct DiagnosticsEngineTests {
         "the speech model card and row say the model's real state",
         arguments: [
             (SpeechModelReadiness.notInstalled, "Not downloaded", "Not downloaded"),
-            (.incomplete, "Incomplete", "Incomplete, download it again"),
+            (.incomplete, "Damaged", "Damaged, download it again"),
             (.downloading(fractionCompleted: 0.4), "Downloading", "Downloading"),
             (.loading, "Loading", "on this Mac, every language, loading"),
             (.loadFailed, "Failed to load", "On this Mac, but it failed to load"),
-            (.loadFailedAgain, "Failed to load", "On this Mac, but it failed to load"),
+            (.loadFailedAgain, "Damaged", "Damaged, download it again"),
             (.ready, "In use", "on this Mac, every language"),
         ])
     func speechModelSaysItsRealState(

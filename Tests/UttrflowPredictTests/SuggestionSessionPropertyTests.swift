@@ -28,7 +28,8 @@ private func stored(for typed: String) -> [Candidate] {
 /// Every keystroke the tap might hand the session.
 private let strokes = [
     KeyStroke(.tab), KeyStroke(.tab, modifiers: .option), KeyStroke(.return), KeyStroke(.escape),
-    KeyStroke(.escape, modifiers: .option), KeyStroke(.downArrow), KeyStroke(.upArrow),
+    KeyStroke(.escape, modifiers: .option), KeyStroke(.downArrow, modifiers: .option),
+    KeyStroke(.upArrow, modifiers: .option), KeyStroke(.downArrow), KeyStroke(.upArrow),
     KeyStroke(.rightArrow),
     KeyStroke(.other), KeyStroke(.downArrow, modifiers: .command),
 ]
@@ -154,7 +155,8 @@ private struct Script {
             rejectionsThisSession: session.rejectionsHere)
         if let refused = Quieting.reason(known) { return refused }
         if minimised { return .minimised }
-        return context.typed.isEmpty ? .emptyLine : .lineTooLong
+        if context.typed.isEmpty { return .emptyLine }
+        return ListMarker.isAlone(context.typed) ? .listMarkerOnly : .lineTooLong
     }
 
     /// The store answers, the gates judge what is drawable, and the session draws what they left.
@@ -199,7 +201,7 @@ private struct Script {
         let budget = SuggestionSession.turnBudgetInMilliseconds
         let elapsed = random.chance(0.05) ? budget + 1 : Int.random(in: 0...budget, using: &random)
         let completions = invented(for: query.typed)
-        guard let update = session.resolveGenerated(completions, for: query, elapsedMilliseconds: elapsed)
+        guard let update = session.resolveSure(completions, for: query, elapsedMilliseconds: elapsed)
         else {
             Issue.record("a live query must take the model's answer")
             return
@@ -226,7 +228,7 @@ private struct Script {
     private mutating func expand(_ query: SuggestionQuery, behind leader: String) {
         let alternatives = invented(for: query.typed) + (random.chance(0.3) ? [leader] : [])
         let before = session.suggestion
-        let expanded = session.expandGenerated(alternatives, for: query)
+        let expanded = session.expandSure(alternatives, for: query)
         let usable = distinct(
             alternatives.filter {
                 $0.lowercased() != leader.lowercased() && $0 != query.typed
@@ -303,8 +305,8 @@ private struct Script {
         guard let query = stale.randomElement(using: &random) else { return }
         #expect(
             session.resolve(stored(for: query.typed), for: query, now: moment, elapsedMilliseconds: 0) == nil)
-        #expect(session.resolveGenerated([query.typed + "x"], for: query, elapsedMilliseconds: 0) == nil)
-        #expect(session.expandGenerated([query.typed + "y"], for: query) == nil)
+        #expect(session.resolveSure([query.typed + "x"], for: query, elapsedMilliseconds: 0) == nil)
+        #expect(session.expandSure([query.typed + "y"], for: query) == nil)
     }
 
     /// The live question, if any, is now stale.
@@ -338,17 +340,18 @@ private struct Script {
         case .certain(let text):
             #expect(armed.contains(accept) && armed.contains(.optionEscape))
             #expect(armed.contains(.escape) == escapes)
-            #expect(!armed.contains(.downArrow) && !armed.contains(.return) && !armed.contains(.upArrow))
+            #expect(!armed.contains(.optionDownArrow) && !armed.contains(.return))
+            #expect(!armed.contains(.optionUpArrow))
             #expect(extends(text))
         case .choice(let leader, let others):
             #expect(!isQuiet)
             #expect(!others.isEmpty && others.count < SuggestionSession.verifiedDepth)
             let lowered = others.map { $0.lowercased() }
             #expect(!lowered.contains(leader.lowercased()) && Set(lowered).count == others.count)
-            #expect(armed.contains(accept) && armed.contains(.downArrow))
+            #expect(armed.contains(accept) && armed.contains(.optionDownArrow))
             #expect(armed.contains(.escape) == escapes)
             #expect(armed.contains(.return) == session.selection.hasMoved)
-            #expect(armed.contains(.upArrow) == session.selection.hasMoved)
+            #expect(armed.contains(.optionUpArrow) == session.selection.hasMoved)
             #expect(extends(leader) && others.allSatisfy(extends))
         }
     }

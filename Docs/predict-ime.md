@@ -25,6 +25,12 @@ input method, which uses them to cancel a conversion and walk its candidates. `a
 `unanswered` gate nothing, so the fallback below still withholds nothing — the bill below
 is what a gate on the fallback cost, and it is why that gate stays off.
 
+**A Return while composing confirms a conversion, not the line.** A Japanese or Chinese
+input method uses Return to confirm the current conversion mid-sentence. When the last
+field read reported `present`, the coordinator hands that Return to capture as a
+keystroke (`SuggestionCoordinator.endsLine`), so the half-typed line is neither learned
+nor reset; the Return that sends the line, with no marked text before it, commits as usual.
+
 ## What works: `AXTextInputMarkedRange`
 
 The attribute is `NSAccessibilityTextInputMarkedRangeAttribute`, declared in AppKit's

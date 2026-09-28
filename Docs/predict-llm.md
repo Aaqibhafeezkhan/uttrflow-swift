@@ -16,7 +16,7 @@ the suggestion in one of two ways:
 - **Generation.** When the corpus and the machine have nothing for the situation, the model
   writes the continuation itself — `git c` in a shell offers `checkout`, then `commit`,
   `cherry-pick` behind it. The corpus never held these; the model knows them. A generated
-  line is the model's own and is not scored again.
+  line is scored by the pass that wrote it and drawn only over `Verification.certainFloor`.
 
 Context decides both. The model is told where the caret is (the application, and what kind of
 field — a shell, a SQL editor, a URL bar, prose), what surrounds the caret (the line, the text
@@ -102,7 +102,7 @@ what follows is what each set out to do.
   wired as gate 2 of the `Verifier`. The turn budget is 8 000 ms and the verification budget
   7 000 ms, so a slow answer is drawn rather than dropped.
 - **C — Generation — done.** When the corpus and the machine are empty the model writes the single
-  most likely line, which is drawn inline; the alternatives are fetched behind it and open on ↓.
+  most likely line, which is drawn inline; the alternatives are fetched behind it and open on ⌥↓.
 - **D — Embeddings.** Store a vector per entry (a new column, brute-force cosine over the few
   thousand entries a surface holds) so a phrase close in meaning is recalled, not only one close in
   spelling. (The earlier decision against embeddings was about the dictation dictionary, a

@@ -37,7 +37,19 @@ public struct TerminalStopPass: CleaningPass {
     private func finishedLast(_ word: String, in draft: Draft) -> String {
         if draft.endsInListItem { return word }
         if layout.contains(.preserveNewlines), draft.text.contains(where: \.isNewline) { return word }
-        return WordShape.finished(word)
+        // Only prose asks: "where total is greater than 12000" in a SQL editor is a clause, not a question.
+        let asks = layout.contains(.paragraphs) && Self.lastSentenceAsks(draft)
+        return WordShape.finished(word, with: asks ? "?" : ".")
+    }
+
+    /// Whether the sentence the draft ends on asks a direct question by its word order.
+    static func lastSentenceAsks(_ draft: Draft) -> Bool {
+        let live = draft.presentIndices
+        let start = live.dropLast().lastIndex {
+            draft.words[$0].isLayoutMark || draft.shape(at: $0).endsSentence
+        }
+        let sentence = live[(start.map { $0 + 1 } ?? 0)...]
+        return QuestionShape.asks(sentence.map { draft.shape(at: $0) })
     }
 
     /// Every layout mark taken out, so the words join on one line.

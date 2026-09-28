@@ -54,18 +54,26 @@ public struct ClipboardBudget: Sendable, Equatable {
     /// The largest single clip kept at all; the one number that stops unbounded growth.
     public let largestClip: Int
 
+    /// The most pixels a copied picture's header may claim; one over it is never decoded.
+    public let largestPicture: Int
+
+    /// The longest edge, in pixels, a converted picture is decoded and stored at.
+    public let pictureEdge: Int
+
     /// The most disk the pictures may take.
     public let disk: Int
 
     public init(
         ceiling: Int, copied: ClipboardTier, dictation: ClipboardTier, images: ClipboardTier,
-        largestClip: Int, disk: Int
+        largestClip: Int, largestPicture: Int, pictureEdge: Int, disk: Int
     ) {
         self.ceiling = ceiling
         self.copied = copied
         self.dictation = dictation
         self.images = images
         self.largestClip = largestClip
+        self.largestPicture = largestPicture
+        self.pictureEdge = pictureEdge
         self.disk = disk
     }
 
@@ -89,5 +97,7 @@ public struct ClipboardBudget: Sendable, Equatable {
         dictation: ClipboardTier(bytes: 4 * 1_000_000, items: 500),
         images: ClipboardTier(bytes: 32 * 1_000_000, items: 500, days: 7),
         largestClip: 2 * 1_000_000,
+        largestPicture: 150 * 1_000_000,
+        pictureEdge: 4096,
         disk: 1_000_000_000)
 }

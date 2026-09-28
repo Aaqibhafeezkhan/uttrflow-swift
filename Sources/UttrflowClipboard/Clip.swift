@@ -116,6 +116,15 @@ public struct Clip: Sendable, Equatable, Identifiable, Codable {
             alias: alias, category: category, isPinned: isPinned, timesCopied: timesCopied)
     }
 
+    /// The same clip stamped freshly at `moment`, so an un-keep does not also age the clip out.
+    public func recopied(at moment: Date) -> Clip {
+        Clip(
+            id: id, text: text, kind: kind, copiedAt: moment, source: source, origin: origin,
+            dictations: dictations, dictatedText: dictatedText, lastUsedAt: lastUsedAt,
+            language: language, richText: richText, image: image,
+            alias: alias, category: category, isPinned: isPinned, timesCopied: timesCopied)
+    }
+
     /// Whether this is the copy of that dictation; a clip older than the link is matched on its words.
     public func isCopy(ofDictation id: UUID, saying spoken: String?) -> Bool {
         guard origin == .uttrflow else { return false }

@@ -144,7 +144,7 @@ struct SelectionKeyRoutingTests {
     @Test("Down moves to the next line and records that the user moved it.")
     func downMoves() {
         #expect(
-            decide(KeyStroke(.downArrow), showing: several)
+            decide(KeyStroke(.downArrow, modifiers: .option), showing: several)
                 == .moveSelection(SuggestionSelection(index: 1, hasMoved: true)))
     }
 
@@ -152,21 +152,21 @@ struct SelectionKeyRoutingTests {
     func downWraps() {
         let last = SuggestionSelection(index: 2, hasMoved: true)
         #expect(
-            decide(KeyStroke(.downArrow), showing: several, selection: last)
+            decide(KeyStroke(.downArrow, modifiers: .option), showing: several, selection: last)
                 == .moveSelection(SuggestionSelection(index: 0, hasMoved: true)))
     }
 
     @Test("Up before anything has been walked is the shell's history and is left alone.")
     func upIsNotOursUntilTheListIsWalked() {
-        #expect(decide(KeyStroke(.upArrow), showing: several) == .passThrough)
-        #expect(!KeyRouting.arming(showing: several).contains(.upArrow))
+        #expect(decide(KeyStroke(.upArrow, modifiers: .option), showing: several) == .passThrough)
+        #expect(!KeyRouting.arming(showing: several).contains(.optionUpArrow))
     }
 
     @Test("Up after Down moves back a line.")
     func upMovesBack() {
         let moved = SuggestionSelection(index: 2, hasMoved: true)
         #expect(
-            decide(KeyStroke(.upArrow), showing: several, selection: moved)
+            decide(KeyStroke(.upArrow, modifiers: .option), showing: several, selection: moved)
                 == .moveSelection(SuggestionSelection(index: 1, hasMoved: true)))
     }
 
@@ -174,15 +174,26 @@ struct SelectionKeyRoutingTests {
     func upWraps() {
         let moved = SuggestionSelection(index: 0, hasMoved: true)
         #expect(
-            decide(KeyStroke(.upArrow), showing: several, selection: moved)
+            decide(KeyStroke(.upArrow, modifiers: .option), showing: several, selection: moved)
                 == .moveSelection(SuggestionSelection(index: 2, hasMoved: true)))
     }
 
     @Test("A single suggestion has nothing to walk, so both arrows are left alone.")
     func aLoneSuggestionIsNotWalkable() {
-        #expect(decide(KeyStroke(.downArrow), showing: one) == .passThrough)
+        #expect(decide(KeyStroke(.downArrow, modifiers: .option), showing: one) == .passThrough)
         let moved = SuggestionSelection(index: 0, hasMoved: true)
-        #expect(decide(KeyStroke(.upArrow), showing: one, selection: moved) == .passThrough)
+        #expect(
+            decide(KeyStroke(.upArrow, modifiers: .option), showing: one, selection: moved) == .passThrough)
+    }
+
+    @Test("A bare Down or Up always reaches the application, so the caret and the app's popup move.")
+    func bareArrowsAreTheApplications() {
+        let moved = SuggestionSelection(index: 1, hasMoved: true)
+        for selection in [SuggestionSelection.untouched, moved] {
+            #expect(decide(KeyStroke(.downArrow), showing: several, selection: selection) == .passThrough)
+            #expect(decide(KeyStroke(.upArrow), showing: several, selection: selection) == .passThrough)
+        }
+        #expect(KeyRouting.arming(showing: several) == [.tab, .optionDownArrow, .escape, .optionEscape])
     }
 
     @Test("An arrow carrying a modifier moves by word or to the end, which is the application's job.")
@@ -245,7 +256,7 @@ struct DismissKeyRoutingTests {
     @Test("With only the dot left there is nothing to accept or walk.")
     func minimisedClaimsOnlyEscape() {
         #expect(decide(KeyStroke(.tab), showing: .minimised) == .passThrough)
-        #expect(decide(KeyStroke(.downArrow), showing: .minimised) == .passThrough)
+        #expect(decide(KeyStroke(.downArrow, modifiers: .option), showing: .minimised) == .passThrough)
         #expect(decide(KeyStroke(.return), showing: .minimised) == .passThrough)
         #expect(KeyRouting.arming(showing: .minimised) == [.escape, .optionEscape])
     }
@@ -260,7 +271,7 @@ struct ArmingTests {
 
     @Test("A list additionally claims Down, which is what opens it.")
     func aList() {
-        #expect(KeyRouting.arming(showing: several) == [.tab, .downArrow, .escape, .optionEscape])
+        #expect(KeyRouting.arming(showing: several) == [.tab, .optionDownArrow, .escape, .optionEscape])
     }
 
     @Test("Walking the list claims Up and Return as well.")
@@ -268,7 +279,7 @@ struct ArmingTests {
         let moved = SuggestionSelection(index: 1, hasMoved: true)
         #expect(
             KeyRouting.arming(showing: several, selection: moved)
-                == [.tab, .downArrow, .upArrow, .return, .escape, .optionEscape])
+                == [.tab, .optionDownArrow, .optionUpArrow, .return, .escape, .optionEscape])
     }
 
     @Test("The accept key that is armed is the one the application uses.")

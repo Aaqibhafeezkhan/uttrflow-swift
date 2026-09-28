@@ -57,7 +57,8 @@
 #
 # `SecretDetectionTests.swift` needs one entry per fixture below: an AWS key, a Slack
 # bot token, a Stripe key, a GitHub PAT, a GCP API key, an OpenAI-shaped secret, two
-# short generic-secret values, and one invented OpenSSH private key block. Each is the
+# short generic-secret values, one invented OpenSSH private key block, and the invented
+# values and Slack webhook the passphrase, object and signed-address fixtures share. Each is the
 # vendor's own documentation example or an invented string, matched by its exact value
 # (or, for the private key, its exact block) so a real key added anywhere in the file
 # still fails.
@@ -96,6 +97,12 @@ useDefault = true
     '''^sk_live_51HxQmvKz8RtYnPbW3LcE$''',
     '''^AIzaSyD3mK9pQvXr2NtLw8ZbYc4FeGhJkMnOpQr$''',
     '''^ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8$''',
+    # The invented `curl -u` user and password the command-credential fixtures share.
+    '''^admin:Hunter2x$''',
+    # Invented values for the passphrase, comment, object and signed-address fixtures.
+    '''^Zx9kLmQ2rT7p$''',
+    '''^Zx9kLmQ2rT7pQ3vB$''',
+    '''^https://hooks\.slack\.com/services/T0AB1CD2E/B0FG3HI4J/Zx9kLmQ2rT7pQ3vB8nW4yH6s$''',
     '''^-----BEGIN OPENSSH PRIVATE KEY-----
             b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtz
             c2gtZWQyNTUxOQAAACDkQ2VydGlmaWNhdGVOb3RSZWFsbHlBS2V5QXRBbGxIZXJl

@@ -87,10 +87,114 @@ named, a remembered line may teach the model this person's voice but may never b
 line itself. Fixtures for it: a corpus holding another thread's lines, where the right answer uses
 none of them.
 
-**P6 — Say how sure it is.** The 32 wrong lines that remain are prose: notes at 89.8 % precision
-is now the worst category, and no list can vouch for a sentence. The scorer already reads a line's likelihood; a generated line is
-drawn today without ever being scored. Scoring it and drawing only what clears a floor turns
-precision into a dial rather than an argument. Measured last, because it costs a second pass.
+**P6 — Say how sure it is. Done.** Most wrong lines are the model's own, in places no list can
+vouch for: a sentence, a shopping-list item, a reply. Scoring each generated line and drawing
+only what clears a floor turns precision into a dial rather than an argument.
+
+A generated line is scored by the pass that wrote it, and a line below a set floor is not drawn.
+While the model decodes, `RecordingSampler` keeps the log-probability of every token it chose,
+and `GeneratedConfidence` averages the tokens that wrote the line's own words past the typing: a
+word the typing still owed and anything the parser cut off the line are left out. No second
+model pass is spent. A line no pass scored, such as one whose model was released since it was
+written, is never drawn. A line drawn as `.certain` clears a stricter floor than one offered in a
+`.choice`:
+
+| Floor | Value | What clears it |
+|---|---|---|
+| `certainFloor` | −0.9 | the one line drawn alone as `.certain` |
+| `choiceFloor` | −1.5 | a line offered as one of several in a `.choice` |
+
+Both are mean log-probability per generated token on gemma-3-4b-it-qat-4bit, which is a
+different scale from `plausibilityFloor`: that one reads a remembered line with no context, and
+stays −6.0.
+
+`certainFloor` is set from the 1,173-fixture catalogue (`uttrflow-bakeoff complete --fixtures
+--judge`, which prints this table). Coverage is the share of fixtures that drew a line:
+
+| Floor on the pass's own score | Precision | Wrong drawn | Coverage |
+|---|---|---|---|
+| none | 87.15 % (217/249) | 32 | 77.75 % |
+| −1.5 | 87.85 % (217/247) | 30 | 77.15 % |
+| −1.0 | 88.57 % (217/245) | 28 | 75.87 % |
+| **−0.9** | **90.04 % (217/241)** | **24** | **74.68 %** |
+| −0.75 | 90.38 % (216/239) | 23 | 71.44 % |
+| −0.6 | 91.77 % (212/231) | 19 | 67.01 % |
+| −0.5 | 92.48 % (209/226) | 17 | 61.04 % |
+
+−0.9 is the lowest floor that keeps every judged right line. The eight judged lines it holds
+back were all wrong, and it costs 3 points of coverage. Above it, each step loses right lines as
+fast as wrong ones.
+
+The scorer's own second pass separates right from wrong about as well at the same coverage
+(90.27 % at 72.63 % with a −8.0 floor, 90.83 % at 67.95 % with −6.0), but it costs one more
+pass per line, a median of about 100 ms on this machine under load. It is not used for
+generated lines. A −3.0 floor on that second pass reached 97.20 % precision, but at 40.58 %
+coverage.
+
+The eight it holds back are `npx esl` → `npx eslinit`, `def subtr` → `def subtrack`, two
+Hinglish replies, and four shopping-list items (`to` → `toppings` twice, `di` → `diets`, `pan` →
+`pan cakes`). The 24 wrong lines that remain are ones the model writes with confidence: nine
+shopping-list items (`ba` → `bacon`, `yog` → `yogurt`), five commands (`npx pret` → `npx
+pretify`), three SQL lines, three replies, two code lines, one mail line and one robustness case.
+The pass's own score cannot see these, so they need another check.
+
+`choiceFloor` is not set from the catalogue, because the catalogue draws one line per fixture.
+−1.5 refuses only the two least likely of the 32 wrong lines, and a person chooses from a list on
+purpose.
+
+`SuggestionScoringTests` pins the contract. A line under `certainFloor` leaves the turn quiet
+(`modelUnsure`). A line over it is drawn. An unscored line is never drawn. An unscored
+alternative is dropped, and a value the machine listed needs no score. `GeneratedConfidenceTests`
+pins which tokens score a line.
+
+**P7 — A generated line keeps to this person's shape. Done, not yet measured.** Both models'
+lines pass through `CompletionText.finished`, so the rules hold on either path. Prose — a reply
+or a document's line — ends at its first sentence end, since the tail of a run-on line is where
+a clause goes wrong; a stop inside a number, an address, an abbreviation or an ellipsis is read
+past. Prose that repeats five or more screen words in a row that this person has not written
+here is refused: the other person's last message is the likeliest thing for a small model to
+echo, and it is never the reply. Commands are exempt, because they reuse the paths and names on
+screen. Every continuation is held to three times this person's typical line here (never under
+16 characters), and with no history to the register's own limit: 80 for a reply, 120 for a
+command, 160 for a document. A reply's token budget follows the typical line too, so a terse
+person is not given a paragraph's room. The `chat/echo` fixtures cover a reply that opens as the
+last message does.
+
+**P8 — A generated line adds no specific nobody gave it. Done, not yet measured.** A number, a
+time, a date, an amount, a percentage, an email or a web address is the one kind of wrong that
+reads as right, and one Tab puts it in a sent message. `CompletionText.finished` now refuses a
+line from either model when a token it adds names such a specific and that exact token is not in
+the typed text, this person's lines here, the screen or the machine's values. Tokens compare
+lowercased with surrounding punctuation removed. There is no prefix or substring match. A digit
+inside a name, as in `python3`, is not a number. The corpus is unaffected: a line this person
+typed is theirs, specifics included. Each refusal is logged under `predict` as `DROP made-up
+specific`, by reason only.
+
+Code, queries and commands write a few numbers that carry no value of their own. In those
+registers (not prose, an address bar or a search box) a word whose every number is one of these
+is not a specific. A number assigned to or compared with a name whose last word is `id`, `ids`,
+`pid`, `uid`, `uuid` or `guid` is still an invented id, and one after `<` or `>` is an invented
+threshold. So is one passed as the argument of a call whose name ends in one of those words
+(`findById(1)`, `byId(0)`, `getUserId(1)`), or listed in `IN (…)` after such a column. The
+exemption holds only where the number is an operand of code: after an assignment,
+a bracket, a separator, an operator or a member, or after `return`, `in`, `case`, `limit` and
+the like. A number standing as a word after a command's word or after `~` or `^` is an argument
+the command acts on, as in `kill 1`, `HEAD~1` or `tail -n 1`, and is a specific. Each row has a
+case in `SpecificsTests`.
+
+| literal | in code, a query or a command | in prose | why |
+|---|---|---|---|
+| `0`, `1`, `-1` | kept | refused | a start, a step, an index, a bound or "not found"; in prose `at 1` is a time |
+| `0.0`, `1.0` | kept | refused | the float forms of nothing and one |
+| `true`, `false`, `nil`, `null`, `None` | kept | kept | words, never a specific |
+| `""`, `''`, `[]`, `{}` | kept | kept | empty values, never a specific |
+| `id = 1`, `user_id = 1`, `userId: 0`, `"id": 1` | refused | refused | a record nobody named |
+| `findById(1)`, `getUserId(0)`, `id IN (1)` | refused | refused | a record nobody named, passed as an argument |
+| `> 0`, `>= 0`, `< 1` | refused | refused | a threshold is a choice the line never showed |
+| `kill 1`, `HEAD~1`, `tail -n 1`, `sleep 1` | refused | refused | an argument a command acts on: a process, a commit, a count |
+| `2`, `10`, `1042`, `0.5`, `19.99` | refused | refused | a count, an id or an amount |
+| `01`, `1e9`, `0x1f`, `1_000`, `1s` | refused | refused | a literal with a form, a base or a unit carries a choice |
+| `$0`, `0%` | refused | refused | an amount sign or a percent sign reads as an amount |
 
 ## What this trades away
 

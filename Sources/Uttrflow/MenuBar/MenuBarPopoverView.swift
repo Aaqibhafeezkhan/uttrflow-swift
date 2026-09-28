@@ -9,6 +9,8 @@ struct MenuBarPopoverView: View {
     let presentation: MenuBarPresentation
     /// Carries a chosen command back to the controller.
     let onCommand: (MenuBarIntent) -> Void
+    /// Whether the panel is on screen; a closed popover draws nothing, so no animation outlives it.
+    var isShown = true
     /// The control that has the keyboard, by its place in ``MenuBarKeyboard``.
     @FocusState private var focus: Int?
     /// Whether a key has moved the focus, which is when its ring is drawn.
@@ -22,8 +24,12 @@ struct MenuBarPopoverView: View {
     static let shadowMargin: CGFloat = 28
 
     var body: some View {
+        if isShown { content }
+    }
+
+    private var content: some View {
         let keyboard = MenuBarKeyboard(presentation)
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             MenuBarHeaderView(
                 header: presentation.header, onCommand: onCommand, focus: $focus, showsFocus: usesKeyboard)
             buttonRow(keyboard).padding(.top, 14)
@@ -52,6 +58,18 @@ struct MenuBarPopoverView: View {
         .frame(width: Self.width, alignment: .leading)
         .background(alignment: .top) { MenuBarAurora() }
         .menuBarGlass()
+        // Above the glass, so a moving bar never re-renders the blur and shadow under it.
+        .overlayPreferenceValue(MenuBarProgressSlot.Key.self) { slot in
+            GeometryReader { proxy in
+                if let slot {
+                    let frame = proxy[slot.bounds]
+                    MenuBarProgressFill(progress: slot.progress, width: frame.width)
+                        .frame(width: frame.width, height: frame.height, alignment: .leading)
+                        .offset(x: frame.minX, y: frame.minY)
+                }
+            }
+            .allowsHitTesting(false)
+        }
         .contextMenu { MenuBarMenuItems(items: presentation.items, onCommand: onCommand) }
         .padding(Self.shadowMargin)
     }
@@ -192,43 +210,6 @@ private struct MenuBarStatusView: View {
     }
 }
 
-/// A thin teal bar: filled to a fraction, or a short run sliding across when the fraction is unknown.
-private struct MenuBarProgressBar: View {
-    let progress: MenuBarProgress
-    @State private var sliding = false
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            ZStack(alignment: .leading) {
-                Capsule().fill(MenuBarColour.track)
-                switch progress {
-                case .fraction(let fraction):
-                    // Eases between ticks, and only steps under Reduce Motion.
-                    Capsule().fill(MenuBarColour.progress).frame(width: width * fraction)
-                        .animation(
-                            MotionBudget.current().workingBarsMove ? .linear(duration: 1) : nil,
-                            value: fraction)
-                case .indeterminate:
-                    Capsule().fill(MenuBarColour.progress)
-                        .frame(width: width * 0.3)
-                        .offset(x: sliding ? width : -width * 0.3)
-                        .onAppear {
-                            // Held still under Reduce Motion, Low Power Mode and thermal pressure.
-                            guard MotionBudget.current().demonstrationMoves else { return }
-                            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: false)) {
-                                sliding = true
-                            }
-                        }
-                }
-            }
-            .clipShape(Capsule())
-        }
-        .frame(height: 3)
-        .accessibilityHidden(true)
-    }
-}
-
 /// The header's one action, as a coloured pill.
 private struct MenuBarPill: View {
     let command: MenuBarCommand
@@ -366,35 +347,5 @@ private struct MenuBarRowView: View {
         }
         .accessibilityLabel(row.title)
         .accessibilityHint("Pastes at the cursor. Option-click copies it.")
-    }
-}
-
-// MARK: - Right-click menu
-
-/// The right-click menu's switches, windows and Quit, drawn from the same items the icon's menu shows.
-private struct MenuBarMenuItems: View {
-    let items: [MenuBarItem]
-    let onCommand: (MenuBarIntent) -> Void
-
-    var body: some View {
-        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-            switch item {
-            case .status, .sectionHeader:
-                EmptyView()
-            case .separator:
-                Divider()
-            case .command(let command):
-                if command.isChecked {
-                    Button {
-                        onCommand(command.intent)
-                    } label: {
-                        Label(command.title, systemImage: "checkmark")
-                    }
-                    .disabled(!command.isEnabled)
-                } else {
-                    Button(command.title) { onCommand(command.intent) }.disabled(!command.isEnabled)
-                }
-            }
-        }
     }
 }

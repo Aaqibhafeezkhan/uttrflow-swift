@@ -58,6 +58,9 @@ actor ScriptedScoring: CandidateScoring {
         }
         return score
     }
+
+    /// The same score for a line it wrote, which is what the generation gate reads.
+    func confidence(ofGenerated line: String) async -> Double? { score }
 }
 
 /// Holds the task under test, filled in only after the task exists, so a double running inside it can cancel it.
@@ -87,6 +90,8 @@ actor CancellingScoring<Success: Sendable>: CandidateScoring {
         box.task?.cancel()
         return score
     }
+
+    func confidence(ofGenerated line: String) async -> Double? { score }
 }
 
 /// A thread hold a test releases by hand, and whether it has ended yet.
@@ -142,6 +147,8 @@ actor NoncooperativeScoring: CandidateScoring {
         }
         return score
     }
+
+    func confidence(ofGenerated line: String) async -> Double? { score }
 }
 
 /// A store that only remembers being told a candidate was wrong.
@@ -159,5 +166,27 @@ actor RecordingSupersession: SupersessionRecording {
     /// Notes one rejection without doing anything else about it.
     func recordRejection(of text: String, in surface: Surface) {
         rejected.append(text)
+    }
+}
+
+extension SuggestionSession {
+    /// The model's lines resolved as if the pass that wrote each one were sure of it, for tests about everything but the floor.
+    mutating func resolveSure(
+        _ completions: [String], for query: SuggestionQuery, elapsedMilliseconds: Int,
+        whenEmpty silence: Quieting.Reason = .nothingOffered
+    ) -> SuggestionUpdate? {
+        resolveGenerated(
+            completions, for: query, elapsedMilliseconds: elapsedMilliseconds, whenEmpty: silence,
+            scores: Self.sure(completions))
+    }
+
+    /// The model's later alternatives added as if the pass that wrote each one were sure of it.
+    mutating func expandSure(_ others: [String], for query: SuggestionQuery) -> SuggestionUpdate? {
+        expandGenerated(others, for: query, scores: Self.sure(others))
+    }
+
+    /// Every line at the best score a pass can give.
+    static func sure(_ lines: [String]) -> [String: Double] {
+        Dictionary(lines.map { ($0, 0.0) }, uniquingKeysWith: { first, _ in first })
     }
 }

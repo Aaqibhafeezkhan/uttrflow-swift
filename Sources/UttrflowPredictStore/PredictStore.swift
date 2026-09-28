@@ -207,15 +207,16 @@ public actor PredictStore: PredictionStore {
         return Self.strongest(order.compactMap { byText[$0] })
     }
 
-    /// The candidates with the most evidence, compared across every folder before any is dropped.
+    /// The candidates ranking would score highest, compared across every folder before any is dropped.
     static func strongest(_ candidates: [Candidate]) -> [Candidate] {
-        let ordered = candidates.sorted { first, second in
-            let a = first.evidence
-            let b = second.evidence
-            return (second.editDistance, a?.count ?? 0, a?.lastUsed ?? .distantPast, second.text)
-                > (first.editDistance, b?.count ?? 0, b?.lastUsed ?? .distantPast, first.text)
+        // Decay scales every score alike from any later moment, so the newest use orders them as ranking would.
+        let latest = candidates.compactMap(\.evidence?.lastUsed).max() ?? .distantPast
+        let scored = candidates.map { (candidate: $0, score: Frecency.score($0, now: latest)) }
+        let ordered = scored.sorted { first, second in
+            (second.candidate.editDistance, first.score, second.candidate.text)
+                > (first.candidate.editDistance, second.score, first.candidate.text)
         }
-        return Array(ordered.prefix(candidateLimit))
+        return ordered.prefix(candidateLimit).map(\.candidate)
     }
 
     /// One text known in two surfaces becomes one candidate: evidence summed, the nearer edit kept.
@@ -269,20 +270,33 @@ public actor PredictStore: PredictionStore {
         ORDER BY count DESC LIMIT ?
         """
 
-    /// Every candidate whose opening is what was typed, matched without regard to case.
+    /// The same range scan newest first, so a line used lately is read however many older lines outnumber it.
+    static let recentPrefixQuery = """
+        SELECT \(entryColumns) FROM entry
+        WHERE surface_id = ? AND text_lower >= ? AND text_lower < ? AND superseded_by IS NULL
+        ORDER BY last_used DESC LIMIT ?
+        """
+
+    /// The most used and the most recent candidates whose opening is what was typed, each once, matched without regard to case.
     private func exactCandidates(
         surfaceIdentifier id: Int64, typed: String
     ) throws(PredictStoreError) -> [Candidate] {
         let lowered = typed.lowercased()
         guard let upper = Self.upperBound(of: lowered) else { return [] }
-        return try readCandidates(
-            Self.prefixQuery,
-            {
-                $0.bind(1, id)
-                $0.bind(2, lowered)
-                $0.bind(3, upper)
-                $0.bind(4, Int64(Self.candidateLimit))
-            }, distance: 0)
+        var seen: Set<String> = []
+        var found: [Candidate] = []
+        for query in [Self.prefixQuery, Self.recentPrefixQuery] {
+            let read = try readCandidates(
+                query,
+                {
+                    $0.bind(1, id)
+                    $0.bind(2, lowered)
+                    $0.bind(3, upper)
+                    $0.bind(4, Int64(Self.candidateLimit))
+                }, distance: 0)
+            found += read.filter { seen.insert($0.text).inserted }
+        }
+        return found
     }
 
     /// The fallback, run only when nothing matched exactly, behind the character-mask filter.
@@ -316,7 +330,11 @@ public actor PredictStore: PredictionStore {
                     query: queryMask, candidate: FuzzyMatch.mask(units.prefix(width)), within: budget)
             else { return nil }
             let distance = FuzzyMatch.prefixDistance(needle, units, within: budget)
-            guard distance <= budget else { return nil }
+            // A near miss that would add, drop or change a typed digit writes a different number, never a fixed typo.
+            guard distance <= budget, FuzzyMatch.keepsDigits(of: needle, in: units, atDistance: distance)
+            else {
+                return nil
+            }
             return Candidate(
                 text: text, source: .personal,
                 evidence: Entry(
@@ -368,6 +386,8 @@ public actor PredictStore: PredictionStore {
                 $0.bind(4, Int64(selfSourced ? 1 : 0))
                 $0.bind(5, moment.timeIntervalSince1970)
             })
+        // Typing the line by hand takes back every refusal of it in this field, which is what brings a retired line back.
+        if !selfSourced { try forgiveRefusals(of: text, in: surface) }
         // This whole value retires the shorter fragments it grew out of, so only it is ever proposed.
         try supersedeFragments(surfaceIdentifier: id, of: text)
         if let previous, !previous.isEmpty {
@@ -393,6 +413,23 @@ public actor PredictStore: PredictionStore {
     /// Notes that a suggestion was shown and typed past, which is the user saying no.
     public func recordRejected(_ text: String, in surface: Surface) throws(PredictStoreError) {
         try increment(.rejected, forText: text, in: surface)
+    }
+
+    /// Takes back one acceptance the person undid: the use and the acceptance it added, and the line when that was all it held.
+    public func retractAcceptance(_ text: String, in surface: Surface) throws(PredictStoreError) {
+        let text = Spelling.canonical(text)
+        try database.transaction { () throws(PredictStoreError) in
+            guard let entry = try supplier(of: text, in: surface) else { return }
+            try database.run(
+                """
+                UPDATE entry SET count = count - 1, accepted = accepted - 1, self_sourced = self_sourced - 1
+                WHERE id = ? AND count > 0 AND accepted > 0 AND self_sourced > 0
+                """
+            ) { $0.bind(1, entry) }
+            try database.run("DELETE FROM entry WHERE id = ? AND count = 0 AND superseded_by IS NULL") {
+                $0.bind(1, entry)
+            }
+        }
     }
 
     /// Marks an entry wrong in this folder and points at what replaces it, so it is never proposed here again.
@@ -454,6 +491,41 @@ public actor PredictStore: PredictionStore {
     public func forgetEverything() throws(PredictStoreError) {
         try database.execute("DELETE FROM surface")
         leaveNothingBehind()
+    }
+
+    /// Removes every stored line `refuses` matches, once for each new `version` of the rule called `name`, and counts the lines removed.
+    @discardableResult
+    public func sweep(
+        _ name: String, version: Int, removing refuses: @Sendable (String) -> Bool
+    ) throws(PredictStoreError) -> Int {
+        let swept = try database.rows("SELECT version FROM sweep WHERE name = ?", { $0.bind(1, name) }) {
+            $0.integer(0)
+        }
+        if let swept = swept.first, swept >= version { return 0 }
+        var removed = 0
+        try database.transaction { () throws(PredictStoreError) in
+            let entries = try database.rows("SELECT id, text, superseded_by FROM entry", { _ in }) {
+                (Int64($0.integer(0)), $0.text(1), $0.optionalText(2))
+            }
+            for (id, text, replacement) in entries where refuses(text) || replacement.map(refuses) == true {
+                try database.run("DELETE FROM entry WHERE id = ?") { $0.bind(1, id) }
+                removed += 1
+            }
+            let successions = try database.rows("SELECT rowid, previous, next FROM succession", { _ in }) {
+                (Int64($0.integer(0)), $0.text(1), $0.text(2))
+            }
+            for (row, previous, next) in successions where refuses(previous) || refuses(next) {
+                try database.run("DELETE FROM succession WHERE rowid = ?") { $0.bind(1, row) }
+            }
+            try database.run(
+                "INSERT INTO sweep (name, version) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET version = excluded.version",
+                {
+                    $0.bind(1, name)
+                    $0.bind(2, Int64(version))
+                })
+        }
+        if removed > 0 { leaveNothingBehind() }
+        return removed
     }
 
     /// Empties the write-ahead log when no reader holds it, and reports whether it did; the delete has already committed either way.
@@ -541,6 +613,23 @@ public actor PredictStore: PredictionStore {
             })
     }
 
+    /// Clears the refusals of one line in every folder of the field, since a line typed by hand is one the person wants.
+    private func forgiveRefusals(of text: String, in surface: Surface) throws(PredictStoreError) {
+        try database.run(
+            """
+            UPDATE entry SET rejected = 0
+            WHERE text = ? AND rejected > 0 AND surface_id IN (
+              SELECT id FROM surface WHERE bundle_id = ? AND role = ? AND locator = ?
+            )
+            """,
+            {
+                $0.bind(1, text)
+                $0.bind(2, surface.bundleIdentifier)
+                $0.bind(3, surface.role)
+                $0.bind(4, surface.locator ?? "")
+            })
+    }
+
     // MARK: - Plumbing
 
     /// A tally an offer moves, closed so nothing a caller supplied can reach the statement.
@@ -577,7 +666,17 @@ public actor PredictStore: PredictionStore {
         ) { Int64($0.integer(0)) }.first
     }
 
-    /// Keeps a surface within its cap, dropping superseded entries first and then the weakest.
+    /// The order entries leave a full surface: fragments a longer line grew out of, then the weakest, and retirements last.
+    static let evictionOrder = """
+        CASE
+          WHEN superseded_by IS NULL THEN 1
+          WHEN length(superseded_by) > length(text)
+            AND substr(lower(superseded_by), 1, length(text_lower)) = text_lower THEN 0
+          ELSE 2
+        END ASC, count ASC, last_used ASC
+        """
+
+    /// Keeps a surface within its cap, never dropping a correction or a refusal while a live entry could go instead.
     private func evictWeakest(surfaceIdentifier id: Int64) throws(PredictStoreError) {
         try evictWeakestSuccessions(surfaceIdentifier: id)
         let held = try database.rows(
@@ -588,7 +687,7 @@ public actor PredictStore: PredictionStore {
             """
             DELETE FROM entry WHERE id IN (
               SELECT id FROM entry WHERE surface_id = ?
-              ORDER BY (superseded_by IS NOT NULL) DESC, count ASC, last_used ASC LIMIT ?
+              ORDER BY \(Self.evictionOrder) LIMIT ?
             )
             """,
             {

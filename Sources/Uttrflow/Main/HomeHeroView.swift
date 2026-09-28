@@ -1,5 +1,6 @@
 // Home's hero card: the headline, the three features, the waveform, the start pill and the mood picture.
 
+import UttrflowCore
 import UttrflowUX
 import AppKit
 import SwiftUI
@@ -159,8 +160,44 @@ struct HomeHeroCard: View {
     }
 }
 
-/// The speech model's state where the waveform would be: a dot and a title, the line under it, and the bar while setup runs.
+/// The speech model's state, redrawing only itself each second while a load runs, so the rest of the window stays still.
 struct HomeModelStatusView: View {
+    let status: HomeModelStatus
+
+    /// Whether its window is the one being used; the estimate moves at a slower beat otherwise.
+    @State private var attended = false
+
+    var body: some View {
+        if let since = status.loadingSince {
+            TimelineView(HomeLoadSchedule(attended: attended)) { tick in
+                HomeModelStatusBlock(status: .loading(since: since, at: tick.date))
+            }
+            .onWindowAttentionChange(includingMotionBudget: false) { attended = $0 }
+        } else {
+            HomeModelStatusBlock(status: status)
+        }
+    }
+}
+
+/// Once a second while the window is in use and every 15 seconds while not, counted from the moment it is asked.
+struct HomeLoadSchedule: TimelineSchedule {
+    let attended: Bool
+
+    /// How often the estimate moves while its window is not the one in use.
+    static let restingInterval: TimeInterval = 15
+
+    /// The seconds between ticks.
+    var interval: TimeInterval {
+        attended ? SpeechModelLoadEstimate.redrawInterval / .seconds(1) : Self.restingInterval
+    }
+
+    func entries(from startDate: Date, mode: Mode) -> PeriodicTimelineSchedule.Entries {
+        PeriodicTimelineSchedule(from: startDate, by: interval).entries(from: startDate, mode: mode)
+    }
+}
+
+/// A dot and a title, the line under it, and the bar while setup runs.
+struct HomeModelStatusBlock: View {
     let status: HomeModelStatus
 
     var body: some View {

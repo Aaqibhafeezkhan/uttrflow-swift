@@ -92,6 +92,19 @@ struct CaptureGateTests {
         #expect(CaptureGate.refusal(toRecord: "y", from: field(), given: allowed) == .tooShort)
     }
 
+    @Test(
+        "A list line holding only its marker is refused as too short.",
+        arguments: ["- ", "* ", "1. ", "12)", "- [ ] ", "[x]", "• "])
+    func markerAloneIsRefused(line: String) {
+        #expect(CaptureGate.refusal(toRecord: line, from: field(), given: allowed) == .tooShort)
+    }
+
+    @Test("A list item with its text after the marker is learned.")
+    func markedItemPasses() {
+        #expect(CaptureGate.refusal(toRecord: "- Buy milk", from: field(), given: allowed) == nil)
+        #expect(CaptureGate.refusal(toRecord: "1. Buy milk", from: field(), given: allowed) == nil)
+    }
+
     @Test("Short all-digit values in non-terminal fields are refused as form secrets.")
     func shortNumericWebValuesAreRefused() {
         let browser = FieldReading(bundleIdentifier: "com.example.browser", role: "AXTextField")
@@ -135,6 +148,27 @@ struct CaptureGateTests {
         for secret in secrets {
             #expect(CaptureGate.refusal(toRecord: secret, from: field(), given: allowed) == .looksLikeSecret)
         }
+    }
+
+    @Test(
+        "A password passed to a command or sent in a header is refused from a terminal.",
+        arguments: [
+            "curl -u admin:Hunter2x https://api.example.com",
+            "mysql -u root -pS3cretPass appdb",
+            "sshpass -p 'S3cret!' ssh deploy@db.example.com",
+            "docker login -u ci -p S3cr3tValue registry.example.com",
+            "docker login --password S3cr3t",
+            "htpasswd -b .htpasswd alice Mead0wlark",
+            "ssh-keygen -t ed25519 -N 'correct horse'",
+            "openssl pkcs12 -export -passout pass:sunshine",
+            "curl -H \"Authorization: Basic YWxpY2U6czNjcjN0\" https://api.example.com",
+            "curl -H \"Authorization: Bearer 8fK2pQ7xLm4Rt9vW3nB6cY1zH5jD0sAe\"",
+            "git clone https://0123456789abcdef0123456789abcdef01234567@git.example.com/org/repo.git",
+        ])
+    func commandCredentialsAreRefused(_ line: String) {
+        let terminal = CapturePreferences(consent: ["com.apple.Terminal": .allowed])
+        #expect(
+            CaptureGate.refusal(toRecord: line, from: terminalField(), given: terminal) == .looksLikeSecret)
     }
 
     @Test("The credential rules are the clipboard's, asked rather than copied.")

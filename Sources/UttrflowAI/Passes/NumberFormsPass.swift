@@ -118,7 +118,12 @@ public struct NumberFormsPass: CleaningPass {
                 text = year.text
                 end += year.count
                 isPhrase = true
-            } else if let time = time(hour: value, at: end, keys: keys, shapes: shapes) {
+            } else if let time = time(hour: value, at: end, keys: keys, shapes: shapes),
+                timeAcceptable(
+                    position: position, minuteStart: end, minuteEnd: end + time.count,
+                    keys: keys, shapes: shapes
+                )
+            {
                 text = time.text
                 end += time.count
                 isPhrase = true
@@ -133,6 +138,20 @@ public struct NumberFormsPass: CleaningPass {
                 isPhrase = true
             }
         }
+        // Three or more single digits spoken in a row are a digit string, even outside any context word.
+        if !isPhrase, item.spoken, let value = item.value, value < 10 {
+            var run = String(value)
+            var p = end
+            while p < keys.count, joined(p, shapes), let digit = singleDigit(keys[p]) {
+                run.append(digit)
+                p += 1
+            }
+            if run.count >= 3 {
+                text = run
+                end = p
+                isPhrase = true
+            }
+        }
         if !isPhrase, item.spoken, let value = item.value {
             let beforeCurrency = joined(end, shapes) && currencies.contains(keys[end])
             guard policy == .always || inContext || value >= 10 || beforeCurrency else { return nil }
@@ -142,6 +161,26 @@ public struct NumberFormsPass: CleaningPass {
             return nil
         }
         return Phrase(text: text, count: end - position)
+    }
+
+    /// True when a clock time's minute reads as two single digits without a time cue around the time, so the run is a digit string.
+    private static func timeAcceptable(
+        position: Int, minuteStart: Int, minuteEnd: Int,
+        keys: [String], shapes: [WordShape]
+    ) -> Bool {
+        guard minuteEnd - minuteStart == 2,
+            keys[minuteStart] == "oh" || keys[minuteStart] == "zero",
+            NumberWords.units[keys[minuteStart + 1]] != nil
+        else { return true }
+        if position > 0, !startsASentence(position, shapes), keys[position - 1] == "at" {
+            return true
+        }
+        if minuteEnd < shapes.count, joined(minuteEnd, shapes),
+            meridiems.contains(keys[minuteEnd]) || keys[minuteEnd] == "o'clock"
+        {
+            return true
+        }
+        return false
     }
 
     /// Whether the words here finish a scale the parser could not read whole, as in "a hundred and fifty".

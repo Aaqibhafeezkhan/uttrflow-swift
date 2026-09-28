@@ -32,11 +32,18 @@ struct LineShape: Equatable, Sendable {
             while let flag = words.first, flag.hasPrefix("-") { words.removeFirst() }
         }
         guard let command = words.first else { return LineShape(command: nil, kind: .program) }
-        let arguments = words.dropFirst().filter { !$0.hasPrefix("-") }
-        let flagged = arguments.count < words.count - 1
+        let rest = words.dropFirst()
+        // A bare `--` ends the options, so every word after it is an operand whatever it begins with.
+        let end = rest.firstIndex(of: "--")
+        let options = rest[..<(end ?? rest.endIndex)]
+        let operands = end.map { rest[($0 + 1)...] } ?? []
+        let arguments = options.filter { !$0.hasPrefix("-") } + operands
         return LineShape(
             command: command,
-            kind: CommandGrammar.kind(of: command, after: Array(arguments), flagged: flagged))
+            kind: CommandGrammar.kind(
+                of: command, after: arguments, flags: options.filter { $0.hasPrefix("-") },
+                previous: rest.last,
+                endOfOptions: end != nil))
     }
 }
 
@@ -86,6 +93,32 @@ enum CommandGrammar {
         "checkout", "switch", "merge", "rebase", "branch", "cherry-pick",
     ]
 
+    /// The flags of each git verb whose value is the name of a branch it creates.
+    static let gitBranchCreatingFlags: [String: Set<String>] = [
+        "checkout": ["-b", "-B", "--orphan"],
+        "switch": ["-c", "-C", "--create", "--force-create", "--orphan"],
+        "worktree": ["-b", "-B"],
+    ]
+
+    /// `git branch` flags whose value is an existing commit.
+    static let gitBranchCommitFlags: Set<String> = [
+        "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "-u", "--set-upstream-to",
+    ]
+
+    /// What `git branch` takes next: an existing branch to delete, rename, copy or start from, or a new name.
+    static func gitBranchArgument(flags: [String], previous: String?, given: Int) -> ArgumentKind {
+        if let previous, gitBranchCommitFlags.contains(previous) { return .branch }
+        let deletes: Set = ["-d", "-D", "--delete", "--edit-description", "--unset-upstream"]
+        if flags.contains(where: deletes.contains) { return .branch }
+        // `-m old new`: the first name may be the branch renamed, the second is always new.
+        let renames: Set = ["-m", "-M", "-c", "-C", "--move", "--copy"]
+        if flags.contains(where: renames.contains) { return given == 0 ? .branch : .free }
+        let lists: Set = ["-l", "--list", "-a", "--all", "-r", "--remotes"]
+        if flags.contains(where: lists.contains) { return .free }
+        // A bare `git branch name` creates it; a word after the name is where it starts.
+        return given == 0 ? .free : .branch
+    }
+
     /// git's verbs that take a branch or a bare file with equal right.
     static let gitBranchOrFileVerbs: Set<String> = ["log", "diff", "reset"]
 
@@ -114,8 +147,12 @@ enum CommandGrammar {
         return Array(words[(separator + 1)...])
     }
 
-    /// What the next word of a command is, after the positional arguments already given and whether any flag came before it.
-    static func kind(of command: String, after arguments: [String], flagged: Bool = false) -> ArgumentKind {
+    /// What the next word of a command is, from the positional arguments and flags before it, the word just before it, and whether a bare `--` came first.
+    static func kind(
+        of command: String, after arguments: [String], flags: [String] = [], previous: String? = nil,
+        endOfOptions: Bool = false
+    ) -> ArgumentKind {
+        let flagged = !flags.isEmpty || endOfOptions
         if directoryCommands.contains(command) { return .directory }
         if interpreters.contains(command) { return arguments.isEmpty && !flagged ? .file : .free }
         if fileCommands.contains(command) { return .file }
@@ -125,6 +162,13 @@ enum CommandGrammar {
         guard subcommandPrograms.contains(command) else { return .free }
         guard let verb = arguments.first else { return .subcommand(of: command) }
         if command == "git" {
+            // After `--` git reads only paths.
+            if endOfOptions { return .file }
+            // A flag that creates a branch takes a new name, which no existing branch may complete.
+            if let previous, gitBranchCreatingFlags[verb]?.contains(previous) == true { return .free }
+            if verb == "branch" {
+                return gitBranchArgument(flags: flags, previous: previous, given: arguments.count - 1)
+            }
             if gitBranchVerbs.contains(verb) { return .branch }
             if gitBranchOrFileVerbs.contains(verb) { return .branchOrFile }
             return gitFileVerbs.contains(verb) ? .file : .free

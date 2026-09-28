@@ -96,22 +96,42 @@ public struct Register: Sendable, Equatable {
         return line[line.index(after: dot)].isLetter
     }
 
-    /// A reply is always given room for a whole message, however terse this person has been, since a reply cut to a word is no reply.
+    /// A reply with no typical length to follow is given room for a whole message.
     public static let replyTokens = 48
 
     /// Below this many characters a person's typical line says they write tersely, not how long a reply should be, so it is not quoted to the model.
     public static let terseLength = 24
 
-    /// How many tokens a pass may spend: enough for a line the length of this person's lines, never less than a short one, and never less than a whole reply.
+    /// How many tokens a pass may spend: enough for a line the length of this person's lines, never less than a short one.
     public var maxTokens: Int {
         // Half the typical character count is about twice the tokens the line needs, which leaves room for alternatives.
-        let budget: Int
         if let typicalLength {
-            budget = min(max(typicalLength / 2, Self.tokenRange.lowerBound), Self.tokenRange.upperBound)
-        } else {
-            budget = symbolShare > Self.symbolicShare ? 32 : (isConversational ? Self.replyTokens : 64)
+            return min(max(typicalLength / 2, Self.tokenRange.lowerBound), Self.tokenRange.upperBound)
         }
-        return isConversational ? max(budget, Self.replyTokens) : budget
+        return symbolShare > Self.symbolicShare ? 32 : (isConversational ? Self.replyTokens : 64)
+    }
+
+    /// Whether a line here is prose, a reply or a document's sentence, which ends at its first sentence end.
+    public var endsAtSentence: Bool { !writesAddresses && symbolShare <= Self.symbolicShare }
+
+    /// How many of this person's typical lines a continuation may run to before it is no line of theirs.
+    public static let lengthMultiple = 3
+
+    /// The fewest characters a continuation is allowed, so a terse person's line can still be finished by a word or two.
+    public static let shortestAllowance = 16
+
+    /// The most characters a continuation may add with no typical length to go by: a reply, a search or an address runs short, a command or a document's line longer.
+    public var registerContinuationLimit: Int {
+        if writesAddresses || isSearchField { return 80 }
+        if symbolShare > Self.symbolicShare { return 120 }
+        return isConversational ? 80 : 160
+    }
+
+    /// The most characters a continuation may add here: a multiple of this person's typical line, never past the register's own limit.
+    public var longestContinuation: Int {
+        guard let typicalLength else { return registerContinuationLimit }
+        return min(
+            registerContinuationLimit, max(typicalLength * Self.lengthMultiple, Self.shortestAllowance))
     }
 
     /// The facts as short phrases the model reads, so it matches the register instead of guessing it.
@@ -177,10 +197,27 @@ public struct Register: Sendable, Equatable {
         let label = line[..<colon].trimmingCharacters(in: .whitespaces)
         guard let first = label.first, first.isLetter, label.count <= speakerLength,
             label.split(separator: " ").count <= speakerWords,
-            label.allSatisfy({ $0.isLetter || $0.isNumber || " ()._-'".contains($0) })
+            label.allSatisfy({ $0.isLetter || $0.isNumber || " ()._-'".contains($0) }),
+            !namesField(label)
         else { return nil }
         return label
     }
+
+    /// Whether a label names a field, by its whole text or its head word, so "Expected result" and "Assigned to" are fields.
+    static func namesField(_ label: String) -> Bool {
+        let lowered = label.lowercased()
+        let head = lowered.prefix { $0.isLetter }
+        return fieldLabels.contains(lowered) || fieldLabels.contains(String(head))
+    }
+
+    /// Words a record, a form, a mail header or a report opens its repeated labels with, which name a field and never a person.
+    static let fieldLabels: Set<String> = [
+        "actual", "address", "amount", "assigned", "assignee", "attendees", "bcc", "category", "cc",
+        "created", "date", "deadline", "description", "due", "email", "end", "environment", "expected",
+        "from", "id", "location", "name", "note", "notes", "owner", "phone", "priority", "reported",
+        "reporter", "result", "sent", "severity", "start", "status", "steps", "subject", "summary", "tags",
+        "time", "title", "to", "total", "type", "updated", "version", "when", "where",
+    ]
 
     /// The longest a speaker's name may run, in characters, before the text before a colon reads as a sentence.
     static let speakerLength = 32
@@ -222,11 +259,16 @@ public struct Register: Sendable, Equatable {
         return sorted[sorted.count / 2]
     }
 
-    /// The share of the visible characters that are neither letters, digits nor whitespace.
+    /// Whether a character is drawn as an emoji, which decorates prose and is never a command's symbol.
+    static func isPictograph(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { $0.properties.isEmojiPresentation || $0.value == 0xFE0F }
+    }
+
+    /// The share of the visible characters that are neither letters, digits nor whitespace, emoji left out.
     static func symbolShare(of texts: [String]) -> Double {
         var visible = 0
         var symbols = 0
-        for character in texts.joined() where !character.isWhitespace {
+        for character in texts.joined() where !character.isWhitespace && !isPictograph(character) {
             visible += 1
             if !character.isLetter, !character.isNumber { symbols += 1 }
         }

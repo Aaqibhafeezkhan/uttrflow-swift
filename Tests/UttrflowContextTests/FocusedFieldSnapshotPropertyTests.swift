@@ -78,7 +78,8 @@ struct FocusedFieldSnapshotPropertyTests {
         let broken = current.contains(where: \.isNewline)
         #expect(!broken)
         #expect(head.hasSuffix(current))
-        #expect(caret.snapshot().learnableLine == current)
+        let snapshot = caret.snapshot()
+        #expect(snapshot.learnableLine == (snapshot.hasTextAfterCaret ? "" : current))
     }
 
     @Test(

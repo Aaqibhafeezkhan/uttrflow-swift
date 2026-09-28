@@ -55,6 +55,55 @@ struct CardNumberDetectionTests {
     }
 
     @Test(
+        "masks a card number grouped by any Unicode space or line break",
+        arguments: [
+            "\u{2028}", "\u{2029}", "\u{85}", "\u{0B}", "\u{0C}", "\n", "\r", "\r\n",
+        ])
+    func lineAndSpaceSeparators(_ separator: String) {
+        let text = ["4111", "1111", "1111", "1111"].joined(separator: separator)
+        #expect(ClipKindDetector.kind(of: text) == .secret, "\(text.debugDescription)")
+        #expect(CardNumberShape.matches(text) == BacktrackingPatterns.hasCardNumber(text))
+    }
+
+    @Test(
+        "masks fullwidth digits grouped by a fullwidth hyphen or full stop",
+        arguments: ["\u{FF0D}", "\u{FF0E}"])
+    func fullwidthSeparators(_ separator: String) {
+        let group = "\u{FF11}\u{FF11}\u{FF11}\u{FF11}"
+        let text = ["\u{FF14}\u{FF11}\u{FF11}\u{FF11}", group, group, group].joined(separator: separator)
+        #expect(ClipKindDetector.kind(of: text) == .secret, "\(text.debugDescription)")
+        #expect(CardNumberShape.matches(text) == BacktrackingPatterns.hasCardNumber(text))
+    }
+
+    @Test(
+        "leaves line-broken and fullwidth numbers that are not cards alone",
+        arguments: [
+            // A column of numbers, a mixed grouping and a failed Luhn check
+            "1234\n5678\n9012\n3456",
+            "4111\n1111 1111 1111",
+            "4111\u{2028}1111\u{2028}1111\u{2028}1112",
+            "2024\n2025\n2026\n2027",
+            // Phone numbers
+            "+1\u{2028}415\u{2028}555\u{2028}0142",
+            "\u{FF0B}\u{FF14}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}"
+                + "\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF11}",
+            // Dates and times
+            "\u{FF12}\u{FF10}\u{FF12}\u{FF16}\u{FF0D}\u{FF10}\u{FF19}\u{FF0D}\u{FF11}\u{FF13}",
+            "2026\u{85}09\u{85}13\u{85}12:30:45",
+            // Version strings
+            "\u{FF11}\u{FF0E}\u{FF14}\u{FF11}\u{FF11}\u{FF11}\u{FF0E}\u{FF11}\u{FF11}\u{FF11}\u{FF11}"
+                + "\u{FF0E}\u{FF11}\u{FF11}\u{FF11}\u{FF11}\u{FF0E}\u{FF11}\u{FF11}\u{FF11}\u{FF11}",
+            "v1.2.3\u{2028}v4.5.6\u{2028}v7.8.9",
+            // Ordinary numbers
+            "1700000000000\u{0B}20240913123045",
+            "12\u{2029}34\u{2029}56\u{2029}78\u{2029}90\u{2029}12\u{2029}34\u{2029}56",
+        ])
+    func lineBrokenAndFullwidthNonCards(_ text: String) {
+        #expect(!CardNumberShape.matches(text), "\(text.debugDescription)")
+        #expect(ClipKindDetector.kind(of: text) != .secret, "\(text.debugDescription)")
+    }
+
+    @Test(
         "still leaves a mixed grouping, a decimal and a version alone",
         arguments: [
             "4111 1111\u{A0}1111.1111",

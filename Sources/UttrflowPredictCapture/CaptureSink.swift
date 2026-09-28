@@ -17,11 +17,17 @@ public protocol CaptureSink: Sendable {
 
     /// Counts one acceptance of a line already recorded, which the ranking weighs.
     func recordAccepted(_ text: String, in surface: Surface) async throws
+
+    /// Takes back one acceptance the person undid, with the use it added.
+    func retractAcceptance(_ text: String, in surface: Surface) async throws
 }
 
 extension CaptureSink {
     /// A sink that keeps no acceptance counts is not wrong, only less informed.
     public func recordAccepted(_ text: String, in surface: Surface) async throws {}
+
+    /// A sink that keeps no acceptance counts has nothing to take back.
+    public func retractAcceptance(_ text: String, in surface: Surface) async throws {}
 }
 
 /// The corpus on disk is the sink the app uses; nothing here is added to it.

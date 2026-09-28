@@ -1,4 +1,5 @@
 public import UttrflowCore
+import UttrflowDictionary
 
 // The verdict on a rewrite, and the guard that reaches it.
 /// Whether a rewrite may be shown to the user.
@@ -283,8 +284,18 @@ public struct MeaningPreservationGuard: Sendable {
         /// Whether the word opens the text or follows a sentence-closing mark.
         let startsSentence: Bool
 
-        /// Whether the checks can read the word at all; Devanagari and the like are left to the base checks.
-        var isPlain: Bool { matching.allSatisfy(\.isASCII) }
+        /// Whether the checks can read the word at all: Latin script, accents included; Devanagari and the like are left to the base checks.
+        var isPlain: Bool { matching.unicodeScalars.allSatisfy(Self.isLatin) }
+
+        /// Whether a scalar is ASCII, a Latin letter with or without its accent, or an accent written apart.
+        static func isLatin(_ scalar: Unicode.Scalar) -> Bool {
+            switch scalar.value {
+            case 0x00...0x7F: true
+            case 0x00C0...0x024F, 0x1E00...0x1EFF: scalar.properties.isAlphabetic
+            case 0x0300...0x036F: true
+            default: false
+            }
+        }
     }
 
     /// A repair may change a word's form, never which content words are there, either way round, or the order they came in. See `Docs/cleanup.md`.
@@ -311,7 +322,8 @@ public struct MeaningPreservationGuard: Sendable {
         let composed = composedNumbers(keptTokens, in: Set(written.map(\.matching)))
         let carried = keptTokens.indices.filter { index in
             let token = keptTokens[index]
-            return token.isPlain && isContent(token) && !composed.contains(index) && !excused.contains(index)
+            return token.isPlain && (isContent(token) || FunctionWords.isMeaningBearing(token.lookup))
+                && !composed.contains(index) && !excused.contains(index)
         }
         if case .rejected(let reason, let kind) = survivalVerdict(carried.map { keptTokens[$0] }, in: written)
         {
@@ -579,24 +591,62 @@ public struct MeaningPreservationGuard: Sendable {
         return .accepted
     }
 
-    /// Whether one rewritten word is the kept word: exact, as its numeral or its word, in an inflected form, in an identifier, or as a verb form.
+    /// Whether one rewritten word is the kept word: exact, as its numeral or its word, a homophone, an identifier spelling, or the aux the rewrite contracted.
     static func survives(_ word: String, as candidate: GrammarToken) -> Bool {
         if word == candidate.matching { return true }
         if numberWords[word] == candidate.matching { return true }
         if numberWords[candidate.matching] == word { return true }
-        if sameForm(word, candidate.matching) { return true }
+        // A misheard sound-alike respelled is the same spoken word, and only the hand-kept table says which are.
+        if Homophones.share(word, candidate.matching) { return true }
         // A word spelled into an identifier — "invoices" inside "fetchInvoices" — is still there.
         if spelledInto(word, candidate.text) { return true }
-        if let index = IrregularVerbForms.setIndex[word] {
-            return IrregularVerbForms.setIndex[candidate.matching] == index
+        // An auxiliary the rewrite contracted to its "n't" form is the same word.
+        if Self.auxContractionRoots.contains(word), candidate.matching == "\(word)nt" { return true }
+        if Self.auxContractionRoots.contains(candidate.matching), word == "\(candidate.matching)nt" {
+            return true
         }
         return false
     }
+
+    /// Aux verbs the rewrite can still contract to the same word; a dropped or substituted one is a rewrite.
+    static let auxContractionRoots: Set<String> = [
+        "do", "does", "did",
+        "is", "are", "was", "were",
+        "have", "has", "had",
+        "will", "would", "shall", "should",
+        "can", "could", "may", "might", "must",
+    ]
 
     /// Whether two words are one word in two forms: the same word, or one of them inflected from the other.
     static func sameForm(_ word: String, _ other: String) -> Bool {
         word == other || inflections(of: word).contains(other) || inflections(of: other).contains(word)
     }
+
+    /// Whether two romanised Hindi words are one word in two forms: by `sameForm`, a verb and its stem ("aata" and "aa"), or two cases of one pronoun ("yah" and "is").
+    static func sameRomanisedForm(_ word: String, _ other: String) -> Bool {
+        if sameForm(word, other) { return true }
+        let (first, second) = (Romaniser.soundKey(word), Romaniser.soundKey(other))
+        if hindiForms(of: first).contains(second) || hindiForms(of: second).contains(first) { return true }
+        guard let pronoun = hindiPronouns[first] else { return false }
+        return hindiPronouns[second] == pronoun
+    }
+
+    /// The forms Hindi inflects a verb stem or a noun into, as sound keys: tense, aspect, person, gender and plural.
+    static func hindiForms(of stem: String) -> Set<String> {
+        guard !stem.isEmpty else { return [] }
+        let endings = [
+            "ta", "ti", "te", "na", "ne", "ni", "ya", "yi", "ye", "a", "i", "e", "o", "on", "kar",
+            "unga", "ungi", "enge", "oge", "ega", "egi", "iye",
+        ]
+        return Set(endings.map { Romaniser.soundKey(stem + $0) })
+    }
+
+    /// The cases of the Hindi demonstratives by sound key, to the one they are: "yah" is "is" before a postposition, "vah" is "us".
+    static let hindiPronouns: [String: String] = Dictionary(
+        uniqueKeysWithValues: [
+            ("yah", ["yah", "yeh", "ye", "is", "in", "ise", "inhe"]),
+            ("vah", ["vah", "woh", "wo", "us", "un", "use", "unhe"]),
+        ].flatMap { pronoun, cases in Set(cases.map(Romaniser.soundKey)).map { ($0, pronoun) } })
 
     /// The forms speech inflects a word into: plural, third person, past and progressive.
     static func inflections(of word: String) -> Set<String> {
@@ -755,7 +805,7 @@ public struct MeaningPreservationGuard: Sendable {
     }
 
     /// Digits people dictate as words, in English and Hindi; traps on first use if the tables share a word.
-    private static let numberWords: [String: String] = Dictionary(
+    static let numberWords: [String: String] = Dictionary(
         uniqueKeysWithValues: Array(englishNumberWords) + Array(hindiNumberWords))
 
     /// Hindi number words in both scripts, without which every Hindi utterance with a number fails the guard.

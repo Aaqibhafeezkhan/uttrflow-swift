@@ -397,6 +397,8 @@ public actor ClipboardStore {
         var clips = loaded()
         for index in clips.indices where clips[index].category == name {
             clips[index].category = destination
+            // A move-out keeps the clips while losing the collection, so the kept promise the category carried moves to a pin.
+            if destination == nil { clips[index].isPinned = true }
         }
         return try settled(clips, keeping: retention)
     }
@@ -450,8 +452,11 @@ public actor ClipboardStore {
 
     /// Carries what the user chose about a clip onto the copy that has just replaced it.
     private func inheriting(_ previous: Clip, from arrival: Clip) -> Clip {
-        Clip(
-            id: previous.id, text: arrival.text, kind: arrival.kind, copiedAt: arrival.copiedAt,
+        // A kept clip the user chose to keep on disk is never made a memory-only secret by a repeat of the same text.
+        let staysKept = previous.isKept && Self.isPersistable(previous) && !Self.isPersistable(arrival)
+        let classified = staysKept ? previous : arrival
+        return Clip(
+            id: previous.id, text: arrival.text, kind: classified.kind, copiedAt: arrival.copiedAt,
             source: arrival.source,
             // Named rather than defaulted, so a repeat cannot quietly become a ⌘C.
             origin: previous.origin,
@@ -463,8 +468,10 @@ public actor ClipboardStore {
             dictatedText: previous.dictatedText,
             // Copying something again is reaching for it, so the eviction clock moves too.
             lastUsedAt: arrival.copiedAt,
-            // The arrival's, detected from the text recorded now and from this pasteboard.
-            language: arrival.language, richText: arrival.richText,
+            // Detected from the text recorded now and from this pasteboard, unless the kind stayed the kept clip's.
+            language: classified.language,
+            // A plain repeat keeps the clip's rich text, which may be a note the user wrote in the panel.
+            richText: arrival.richText ?? previous.richText,
             // The file already on disk, not the one just written; the arrival's would strand it.
             image: previous.image ?? arrival.image,
             // Everything the user decided stays with the clip they decided it about.
@@ -478,7 +485,14 @@ public actor ClipboardStore {
         _ id: UUID, keeping retention: ClipRetention, _ edit: (inout Clip) -> Void
     ) throws(ClipboardStoreError) -> [Clip] {
         var clips = loaded()
-        if let index = clips.firstIndex(where: { $0.id == id }) { edit(&clips[index]) }
+        if let index = clips.firstIndex(where: { $0.id == id }) {
+            let wasKept = clips[index].isKept
+            edit(&clips[index])
+            // A clip the user just un-kept is treated as freshly copied, so the same action cannot also age it out.
+            if wasKept && !clips[index].isKept {
+                clips[index] = clips[index].recopied(at: retention.now)
+            }
+        }
         return try settled(clips, keeping: retention)
     }
 

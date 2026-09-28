@@ -107,6 +107,41 @@ struct LayoutWordsPassTests {
         #expect(cleaned(input, by: sut) == input)
     }
 
+    @Test(
+        "leaves a layout phrase an opener heads across modifiers",
+        arguments: [
+            "her first new line was funny", "our best new line got a laugh",
+            "his first new paragraph was long", "the very last new line matters",
+            "her new line manager is kind", "every new line counts",
+        ]
+    )
+    func leavesModifiedMentions(input: String) {
+        #expect(cleaned(input, by: sut) == input)
+    }
+
+    @Test(
+        "leaves a layout phrase after every modifier in the table",
+        arguments: MentionGuard.modifiers.sorted())
+    func leavesEachModifier(modifier: String) {
+        let input = "the \(modifier) new line counts"
+        #expect(cleaned(input, by: sut) == input)
+    }
+
+    @Test(
+        "still lays out a phrase whose nearest opener heads a noun before it",
+        arguments: [
+            ("we need eggs new line milk", "we need eggs\nmilk"),
+            ("retry the request new line log the failure", "retry the request\nlog the failure"),
+            (
+                "thanks for the update new paragraph the second issue",
+                "thanks for the update\n\nthe second issue"
+            ),
+        ]
+    )
+    func laysOutAfterANoun(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
     /// Issue 238: a numbered item inside its sentence is laid out only when an item numbered next to it is said too.
     @Test(
         "leaves a lone number inside its sentence as the designator it is",

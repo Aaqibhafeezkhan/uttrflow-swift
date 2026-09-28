@@ -146,6 +146,26 @@ struct CompletionParsingTests {
                 == "INSERT INTO products (id, name, price, stock)")
     }
 
+    @Test("A time or date inside the line is its answer, and only a stamp hung after the line is dropped")
+    func onlyATrailingStampIsDropped() {
+        #expect(
+            CompletionText.trimmed(
+                "The meeting is at 10:30, see you there", typed: "The meeting is at", echoing: [])
+                == "The meeting is at 10:30, see you there")
+        #expect(
+            CompletionText.trimmed(
+                "Let's meet on Friday, 5 March, at the office", typed: "Let's meet on", echoing: [])
+                == "Let's meet on Friday, 5 March, at the office")
+        #expect(
+            CompletionText.trimmed("The meeting is at 10:30", typed: "The meeting is at", echoing: [])
+                == "The meeting is at 10:30")
+        #expect(
+            CompletionText.trimmed(
+                "See you there, 4 September at 6:41 PM", typed: "See you", echoing: [])
+                == "See you there")
+        #expect(CompletionText.trimmed("ok, 12:46 PM", typed: "ok", echoing: []) == nil)
+    }
+
     @Test(
         "A new word of one or two characters is nothing, while a character that finishes the typed word stays."
     )
@@ -229,67 +249,215 @@ struct ContextNeverCopiedTests {
     }
 }
 
-/// A mail the person is replying to, signed by its sender.
-private let incoming =
-    "From: Sam\nHi, could you share the invoice for August when you get a chance? Thanks, Sam"
+/// A chat whose last message a reply could echo, with this person's own short replies.
+private let deckChat = GenerationSituation(
+    application: "Chat", field: "Message", windowTitle: "Sam",
+    surroundings: """
+        Sam: morning, quick one
+        Me: hey, what's up
+        Sam: the client call moved to 3
+        Sam: Can you send the deck by Friday?
+        """,
+    recentLines: ["hey, what's up", "on it", "sounds good", "will do"], isMultiline: true)
 
-@Suite("A sign-off is never signed with a name from the screen")
+@Suite("A suggestion never copies a run of screen words")
+struct CopiedRunTests {
+    @Test("A reply that repeats the other person's last message is refused on either model's path")
+    func anEchoedMessageIsRefused() {
+        let context = CompletionText.contextNeverCopied(in: deckChat)
+        #expect(
+            CompletionText.copiesContext(
+                "Can you send the deck by Friday?", typed: "Can you", context: context, ownLines: []))
+        #expect(
+            CompletionText.finished(["Can you send the deck by Friday?"], typed: "Can you", in: deckChat)
+                .isEmpty)
+        // A word the typed text only began still counts as the model's, so a mid-word cut is no way round it.
+        #expect(
+            CompletionText.finished(["Can you send the deck by Friday?"], typed: "Can you se", in: deckChat)
+                .isEmpty)
+    }
+
+    @Test("Fewer than five words in a row, or words the person typed themselves, are not a copy")
+    func shortRunsAndTypedWordsAreKept() {
+        let context = CompletionText.contextNeverCopied(in: deckChat)
+        #expect(
+            !CompletionText.copiesContext(
+                "Can you send the deck later", typed: "Can you", context: context, ownLines: []))
+        #expect(
+            !CompletionText.copiesContext(
+                "Can you send the deck by Friday?", typed: "Can you send the deck", context: context,
+                ownLines: []))
+        #expect(
+            CompletionText.finished(["yes I can send the deck by monday"], typed: "yes I", in: deckChat)
+                == ["yes I can send the deck by monday"])
+    }
+
+    @Test("A run the person has written here before is theirs to repeat")
+    func aRunInTheirOwnLinesIsKept() {
+        let context = CompletionText.contextNeverCopied(in: deckChat)
+        #expect(
+            !CompletionText.copiesContext(
+                "Can you send the deck by Friday?", typed: "Can you", context: context,
+                ownLines: ["can you send the deck by friday"]))
+    }
+
+    @Test("A command may reuse a path the screen shows, however many words it splits into")
+    func aCommandMayReuseTheScreen() {
+        let shell = GenerationSituation(
+            application: "Terminal", preceding: "$ ls projects/uttrflow/app/Sources/Login/Session",
+            recentLines: [
+                "git commit -m 'fix: ship it'", "ls -la ~/src/*.swift", "docker compose -f ./a.yml up -d",
+            ])
+        let line = "cd projects/uttrflow/app/Sources/Login/Session"
+        #expect(CompletionText.finished([line], typed: "cd ", in: shell) == [line])
+    }
+
+    @Test("A run is read within one line of the screen, never across two")
+    func runsDoNotCrossLines() {
+        #expect(
+            !CompletionText.copiesContext(
+                "ok we moved to 3 sam the deck", typed: "ok", context: ["we moved to 3\nSam: the deck"],
+                ownLines: []))
+    }
+}
+
+@Suite("A suggestion ends where its line ends")
+struct FirstSentenceTests {
+    @Test("A reply that runs into a second sentence is ended at the first")
+    func aReplyEndsAtItsFirstSentence() {
+        let raw = "ok sounds good, see you at 3. Let me know if anything changes and I will update the doc."
+        #expect(
+            CompletionText.finished([raw], typed: "ok sounds g", in: deckChat) == [
+                "ok sounds good, see you at 3."
+            ])
+        #expect(CompletionText.firstSentence(of: "sure! on my way", typed: "su") == "sure!")
+        #expect(CompletionText.firstSentence(of: "is it done?? I need it", typed: "is") == "is it done??")
+        #expect(
+            CompletionText.firstSentence(of: "she said \"go.\" Then left", typed: "she") == "she said \"go.\""
+        )
+    }
+
+    @Test("A stop inside a number, an address, an abbreviation or an ellipsis is no sentence end")
+    func stopsThatEndNothing() {
+        for line in [
+            "meet at 5.30 near the gate", "see example.com for details", "bring snacks, e.g. chips and dip",
+            "ask Dr. Rao about it", "hmm... maybe later", "call J. Smith first",
+        ] {
+            #expect(CompletionText.firstSentence(of: line, typed: String(line.prefix(4))) == line, "\(line)")
+        }
+    }
+
+    @Test("A sentence end the person typed is theirs, and the line goes on to the next")
+    func aTypedStopIsNotCut() {
+        #expect(
+            CompletionText.firstSentence(of: "Done. Sending it now. Thanks", typed: "Done. S")
+                == "Done. Sending it now.")
+    }
+
+    @Test("A command keeps every clause, since a full stop there is no sentence end")
+    func aCommandIsNotCut() {
+        let shell = GenerationSituation(
+            application: "Terminal", preceding: "$ git status",
+            recentLines: [
+                "git commit -m 'fix: ship it'", "ls -la ~/src/*.swift", "docker compose -f ./a.yml up -d",
+            ])
+        #expect(
+            CompletionText.finished(["git commit -m 'fix. ship it. now'"], typed: "git commit", in: shell)
+                == ["git commit -m 'fix. ship it. now'"])
+    }
+}
+
+@Suite("A suggestion is held to the length this person writes")
+struct ContinuationLengthTests {
+    @Test("In a chat of short replies a long continuation is refused, and a short one kept")
+    func aLongReplyIsRefused() {
+        let long =
+            "sounds good, I will have the whole thing ready well before the call and send it across to everyone"
+        #expect(CompletionText.finished([long], typed: "sou", in: deckChat).isEmpty)
+        #expect(CompletionText.finished(["sounds good"], typed: "sou", in: deckChat) == ["sounds good"])
+    }
+
+    @Test("With no history the register's own limit holds, not one limit for every field")
+    func theRegisterSetsTheLimitWithoutHistory() {
+        let notes = GenerationSituation(application: "Notes", isMultiline: true)
+        let line = "The plan is " + String(repeating: "longer and ", count: 12) + "done"
+        #expect(line.count - 4 > 80 && line.count - 4 <= 160)
+        #expect(CompletionText.finished([line], typed: "The ", in: notes) == [line])
+        let chat = GenerationSituation(
+            application: "Chat", field: "Message",
+            surroundings: "Sam: hi\nMe: hey\nSam: are you around\nSam: call?", isMultiline: true)
+        #expect(CompletionText.finished([line], typed: "The ", in: chat).isEmpty)
+    }
+
+    @Test("Two lines that finish the same are offered once")
+    func finishedLinesAreOfferedOnce() {
+        #expect(
+            CompletionText.finished(["sure, on it. Later", "sure, on it. Soon"], typed: "sure", in: deckChat)
+                == ["sure, on it."])
+    }
+}
+
+@Suite("A sign-off is signed only with a name the person wrote")
 struct SignOffTests {
     @Test("A closing the person typed is not signed with the sender's name")
     func theSendersNameIsNotSigned() {
         let own = ["Please find the document attached.", "Kind regards,"]
         #expect(
-            SignOff.unsigned("Kind regards, Sam", typed: "Kind regards,", screen: [incoming], ownLines: own)
+            SignOff.unsigned("Kind regards, Sam", typed: "Kind regards,", ownLines: own)
                 == nil)
-        #expect(SignOff.unsigned("Thanks, Sam.", typed: "Thanks, ", screen: [incoming], ownLines: own) == nil)
-        #expect(SignOff.unsigned("best,  Sam", typed: "best,", screen: [incoming], ownLines: []) == nil)
+        #expect(SignOff.unsigned("Thanks, Sam.", typed: "Thanks, ", ownLines: own) == nil)
+        #expect(SignOff.unsigned("best,  Sam", typed: "best,", ownLines: []) == nil)
     }
 
     @Test("A closing still being typed is finished without the sender's name after it")
     func theClosingIsKept() {
         #expect(
-            SignOff.unsigned("Kind regards, Sam", typed: "Kind reg", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Kind regards, Sam", typed: "Kind reg", ownLines: [])
                 == "Kind regards,")
     }
 
     @Test("A name the person has written in their own lines is theirs to sign with")
     func theirOwnNameIsKept() {
-        let screen = incoming + "\nOn Monday, Alex wrote:"
         #expect(
             SignOff.unsigned(
-                "Kind regards, Alex", typed: "Kind regards,", screen: [screen], ownLines: ["Cheers, Alex"])
+                "Kind regards, Alex", typed: "Kind regards,", ownLines: ["Cheers, Alex"])
                 == "Kind regards, Alex")
+    }
+
+    @Test("A name found nowhere the person wrote is cut back to the closing")
+    func anInventedNameIsCut() {
+        #expect(SignOff.unsigned("Best regards, David", typed: "Best regards,", ownLines: []) == nil)
+        #expect(SignOff.unsigned("Best regards, David", typed: "Best", ownLines: []) == "Best regards,")
         #expect(
-            SignOff.unsigned("Kind regards, Alex", typed: "Kind regards,", screen: [], ownLines: [])
-                == "Kind regards, Alex")
+            SignOff.unsigned("Thanks, Sam Collins", typed: "Thanks,", ownLines: ["Cheers, Sam"]) == nil)
+        #expect(
+            SignOff.unsigned("Thanks, Sam Collins", typed: "Thanks, Sam", ownLines: ["Collins here"])
+                == "Thanks, Sam Collins")
     }
 
     @Test("Words after a comma that are not a closing's signature are left alone")
     func otherLinesAreLeftAlone() {
-        let screen = "Sam: see you tomorrow at the August review"
         #expect(
-            SignOff.unsigned("Thanks, see you tomorrow", typed: "Thanks,", screen: [screen], ownLines: [])
+            SignOff.unsigned("Thanks, see you tomorrow", typed: "Thanks,", ownLines: [])
                 == "Thanks, see you tomorrow")
         #expect(
-            SignOff.unsigned("Hi Sam, could you share", typed: "Hi", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Hi Sam, could you share", typed: "Hi", ownLines: [])
                 == "Hi Sam, could you share")
-        #expect(SignOff.unsigned("Hi, Sam", typed: "Hi,", screen: [incoming], ownLines: []) == "Hi, Sam")
+        #expect(SignOff.unsigned("Hi, Sam", typed: "Hi,", ownLines: []) == "Hi, Sam")
         #expect(
-            SignOff.unsigned("Kind regards,", typed: "Kind", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Kind regards,", typed: "Kind", ownLines: [])
                 == "Kind regards,")
         #expect(
-            SignOff.unsigned("Kind regards", typed: "Kind", screen: [incoming], ownLines: [])
+            SignOff.unsigned("Kind regards", typed: "Kind", ownLines: [])
                 == "Kind regards")
         #expect(
             SignOff.unsigned(
-                "Thanks, Sam Could You Share", typed: "Thanks,", screen: [incoming], ownLines: [])
+                "Thanks, Sam Could You Share", typed: "Thanks,", ownLines: [])
                 == "Thanks, Sam Could You Share")
     }
 
-    @Test("A signature is signed only where every word of it came from the screen")
-    func aPartlyOwnSignatureIsKept() {
-        #expect(
-            SignOff.unsigned("Thanks, Sam Rivers", typed: "Thanks,", screen: [incoming], ownLines: [])
-                == "Thanks, Sam Rivers")
+    @Test("A signature partly on screen and partly made up is cut")
+    func aPartlyInventedSignatureIsCut() {
+        #expect(SignOff.unsigned("Thanks, Sam Rivers", typed: "Thanks,", ownLines: []) == nil)
     }
 }

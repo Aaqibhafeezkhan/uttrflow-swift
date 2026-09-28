@@ -28,6 +28,18 @@ struct RestatementTests {
         #expect(Restatement.triggerRun(at: 0, in: sorry.live, of: sorry.draft) == 2)
     }
 
+    @Test(
+        "every contracted subject pronoun is as weak an anchor as the pronoun",
+        arguments: [
+            "he's", "she's", "we're", "we'll", "we've", "we'd", "you're", "you'll", "you've", "you'd",
+            "they're", "they'll", "they've", "they'd", "he'll", "she'll", "that's", "there's",
+            "i'm", "it's", "they\u{2019}re",
+        ]
+    )
+    func contractedPronounsAreWeak(form: String) {
+        #expect(Restatement.weakAnchors.contains(form))
+    }
+
     @Test("the half taken back has to hold a word the speaker meant, not function words alone")
     func discardedHalfHoldsContent() {
         let good = reading("at four no sorry at five")

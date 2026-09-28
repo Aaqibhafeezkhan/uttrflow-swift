@@ -45,6 +45,24 @@ if [[ "$picked" != "$repeat" ]]; then
     exit 1
 fi
 
+# A themed pack yields the largest light tile and, when asked, the largest dark one.
+themed="$test_root/themed"
+mkdir -p "$themed/PNG @1x/Light" "$themed/PNG @4x/Light" "$themed/PNG @4x/Dark"
+touch \
+    "$themed/PNG @1x/Light/Theme=Light, Show text=No, Shape=Square, Platform=iOS.png" \
+    "$themed/PNG @4x/Light/Theme=Light, Show text=No, Shape=Square, Platform=iOS.png" \
+    "$themed/PNG @4x/Dark/Theme=Dark, Show text=No, Shape=Square, Platform=iOS.png"
+light_picked="$("$repo_root/Scripts/select-google-mark.sh" "$themed")"
+if [[ "$light_picked" != *"PNG @4x/Light/"* ]]; then
+    echo "error: the largest light tile was not picked: $light_picked" >&2
+    exit 1
+fi
+dark_picked="$("$repo_root/Scripts/select-google-mark.sh" "$themed" Dark)"
+if [[ "$dark_picked" != *"PNG @4x/Dark/"* ]]; then
+    echo "error: the largest dark tile was not picked: $dark_picked" >&2
+    exit 1
+fi
+
 # The legacy filename-token layout still has to work.
 legacy="$test_root/legacy"
 mkdir -p "$legacy"

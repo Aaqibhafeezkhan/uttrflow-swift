@@ -42,6 +42,9 @@ final class MenuBarController: NSObject {
     /// Whether the popover is on screen.
     var isPopoverShown: Bool { panel.isVisible }
 
+    /// Whether the popover's view draws anything, which it does only while the panel is on screen.
+    var isPopoverContentHosted: Bool { hostingView.rootView.isShown }
+
     /// Signed out: a click asks for sign-in instead of opening the popover, and the menu offers only that and Quit.
     var requiresSignIn = false {
         didSet { if requiresSignIn { closePopover() } }
@@ -53,7 +56,8 @@ final class MenuBarController: NSObject {
     ) {
         statusItem = statusBar.statusItem(withLength: NSStatusItem.variableLength)
         presentation = initial
-        hostingView = MenuBarHostingView(rootView: MenuBarPopoverView(presentation: initial) { _ in })
+        hostingView = MenuBarHostingView(
+            rootView: MenuBarPopoverView(presentation: initial, onCommand: { _ in }, isShown: false))
         panel = MenuBarPanel(
             contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true
         )
@@ -104,7 +108,7 @@ final class MenuBarController: NSObject {
             button.title = button.image == nil ? "Uttrflow" : ""
         }
         fillMenu()
-        // A closed popover keeps its old content, so a hidden panel never starts an animation.
+        // A closed popover stays empty until it opens, so a hidden panel never starts an animation.
         guard panel.isVisible else { return }
         hostPresentation()
         placePanel()
@@ -198,9 +202,12 @@ final class MenuBarController: NSObject {
         watchForDismissal()
     }
 
-    private func closePopover() {
+    /// Orders the panel out and empties it, since a hidden panel's content keeps animating.
+    func closePopover() {
         guard panel.isVisible else { return }
         panel.orderOut(nil)
+        hostingView.rootView = MenuBarPopoverView(
+            presentation: presentation, onCommand: { _ in }, isShown: false)
         statusItem.button?.highlight(false)
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors.removeAll()
@@ -343,5 +350,35 @@ final class MenuBarController: NSObject {
 extension MenuBarController: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         onMenuWillOpen?()
+    }
+}
+
+// MARK: - The popover's right-click menu
+
+/// The right-click menu's switches, windows and Quit, drawn from the same items the icon's menu shows.
+struct MenuBarMenuItems: View {
+    let items: [MenuBarItem]
+    let onCommand: (MenuBarIntent) -> Void
+
+    var body: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            switch item {
+            case .status, .sectionHeader:
+                EmptyView()
+            case .separator:
+                Divider()
+            case .command(let command):
+                if command.isChecked {
+                    Button {
+                        onCommand(command.intent)
+                    } label: {
+                        Label(command.title, systemImage: "checkmark")
+                    }
+                    .disabled(!command.isEnabled)
+                } else {
+                    Button(command.title) { onCommand(command.intent) }.disabled(!command.isEnabled)
+                }
+            }
+        }
     }
 }

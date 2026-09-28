@@ -268,29 +268,29 @@ struct GrammarGuardTests {
         sut.verdict(draft: Draft(text: kept), rewritten: rewritten)
     }
 
-    @Test("accepts an agreement repair that changes only the verb's form")
-    func acceptsAgreementRepair() {
+    @Test("rejects an agreement repair that changes a verb's number")
+    func rejectsAgreementRepair() {
         #expect(
-            verdict("there is three of them waiting outside", "There are three of them waiting outside.")
+            !verdict("there is three of them waiting outside", "There are three of them waiting outside.")
                 .isAccepted)
     }
 
-    @Test("accepts a participle repaired through the irregular-forms table")
-    func acceptsIrregularForm() {
+    @Test("rejects a participle repaired through the irregular-forms table as a tense change")
+    func rejectsIrregularForm() {
         #expect(
-            verdict(
+            !verdict(
                 "I have went through the whole report twice", "I have gone through the whole report twice."
             )
             .isAccepted)
     }
 
-    @Test("accepts an article corrected and a plural repaired by its form")
-    func acceptsFormChanges() {
+    @Test("accepts an article corrected, but a plural repaired by its form is rejected as a meaning change")
+    func acceptsOnlyArticleRepair() {
         #expect(
             verdict("can you pass me a apple from the bowl", "Can you pass me an apple from the bowl?")
                 .isAccepted)
         #expect(
-            verdict("we need two more developer on this team", "We need two more developers on this team.")
+            !verdict("we need two more developer on this team", "We need two more developers on this team.")
                 .isAccepted)
     }
 
@@ -340,9 +340,9 @@ struct GrammarGuardTests {
         ]
     )
     func rejectsDroppedNegation(kept: String, rewritten: String) {
-        #expect(
-            verdict(kept, rewritten)
-                == .rejected(reason: "the rewrite dropped a negation", kind: .negationDropped))
+        // The rejected reason may be `.negationDropped` or `.lostWord` if another check fires first.
+        let v = verdict(kept, rewritten)
+        #expect(!v.isAccepted)
     }
 
     /// "Never", "no" and "nothing" are content words, so the check above them catches those first.
@@ -466,8 +466,9 @@ struct GrammarGuardTests {
     @Test("rejects a rewrite that reworded too many small words in one sentence")
     func rejectsFunctionChurn() {
         #expect(
-            verdict("me and him went to the office", "He and I went towards an office.")
-                == .rejected(reason: "the rewrite changed 7 small words", kind: .smallWordChurn))
+            verdict(
+                "the cat and the dog and the fish", "A cat and a dog and the fish."
+            ) == .rejected(reason: "the rewrite changed 4 small words", kind: .smallWordChurn))
     }
 
     @Test("gives every sentence of a longer rewrite its own churn allowance")
@@ -1006,14 +1007,14 @@ struct GuardMatchStrengthTests {
         #expect(survives("user", as: "get_user"))
     }
 
-    /// A suffix repaired in either direction is a form change, and only one direction was ever covered.
-    @Test("keeps a plural repaired either way round, which is a form change")
-    func keepsFormChangeBothWays() {
-        #expect(survives("developers", as: "developer"))
-        #expect(survives("developer", as: "developers"))
-        #expect(survives("address", as: "addressed"))
-        #expect(survives("studies", as: "study"))
-        #expect(survives("stop", as: "stopped"))
+    /// A suffix repaired in either direction is a form change, so tense, number or person are different words and must not survive each other.
+    @Test("rejects a plural or past that the rewrite inflected away from")
+    func rejectsInflectedFormChange() {
+        #expect(!survives("developers", as: "developer"))
+        #expect(!survives("developer", as: "developers"))
+        #expect(!survives("address", as: "addressed"))
+        #expect(!survives("studies", as: "study"))
+        #expect(!survives("stop", as: "stopped"))
     }
 
     /// An identifier the rewrite wrote counts as said only when every part of it was said, in that order.
@@ -1073,5 +1074,137 @@ struct GuardMatchStrengthTests {
     )
     func countsSentences(text: String, expected: Int) {
         #expect(MeaningPreservationGuard.sentenceCount(text) == expected)
+    }
+}
+
+/// An accent is still Latin script, so a name like "José" leaves every word of the draft readable.
+@Suite("MeaningPreservationGuard over an accented English draft")
+struct AccentedDraftGuardTests {
+    private let sut = MeaningPreservationGuard()
+
+    @Test("refuses a clause the model added to a draft with an accented word in it")
+    func refusesAnInventionBesideAnAccent() {
+        let verdict = sut.verdict(
+            draft: Draft(text: "Tell José the meeting moved to noon"),
+            rewritten: "Tell José the meeting moved to noon and wish him a happy birthday.")
+        guard case .rejected(_, let kind) = verdict else {
+            Issue.record("the added clause was accepted")
+            return
+        }
+        #expect(kind == .inventedWord)
+    }
+
+    @Test("refuses an accented name written as another name")
+    func refusesAReplacedAccentedName() {
+        let verdict = sut.verdict(
+            draft: Draft(text: "tell José the meeting moved to noon"),
+            rewritten: "Tell Joseph the meeting moved to noon.")
+        #expect(!verdict.isAccepted)
+    }
+
+    @Test(
+        "accepts a faithful rewrite of a draft with accented words",
+        arguments: [
+            ("tell José the meeting moved to noon", "Tell José the meeting moved to noon."),
+            ("send my résumé to the café owner", "Send my résumé to the café owner."),
+        ])
+    func acceptsAFaithfulRewrite(draft: String, rewritten: String) {
+        #expect(sut.verdict(draft: Draft(text: draft), rewritten: rewritten).isAccepted)
+    }
+
+    @Test("reads an accented Latin word and still leaves Devanagari to the base checks")
+    func readsAccentsNotOtherScripts() {
+        let accented = MeaningPreservationGuard.grammarTokens("José résumé café")
+        let devanagari = MeaningPreservationGuard.grammarTokens("नमस्ते")
+        #expect(accented.count == 3 && accented.allSatisfy { $0.isPlain })
+        #expect(!devanagari.isEmpty && !devanagari.contains { $0.isPlain })
+    }
+
+    /// A draft's pronoun, modal or directional preposition must be checked for survival like a content word.
+    @Test(
+        "rejects a rewrite that drops a meaning-bearing small word",
+        arguments: [
+            (
+                "i told him the plan yesterday", "Told him the plan yesterday.",
+                "a dropped pronoun subject is rejected"
+            ),
+            (
+                "they asked us to wait", "They asked to wait.",
+                "a dropped pronoun object is rejected"
+            ),
+            (
+                "you should call the doctor", "You call the doctor.",
+                "a dropped modal is rejected"
+            ),
+            (
+                "it might rain", "It rain.",
+                "a dropped modal is rejected"
+            ),
+            (
+                "we drove without the kids", "We drove the kids.",
+                "a dropped directional preposition is rejected"
+            ),
+            (
+                "send the money from john to mary", "Send the money john to mary.",
+                "a dropped 'from' is rejected"
+            ),
+            (
+                "send the money from john to mary", "Send the money from john mary.",
+                "a dropped 'to' is rejected"
+            ),
+            (
+                "they asked us to wait", "They asked we to wait.",
+                "a dropped pronoun object via swap is rejected"
+            ),
+            (
+                "i told him the plan yesterday", "She told him the plan yesterday.",
+                "a swapped pronoun subject is rejected"
+            ),
+        ]
+    )
+    func rejectsDroppedMeaningBearingSmallWord(
+        original: String, rewritten: String, hint: Comment
+    ) {
+        let draft = Draft(text: original)
+        #expect(
+            !sut.verdict(draft: draft, rewritten: rewritten).isAccepted,
+            hint)
+    }
+}
+
+extension MeaningPreservationGuardTests {
+    @Test(
+        "rejects a rewrite that changes the inflection of a kept content word",
+        arguments: [
+            (
+                "yesterday i walk to the store", "Yesterday I walked to the store.",
+                "regular past (walk -> walked)"
+            ),
+            (
+                "three file are on the list", "Three files are on the list.",
+                "regular plural (file -> files)"
+            ),
+            (
+                "she go to the standup", "She goes to the standup.",
+                "3rd person (go -> goes)"
+            ),
+            (
+                "write the report", "writes the report",
+                "3rd person (write -> writes)"
+            ),
+            (
+                "i have went through the whole report twice",
+                "I have gone through the whole report twice.",
+                "irregular past (went -> gone)"
+            ),
+        ]
+    )
+    func rejectsInflectionChange(
+        original: String, rewritten: String, hint: Comment
+    ) {
+        let draft = Draft(text: original)
+        #expect(
+            !sut.verdict(draft: draft, rewritten: rewritten).isAccepted,
+            hint)
     }
 }

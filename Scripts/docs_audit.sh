@@ -407,7 +407,7 @@ for required in \
     "code-owner review" \
     "approval by someone other than the last pusher" \
     "strict_required_status_checks_policy" \
-    "Keep the worktree and branch while the PR is open"
+    "Once the branch is pushed, remove the worktree and the local branch"
 do
     if ! grep -Fq "$required" AGENTS.md; then
         missing_policy+=("$required")

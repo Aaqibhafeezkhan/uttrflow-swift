@@ -14,7 +14,7 @@ struct DictionaryPageView: View {
 
     /// The artboard's columns: word, sound, source, used, undone, and the row's controls.
     static let widths: [PageColumnWidth] = [
-        .share(1.1), .share(1.1), .share(1), .fixed(55), .fixed(60), .fixed(64),
+        .share(1.1), .share(1.1), .share(1), .fixed(55), .fixed(60), .fixed(76),
     ]
 
     var body: some View {
@@ -95,9 +95,13 @@ struct DictionaryRowView: View {
             Text("\(row.timesUsed)×")
                 .monospacedDigit()
                 .foregroundStyle(PagePalette.text.opacity(0.6))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text("\(row.timesUndone)×")
                 .monospacedDigit()
                 .foregroundStyle(undoneColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             controls
         }
         .font(.system(size: 13))
@@ -107,8 +111,8 @@ struct DictionaryRowView: View {
         .background(isHovered ? PagePalette.text.opacity(0.03) : .clear)
         .contentShape(.rect)
         .onHover { isHovered = $0 }
-        .rowActions(row.actions, onIntent: onIntent)
         .accessibilityElement(children: .contain)
+        .rowActions(row.actions, onIntent: onIntent)
     }
 
     /// Amber once undone, red when the undos are what is retiring it, quiet otherwise.
@@ -117,24 +121,31 @@ struct DictionaryRowView: View {
         return row.hasBeenUndone ? PagePalette.clipboardInk : PagePalette.faint
     }
 
-    /// Restore is drawn at rest on a retired word; Delete waits for the pointer but is always built.
+    /// Restore is drawn at rest on a retired word; Delete's glyph waits for the pointer or the keyboard.
     private var controls: some View {
         HStack(spacing: 4) {
             Spacer(minLength: 0)
             ForEach(row.actions) { action in
                 if action.isDestructive {
-                    PageRowIconButton(action: action, onIntent: onIntent)
-                        .revealedInRow(action.id, isHovered: isHovered, focusedControl: $focusedControl)
+                    PageRowIconButton(
+                        action: action,
+                        isShown: RowReveal.isDrawn(isHovered: isHovered, focusedControl: focusedControl),
+                        onIntent: onIntent
+                    )
+                    .focused($focusedControl, equals: action.id)
                 } else {
                     Button(action.title) { onIntent(action.intent) }
                         .buttonStyle(.plain)
                         .font(.system(size: 11.5))
                         .foregroundStyle(PagePalette.clipboardInk)
+                        .lineLimit(1)
+                        .fixedSize()
                         .focused($focusedControl, equals: action.id)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        // The row's height comes from its text, as in the design; the 22-point hit area overhangs it.
+        .frame(maxWidth: .infinity, maxHeight: 19, alignment: .trailing)
     }
 }
 
@@ -228,6 +239,12 @@ struct DictionaryEditorView: View {
     @Binding var draft: DictionaryDraft
     var onIntent: (MainIntent) -> Void
 
+    /// Which field has the caret; the spelling takes it as the card opens.
+    @FocusState private var focused: Field?
+
+    /// The card's two fields.
+    enum Field { case word, pronunciation }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -242,12 +259,16 @@ struct DictionaryEditorView: View {
                 tint: PagePalette.dictation
             ) {
                 TextField("", text: word).textFieldStyle(.plain)
+                    .focused($focused, equals: .word)
+                    .onSubmit(submit)
             }
             VStack(alignment: .leading, spacing: 5) {
                 PageEditorField(
                     label: editor.pronunciationLabel, symbolName: "ear", tint: PagePalette.suggestion
                 ) {
                     TextField("", text: pronunciation).textFieldStyle(.plain)
+                        .focused($focused, equals: .pronunciation)
+                        .onSubmit(submit)
                 }
                 Text(editor.pronunciationHint)
                     .font(.system(size: 11.5))
@@ -260,6 +281,13 @@ struct DictionaryEditorView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageCard(edge: PagePalette.dictation.opacity(0.35))
+        .onAppear { focused = .word }
+        .onExitCommand { onIntent(editor.cancel.intent) }
+    }
+
+    /// Return saves a word that can be saved, and does nothing to one that cannot.
+    private func submit() {
+        if editor.canSave { onIntent(save.intent) }
     }
 
     /// Rebuilt from what is in the fields now, not from the presentation drawn a keystroke ago.

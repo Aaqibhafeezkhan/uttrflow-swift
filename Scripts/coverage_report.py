@@ -192,6 +192,7 @@ EXCLUDED_FILES = {
     ),
     "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item and its on-screen popover",
     "Uttrflow/MenuBar/MenuBarPopoverView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/MenuBar/MenuBarProgressBar.swift": "SwiftUI, drawn from a tested presentation; the run it slides is tested",
     "Uttrflow/MenuBar/MenuBarGlass.swift": "SwiftUI glass and colours, values from BrandPalette",
     "UttrflowSpeech/TokenizerDownload.swift": "fetches the tokenizer over the real network at install time",
     "UttrflowSpeech/WhisperKitBackend.swift": "loads a downloaded model and decodes real speech",
@@ -206,6 +207,10 @@ EXCLUDED_FILES = {
     "UttrflowLocalModel/QuantizedLoad.swift": (
         "builds a model's layers on MLX and loads gigabytes of weights; which layers it builds quantized "
         "is QuantizedLayerPlan, tested against safetensors headers"
+    ),
+    "UttrflowLocalModel/RecordingSampler.swift": (
+        "reads MLX logits inside a real decode; which tokens score a line is GeneratedConfidence, "
+        "tested without a model"
     ),
     "UttrflowLocalModel/MLXCandidateScorer.swift": (
         "loads a model and runs GPU inference; the text its answers are read through is "

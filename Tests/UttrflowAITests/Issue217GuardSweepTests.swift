@@ -34,13 +34,14 @@ struct Issue217GuardSweepTests {
     @Test("still sees a word spelled into an identifier, and a form of the same word")
     func keepsWhatTheRuleWasFor() {
         #expect(survives("invoices", as: "fetchInvoices"))
-        #expect(survives("developer", as: "developers"))
-        #expect(survives("running", as: "run"))
+        // Tense, number and person of a content word are a different word, so the survival check refuses them.
+        #expect(!survives("developer", as: "developers"))
+        #expect(!survives("running", as: "run"))
     }
 
-    /// The repairs `Docs/cleanup.md` says the formatter makes — a tense that drifts, agreement — change a word's form.
+    /// Tense/number/person repairs the rewrite makes are a meaning change, not a tidy.
     @Test(
-        "accepts the grammar repairs the tidier is asked for",
+        "rejects a grammar repair the formatter used to make",
         arguments: [
             ("yesterday i try to fix the build", "Yesterday I tried to fix the build."),
             ("we apply the patch last week", "We applied the patch last week."),
@@ -52,17 +53,17 @@ struct Issue217GuardSweepTests {
             ("they was use the old build", "They were using the old build."),
         ]
     )
-    func acceptsAFormRepair(kept: String, rewritten: String) {
-        #expect(MeaningPreservationGuard.grammarVerdict(kept: kept, rewritten: rewritten).isAccepted)
+    func rejectsAFormRepair(kept: String, rewritten: String) {
+        #expect(!MeaningPreservationGuard.grammarVerdict(kept: kept, rewritten: rewritten).isAccepted)
     }
 
-    /// A y-stem or a dropped "e" is a spelling change English makes before an ending, not a different word.
-    @Test("reads a form written over a stem, and still refuses a word that only shares one")
+    /// A y-stem or a dropped "e" is a spelling change English makes before an ending, so it is still a different word.
+    @Test("rejects a form written over a stem, and still refuses a word that only shares one")
     func readsAStemmedForm() {
-        #expect(survives("try", as: "tried"))
-        #expect(survives("happy", as: "happier"))
-        #expect(survives("cities", as: "city"))
-        #expect(survives("take", as: "taking"))
+        #expect(!survives("try", as: "tried"))
+        #expect(!survives("happy", as: "happier"))
+        #expect(!survives("cities", as: "city"))
+        #expect(!survives("take", as: "taking"))
         #expect(!survives("mad", as: "made"))
         #expect(!survives("depot", as: "deposit"))
         #expect(!survives("many", as: "management"))
@@ -72,8 +73,8 @@ struct Issue217GuardSweepTests {
     /// The listed forms reach only the words listed, so a short word whose ending would make another word is still refused.
     @Test("refuses an unlisted short word whose ending makes another word")
     func listedFormsStayNarrow() {
-        #expect(survives("go", as: "goes"))
-        #expect(survives("happy", as: "happiest"))
+        #expect(!survives("go", as: "goes"))
+        #expect(!survives("happy", as: "happiest"))
         #expect(!survives("dry", as: "dryer"))
         #expect(!survives("corn", as: "corner"))
         #expect(

@@ -32,10 +32,18 @@ struct FieldReadBudgetTests {
 
 @Suite("Fields left alone after a slow read")
 struct SlowFieldsTests {
-    @Test("A field that ran over rests for the first rest, and only that field")
+    @Test("A field's first run over is forgiven, since the first read of a process is a cold start")
+    func firstRunOverIsForgiven() {
+        let slow = SlowFields()
+        slow.ranOver(field, at: second)
+        #expect(!slow.isResting(field, at: second))
+    }
+
+    @Test("A field that ran over twice rests for the first rest, and only that field")
     func restsAfterRunningOver() {
         let slow = SlowFields()
         #expect(!slow.isResting(field, at: second))
+        slow.ranOver(field, at: second)
         slow.ranOver(field, at: second)
         #expect(slow.isResting(field, at: second + SlowFields.firstRestInNanoseconds - 1))
         #expect(!slow.isResting(field, at: second + SlowFields.firstRestInNanoseconds))
@@ -46,6 +54,7 @@ struct SlowFieldsTests {
     func doublesUpToTheLongest() {
         let slow = SlowFields()
         var now = second
+        slow.ranOver(field, at: now)
         slow.ranOver(field, at: now)
         now += SlowFields.firstRestInNanoseconds
         slow.ranOver(field, at: now)
@@ -60,7 +69,10 @@ struct SlowFieldsTests {
     func aFastReadEndsTheRest() {
         let slow = SlowFields()
         slow.ranOver(field, at: second)
+        slow.ranOver(field, at: second)
         slow.answered(field)
+        #expect(!slow.isResting(field, at: second))
+        slow.ranOver(field, at: second)
         #expect(!slow.isResting(field, at: second))
         slow.ranOver(field, at: second)
         #expect(slow.isResting(field, at: second + SlowFields.firstRestInNanoseconds - 1))
@@ -71,10 +83,46 @@ struct SlowFieldsTests {
         let slow = SlowFields()
         for element in 0...UInt(SlowFields.capacity) {
             slow.ranOver(SlowFields.Key(process: 1, element: element), at: second + UInt64(element))
+            slow.ranOver(SlowFields.Key(process: 1, element: element), at: second + UInt64(element))
         }
         #expect(!slow.isResting(SlowFields.Key(process: 1, element: 0), at: second + 100))
         #expect(slow.isResting(SlowFields.Key(process: 1, element: 1), at: second + 100))
         #expect(
             slow.isResting(SlowFields.Key(process: 1, element: UInt(SlowFields.capacity)), at: second + 100))
+    }
+
+    @Test(
+        "A resting field quiets its whole application, so not even its focus is asked for until the rest ends"
+    )
+    func aRestingFieldQuietsItsApplication() {
+        let slow = SlowFields()
+        slow.ranOver(field, at: second)
+        #expect(!slow.isQuiet(field.process, at: second))
+        slow.ranOver(field, at: second)
+        #expect(slow.isQuiet(field.process, at: second + SlowFields.firstRestInNanoseconds - 1))
+        #expect(!slow.isQuiet(field.process, at: second + SlowFields.firstRestInNanoseconds))
+        #expect(!slow.isQuiet(43, at: second))
+    }
+
+    @Test("A possible focus move ends the quiet, and finding the same field still resting quiets it again")
+    func focusMoveEndsTheQuiet() {
+        let slow = SlowFields()
+        slow.ranOver(field, at: second)
+        slow.ranOver(field, at: second)
+        slow.focusMayHaveMoved()
+        #expect(!slow.isQuiet(field.process, at: second))
+        #expect(!slow.isResting(other, at: second))
+        #expect(!slow.isQuiet(field.process, at: second))
+        #expect(slow.isResting(field, at: second))
+        #expect(slow.isQuiet(field.process, at: second + SlowFields.firstRestInNanoseconds - 1))
+    }
+
+    @Test("A field of the application that answers in time ends its quiet")
+    func anAnswerEndsTheQuiet() {
+        let slow = SlowFields()
+        slow.ranOver(field, at: second)
+        slow.ranOver(field, at: second)
+        slow.answered(other)
+        #expect(!slow.isQuiet(field.process, at: second))
     }
 }

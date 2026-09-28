@@ -175,8 +175,12 @@ struct MainNoticeBar: View {
                 }
                 if let action = notice.action {
                     HStack(spacing: 6) {
-                        Button(action.title) { onIntent(action.intent) }
-                            .buttonStyle(MainPrimaryButtonStyle(size: .compact))
+                        // Put away first, so a refusal the action itself raises is the one left showing.
+                        Button(action.title) {
+                            onIntent(.dismissNotice)
+                            onIntent(action.intent)
+                        }
+                        .buttonStyle(MainPrimaryButtonStyle(size: .compact))
                         Button("Not now") { onIntent(.dismissNotice) }
                             .buttonStyle(MainSecondaryButtonStyle(size: .compact))
                     }
@@ -202,15 +206,15 @@ struct MainNoticeBar: View {
         ZStack(alignment: .topLeading) {
             Rectangle().fill(.ultraThinMaterial)
             PagePalette.toastGlass
-            EllipticalGradient(
-                colors: [
-                    notice.tone.glow.opacity(0.3), notice.tone.glow.opacity(0.08),
-                    notice.tone.glow.opacity(0),
+            // The design's blurred blob, centred on the top-left corner and filling the notice, so it never sizes it.
+            RadialGradient(
+                stops: [
+                    .init(color: notice.tone.glow.opacity(0.3), location: 0),
+                    .init(color: notice.tone.glow.opacity(0.26), location: 0.4),
+                    .init(color: notice.tone.glow.opacity(0.1), location: 0.72),
+                    .init(color: notice.tone.glow.opacity(0), location: 1),
                 ],
-                center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5
-            )
-            .frame(width: 220, height: 180)
-            .offset(x: -90, y: -90)
+                center: .topLeading, startRadius: 0, endRadius: 150)
         }
         .accessibilityHidden(true)
     }
@@ -601,15 +605,6 @@ enum RowReveal {
 }
 
 extension View {
-    /// Draws a hover-revealed control while its row is hovered or any control in the row has keyboard focus.
-    func revealedInRow(
-        _ id: String, isHovered: Bool, focusedControl: FocusState<String?>.Binding
-    ) -> some View {
-        focused(focusedControl, equals: id)
-            .opacity(
-                RowReveal.isDrawn(isHovered: isHovered, focusedControl: focusedControl.wrappedValue) ? 1 : 0)
-    }
-
     /// Offers a row's hover-revealed controls to VoiceOver through the actions rotor, once per row.
     func rowActions(
         _ actions: [MainAction], onIntent: @escaping (MainIntent) -> Void

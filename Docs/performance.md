@@ -244,8 +244,10 @@ reclaims on its own.
 
 The suggestion model is what the budget is about. On an 8 GB Mac its 3 GB is close to half of
 all memory, which is why nothing loads it for somebody who never asked, and why turning the
-feature off gives it back. `AppDelegate` releases it when the switch goes off, after any load
-still running has landed, and `MLXCandidateScorer.release()` swaps out the weights (keeping the modules
+feature off gives it back. `AppDelegate` releases it when the switch goes off or memory is pressed. A
+load still running is stopped first rather than waited out: the download is cancelled, and the
+weights are not read (or, when the read had begun, not kept for the warm-up), so neither a fetch nor
+a 2.5 GB read runs on after the release. Then `MLXCandidateScorer.release()` swaps out the weights (keeping the modules
 and tokenizer, see "Reloads no longer quantise" below), drops the warmed instructions and the
 vocabulary, and empties MLX's cache. Measured with
 `uttrflow-bakeoff gpu-memory --release`:
@@ -785,6 +787,30 @@ is the card's `background`, for its `visibleRect` and watched every enclosing `N
 does not see SwiftUI's scroll clipping: the scrolled-out card still cost 31.4% across the rise,
 and 31.1% once the window was shortened below it.
 
+### The menu bar popover's loading bar
+
+The popover's unknown-length bar was a SwiftUI `repeatForever` offset inside the glass, so every
+display frame ran SwiftUI's animation pass on the main thread and invalidated the group that
+carries the aurora's `blur(40)` and the glass's `shadow(radius: 20)`. The run is now a
+`CAGradientLayer` slid by a `CABasicAnimation` (`MenuBarSlidingRun.swift`), drawn above the glass
+through an anchor preference, so a frame costs the app nothing and the glass is never redrawn for
+it. It moves only while `moves` (from `MotionBudgetObserver`) allows and while it is in a window;
+the controller empties the panel on close, which removes the layer.
+
+Measured on 28 September 2026 in a debug test build, the popover hosted in an on-screen borderless
+window, main-thread time over three-second samples, on a machine under heavy unrelated load
+(load average about 100), so the before figures carry that noise:
+
+| | main thread, share of a core |
+|---|---|
+| SwiftUI `repeatForever` inside the glass (10 samples) | 14–97%, median 66% |
+| Core Animation run above the glass (8 samples) | 0.0% in every sample |
+| no bar, for comparison | 0.0% |
+
+Offscreen renders of the popover match the old one within 1/255 except on the bar's rounded ends
+(at most 7/255). `ImageRenderer` cannot draw a platform view, so an offscreen render of the
+loading state shows SwiftUI's placeholder where the run is; the live popover does not.
+
 ### The clipboard poll
 
 macOS offers no notification for a copy, so `PasteboardWatcher` reads the change count on a
@@ -931,6 +957,17 @@ with time: 3,420 leaked nodes and 583 KB at one minute, the same at 92 minutes.
 | `OnboardingFlow` cycle | 2.4 KB per onboarding controller | ours | fixed |
 | `mlx::core::array::ArrayDesc` cycles | 0.4–1.7 MB on the first load only | MLX | reloads fixed here, first load upstream |
 | `NSXPCConnection` cycles (AppIntents daemon) | 4.7 KB | the system | not ours |
+| CoreAudio `ListenerBinding` / `ParameterListenerBinding` (148 nodes) | 9.5 KB | ours, the cue engine | fixed size, by design |
+
+**The cue engine's listener bindings.** `ShapedSoundPlayer.prewarm(_:)`
+(`Sources/UttrflowAudio/RecordingCue+Engine.swift`) builds one `AVAudioEngine`, starts it once
+and pauses it, and `pauseWhenIdle()` only pauses it between cues, so it lives as long as the
+process. CoreAudio reports the listener bindings that engine registers as 148 leaks of 9,472
+bytes. The count is the same after prewarm and after eight cues, and it drops to zero when the
+engine is torn down by a rebuild, so it is the engine being alive, not growth. Tearing it down
+when idle would remove the group, but the next cue would then have to build the engine before
+it sounds, about 150 ms by the comment on `prewarm`, and that delay has not been measured on the
+cue path. The engine is kept.
 
 **The onboarding cycle.** `OnboardingModel` set `flow.onChange` to a closure that captured
 `self` weakly but the `flow` argument strongly, so the flow held a closure that held the flow.

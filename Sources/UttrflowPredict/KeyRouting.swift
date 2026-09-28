@@ -12,7 +12,7 @@ public enum Dismissal: Sendable, Equatable, CaseIterable {
 public struct SuggestionSelection: Sendable, Equatable {
     /// Which of the offered texts is highlighted, counting the leader as zero.
     public let index: Int
-    /// Whether Down has been pressed at least once, which is the only thing that makes ⏎ ours.
+    /// Whether ⌥↓ has been pressed at least once, which is the only thing that makes ⏎ ours.
     public let hasMoved: Bool
 
     /// Nothing has been navigated, so the leader is highlighted and ⏎ belongs to the app.
@@ -94,17 +94,24 @@ public enum KeyRouting {
 
         // A single suggestion is not a list, so the keys that walk one are not ours.
         let navigable = offered.count > 1
+        // A bare arrow moves the caret or the application's own popup, so only ⌥↓ and ⌥↑ walk ours.
+        if stroke.modifiers == .option, navigable {
+            switch stroke.key {
+            case .downArrow:
+                return .moveSelection(
+                    SuggestionSelection(index: (index + 1) % offered.count, hasMoved: true))
+            case .upArrow where selection.hasMoved:
+                return .moveSelection(
+                    SuggestionSelection(
+                        index: (index + offered.count - 1) % offered.count, hasMoved: true))
+            default:
+                return .passThrough
+            }
+        }
         guard stroke.modifiers.isEmpty else { return .passThrough }
         switch stroke.key {
         case .escape where claimsEscape(acceptKey):
             return .dismiss(.minimise)
-        case .downArrow where navigable:
-            return .moveSelection(
-                SuggestionSelection(index: (index + 1) % offered.count, hasMoved: true))
-        case .upArrow where navigable && selection.hasMoved:
-            return .moveSelection(
-                SuggestionSelection(
-                    index: (index + offered.count - 1) % offered.count, hasMoved: true))
         // ⏎ runs the command and sends the message, so it is ours only while a list is being walked.
         case .return where navigable && selection.hasMoved:
             return .accept(offered[index])

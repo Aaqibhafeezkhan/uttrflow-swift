@@ -101,6 +101,26 @@ struct ReloadableWeightsTests {
         #expect(recorder.recorded == ["build", "empty", "refill"])
     }
 
+    @Test("A load whose caller stops while it waits its turn reads no weights, and a later load still loads")
+    func aStoppedLoadReadsNothing() async throws {
+        let recorder = LoadRecorder(holdsBuilds: true)
+        let weights = ReloadableWeights(loading: recorder.loading)
+        let directory = directory
+        let first = Task { try await weights.load(from: directory) }
+        try await arrival(of: recorder.buildStarted)
+        let unloading = Task { await weights.unload() }
+        try await eventually { await weights.hasPendingUnload }
+        let second = Task { try await weights.load(from: directory) }
+        second.cancel()
+        recorder.openGate()
+        _ = try await first.value
+        await unloading.value
+        await #expect(throws: CancellationError.self) { try await second.value }
+        #expect(recorder.recorded == ["build", "empty"])
+        #expect(try await weights.load(from: directory) != nil)
+        #expect(recorder.recorded == ["build", "empty", "refill"])
+    }
+
     @Test("A failed build is tried again from scratch, and a failed refill is read again in full")
     func failuresAreRetried() async throws {
         let recorder = LoadRecorder()

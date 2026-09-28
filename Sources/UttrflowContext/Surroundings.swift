@@ -65,6 +65,9 @@ public struct Surroundings: Sendable, Equatable {
         "AXValueIndicator", "AXSplitter", "AXListMarker",
     ]
 
+    /// The roles that hold a web page, beyond which a browser's own tab strip, toolbar and infobars sit.
+    static let pageRoles: Set<String> = ["AXWebArea"]
+
     /// Collects the text around the focused element, nearest first, within the budget and the caps.
     public static func collect<Tree: ElementTree>(
         around focused: Tree.Element, in tree: Tree, windowTitle: String?, windowFrame: CGRect? = nil,
@@ -76,8 +79,10 @@ public struct Surroundings: Sendable, Equatable {
         var levels: [[String]] = []
         var child = focused
         var climbed = 0
-        // Each ancestor's other children are one ring further out, so the message list beside a compose box comes first.
-        while climbed < maximumAncestors, !walk.isExhausted, let parent = tree.parent(of: child) {
+        // Each ancestor's other children are one ring further out, so the message list beside a compose box comes first; a page is never left.
+        while climbed < maximumAncestors, !walk.isExhausted, !pageRoles.contains(tree.role(of: child) ?? ""),
+            let parent = tree.parent(of: child)
+        {
             climbed += 1
             let siblings = tree.children(of: parent)
             let position = siblings.firstIndex(of: child) ?? siblings.count
@@ -101,16 +106,16 @@ public struct Surroundings: Sendable, Equatable {
             timedTurnLines: walk.clockOnlyElements)
     }
 
-    /// The first occurrence of every line wins; later repeats are dropped. A text the focused element already holds is dropped too, so a mirror of the field's value cannot land in the prompt.
+    /// The copy of every line nearest the field (the last) wins, so the tail still ends on the newest message; the focused element's own text is dropped too.
     static func deduplicated(_ lines: [String], dropping duplicate: String?) -> [String] {
         var seen: Set<String> = []
         var kept: [String] = []
-        for line in lines {
+        for line in lines.reversed() {
             if let duplicate, !duplicate.isEmpty, line == duplicate { continue }
             guard seen.insert(line).inserted else { continue }
             kept.append(line)
         }
-        return kept
+        return kept.reversed()
     }
 
     /// One read's running state: how much it has visited and gathered, and when it has to stop.

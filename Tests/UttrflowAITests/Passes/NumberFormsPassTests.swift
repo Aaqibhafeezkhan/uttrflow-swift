@@ -149,6 +149,33 @@ struct NumberFormsPassTests {
         #expect(cleaned(input, by: sut) == expected)
     }
 
+    /// A run of three or more single digits is a digit string, never a clock time; a clock time needs a cue or a non-digit-run minute.
+    @Test(
+        "writes single-digit runs as a digit string",
+        arguments: [
+            ("the pin is five zero one two", "the pin is 5012"),
+            ("my extension is three zero two", "my extension is 302"),
+            ("the code is six zero five nine", "the code is 6059"),
+            ("dial one eight hundred five five five zero one nine nine", "dial one 805 550199"),
+        ]
+    )
+    func digitRuns(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    /// A digit run still becomes a clock time when a cue ("at", am/pm, o'clock) sits before or after the run.
+    @Test(
+        "keeps a clock time when the digit run has a time cue",
+        arguments: [
+            ("at five zero one", "at 5:01"),
+            ("two zero one pm", "2:01 pm"),
+            ("five zero one two am", "5012 am"),
+        ]
+    )
+    func digitRunsWithTimeCue(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
     @Test(
         "writes years spoken in two halves",
         arguments: [

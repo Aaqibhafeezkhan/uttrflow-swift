@@ -31,8 +31,34 @@ public struct FillersPass: CleaningPass {
                 draft.replace(
                     at: before, with: String(draft.words[before].text.dropLast()), by: Self.id)
             }
+            if Self.stopIsThePause(at: position, in: live, of: draft) {
+                Self.runOn(live[position + 1], in: &draft)
+                draft.replace(at: index, with: draft.shape(at: index).core, by: Self.id)
+            }
             draft.remove(at: index, by: Self.id, carryingMarks: true)
         }
         return draft
+    }
+
+    /// Whether the filler's full stop marks the pause in a clause: the next word runs on in lower case, or the one before cannot end a sentence.
+    static func stopIsThePause(at position: Int, in live: [Int], of draft: Draft) -> Bool {
+        guard draft.shape(at: live[position]).suffix == ".", position > 0, position + 1 < live.count
+        else { return false }
+        let before = draft.words[live[position - 1]]
+        let after = draft.words[live[position + 1]]
+        let marks = WordShape(before.text).suffix
+        guard !before.isLayoutMark, !after.isLayoutMark, marks.isEmpty || WordShape.trailsOff(marks)
+        else { return false }
+        return WordShape.lowercased(after.text) == after.text
+            || FunctionWords.leadsOn(WordShape(before.text).key)
+    }
+
+    /// Lowers the capital the filler's stop gave the next word, unless it is "I", an acronym or a name the text shows.
+    private static func runOn(_ index: Int, in draft: inout Draft) {
+        let word = draft.words[index].text
+        guard !FirstWordPass.keepsCapital(word), !FirstWordPass.looksLikeName(word, in: [draft.text]) else {
+            return
+        }
+        draft.replace(at: index, with: WordShape.lowercased(word), by: Self.id)
     }
 }

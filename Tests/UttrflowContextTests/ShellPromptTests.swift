@@ -29,6 +29,25 @@ struct ShellPromptTests {
         #expect(ShellPrompt.input(in: "➜  uttrflow git:(main) ✔ git status") == "git status")
     }
 
+    @Test("An arrow prompt is taken off in a clean repository and outside one, where it draws no git marker.")
+    func arrowPromptWithoutAMarker() {
+        #expect(ShellPrompt.input(in: "➜  uttrflow git:(main) git status") == "git status")
+        #expect(ShellPrompt.input(in: "➜  uttrflow git:(feature/login) git sta") == "git sta")
+        #expect(ShellPrompt.input(in: "➜  Downloads ls -la") == "ls -la")
+        #expect(ShellPrompt.input(in: "  ➜  Downloads ls -la") == "ls -la")
+        #expect(ShellPrompt.input(in: "➜  uttrflow git:(main) ") == "")
+        #expect(ShellPrompt.input(in: "➜  Downloads ") == "")
+        #expect(ShellPrompt.input(in: "➜  uttrflow git:(main) echo 50% done") == "echo 50% done")
+        #expect(ShellPrompt.input(in: "➜  uttrflow hg:(default) ✗ hg status") == "hg status")
+    }
+
+    @Test("An arrow anywhere but the start of the line is part of the command.")
+    func anArrowInsideACommandIsNotAPrompt() {
+        #expect(ShellPrompt.input(in: "echo ➜  done") == "echo ➜  done")
+        #expect(ShellPrompt.input(in: "user@host:~/dir$ echo ➜  done") == "echo ➜  done")
+        #expect(ShellPrompt.input(in: "➜ ls") == "➜ ls")
+    }
+
     @Test("A root prompt is a hash with nothing in front of it.")
     func rootPrompt() {
         #expect(ShellPrompt.input(in: "# apt update") == "apt update")

@@ -73,6 +73,8 @@ final class DockPanelController {
     ) {
         let model = DockViewModel(
             presentation: presentation, shortcut: shortcut, anchor: anchor)
+        // Empty until shown, so a button that is never put on screen never animates.
+        model.isShown = false
         self.model = model
         self.anchor = anchor
         self.panelSize = CGSize(
@@ -105,22 +107,33 @@ final class DockPanelController {
 
     /// `orderFrontRegardless`, never `makeKeyAndOrderFront`, so the keyboard stays with the user's app.
     func show() {
+        model.isShown = true
+        if model.presentation.isRecording { startMetering() }
         reposition()
         panel.orderFrontRegardless()
     }
 
+    /// Orders the panel out and empties it, since a hidden panel's timeline views keep waking the app.
     func hide() {
         panel.orderOut(nil)
+        model.isShown = false
+        stopMetering()
     }
 
     /// Whether the button is on screen.
     var isVisible: Bool { panel.isVisible }
 
+    /// Whether the button's view draws anything, which it does only while the panel is on screen.
+    var drawsContent: Bool { model.isShown }
+
+    /// Whether the microphone's level is being read for the meter.
+    var isMetering: Bool { levelTimer != nil }
+
     /// The only way the button's appearance ever changes.
     func update(with presentation: DockPresentation) {
         model.show(presentation)
         // Started and stopped where the state is known, so a meter cannot outlive its recording.
-        if presentation.isRecording { startMetering() } else { stopMetering() }
+        if presentation.isRecording, model.isShown { startMetering() } else { stopMetering() }
     }
 
     /// Says where to read the microphone's level from.

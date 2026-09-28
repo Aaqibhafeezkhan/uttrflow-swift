@@ -142,7 +142,8 @@ struct PanelThumbnailsTests {
     /// Asked for at the size it is drawn, not the size of the screenshot.
     @Test("asks for the small version")
     func asksForAThumbnail() async {
-        let (thumbnails, counter) = thumbnails()
+        // An hour, so a slow machine cannot make the miss stale and decode it twice.
+        let (thumbnails, counter) = thumbnails(retryAfter: .seconds(3600))
 
         thumbnails.prepare(file)
         await thumbnails.waitForIdle(file: file)
@@ -351,4 +352,13 @@ struct PanelThumbnailsCapacityTests {
         #expect(PanelThumbnailsTests.thumbnailBytes < 30_000)
     }
 
+    @Test("a representation with no pixels behind it weighs nothing")
+    func aRepresentationWithoutPixelsWeighsNothing() {
+        let empty = NSImage(size: NSSize(width: 68, height: 68))
+        empty.addRepresentation(NSImageRep())
+        #expect(PanelThumbnails.bytes(of: empty) == 0)
+        let mixed = PanelThumbnailsTests.bitmap()
+        mixed.addRepresentation(NSImageRep())
+        #expect(PanelThumbnails.bytes(of: mixed) == PanelThumbnailsTests.thumbnailBytes)
+    }
 }

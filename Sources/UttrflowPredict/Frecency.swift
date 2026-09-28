@@ -1,9 +1,9 @@
-import struct Foundation.Date
-import func Foundation.log
-import func Foundation.pow
+public import struct Foundation.Date
+public import func Foundation.log
+public import func Foundation.pow
 
 /// Scores a candidate by how much evidence stands behind it, never by whether it is correct.
-enum Frecency {
+public enum Frecency {
     /// How long a single use takes to lose half its weight.
     static let halfLifeInDays = 21.0
 
@@ -13,17 +13,20 @@ enum Frecency {
     /// How much a perfect acceptance record lifts a candidate, and how much an entirely refused one lowers it.
     static let acceptanceLift = 0.6
 
-    /// The factor an always-refused candidate settles at, so refusal lowers a line without ever erasing it.
+    /// The factor an always-refused candidate settles at until refusal retires it.
     static let acceptanceFloor = 1 - acceptanceLift
+
+    /// How many refusals, for each acceptance plus one, retire a line until the person types it again by hand.
+    static let retiringRefusals = 3
 
     /// What the environment is worth on its own, being true but not necessarily wanted.
     static let environmentWeight = 1.0
 
     /// The score of one candidate at a moment in time.
-    static func score(_ candidate: Candidate, now: Date) -> Double {
+    public static func score(_ candidate: Candidate, now: Date) -> Double {
         guard let evidence = candidate.evidence else { return environmentWeight / distancePenalty(candidate) }
         let uses = effectiveCount(evidence)
-        guard uses > 0 else { return 0 }
+        guard uses > 0, !isRetiredByRefusal(evidence) else { return 0 }
         return log(1 + uses) * decay(evidence.lastUsed, now: now) * acceptance(evidence)
             / distancePenalty(candidate)
     }
@@ -40,6 +43,11 @@ enum Frecency {
         let days = now.timeIntervalSince(lastUsed) / 86_400
         guard days > 0 else { return 1 }
         return pow(2, -days / halfLifeInDays)
+    }
+
+    /// Whether the person has typed past the line so often, against so few acceptances, that it is no longer offered.
+    static func isRetiredByRefusal(_ evidence: Entry) -> Bool {
+        evidence.rejected >= retiringRefusals * (evidence.accepted + 1)
     }
 
     /// How the candidate has fared when offered: 1 until it has been, then within [floor, 1 + lift].

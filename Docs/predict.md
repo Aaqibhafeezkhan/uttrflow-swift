@@ -248,11 +248,19 @@ application still does the work for every message that was sent, on the thread t
 handles the user's typing. So one read asks each question once — the field's names in one
 batched message, the caret, the window and the frames once each — and the whole read stops
 at the next question once `FieldReadBudget.allowanceInNanoseconds` (40 ms) has passed. A
-field whose read ran over is then asked nothing at all for a rest that starts at 10 s and
-doubles on each further overrun up to 5 minutes (`SlowFields`); a read that keeps to the
-budget ends the rest. A very long web text area, whose caret questions each run into the
+field's first overrun is forgiven, because the first read in a new process is a cold start
+(about 60 ms in a browser once its full tree is switched on); a second overrun leaves the
+field alone for a rest that starts at 10 s and doubles on each further overrun up to
+5 minutes (`SlowFields`), and a read that keeps to the budget ends the rest. A very long web text area, whose caret questions each run into the
 timeout, therefore costs its application one read per rest rather than one per turn, and
 draws no suggestion.
+
+**A resting field quiets its whole application.** Asking an application which element has
+focus can itself be the slow part (about 100 ms in a browser holding a 200 KB text area), so
+while the focused field rests, a turn and the surroundings walk send that application no
+message at all (`SlowFields.isQuiet`). A click, an application switch, Tab, Escape or any ⌘
+shortcut may have moved focus, so each ends the quiet; the next read asks for the focus once,
+and a field that still rests quiets the application again for the rest of its rest.
 
 ### One ghost, and only while it is true
 
@@ -332,7 +340,7 @@ When the corpus and the machine both have nothing for the line and the generator
 - **One line first.** The pass asks for the single most likely completion and stops at its
   newline; `resolveGenerated` draws it as `.certain`. The alternatives are fetched in a
   second pass once that line is on screen and `expandGenerated` turns it into a `.choice`,
-  so ↓ still opens a list and nobody waited for it. Quiet mode never expands.
+  so ⌥↓ still opens a list and nobody waited for it. Quiet mode never expands.
 - **Drawn against the field as it is now.** A late answer is drawn only after a fresh read
   finds the same field and the same line (`drawFresh`), so a scrolled caret is followed and
   a changed line is not written over.
@@ -486,16 +494,21 @@ than as one strong answer. Below the threshold the answer is a `.choice` of at m
 command whose acceptance cannot be undone by pressing Backspace — is never shown without
 full separation, and never appears among the alternatives of a `.choice` at any score.
 
-Before any of that, `Quieting.reason` runs seven ordered predicates and returns the first
-that fires: turned off here, secure field, a field that reports no caret to draw at, text
-selected, caret not at the end of its line, three suggestions typed past in this field
-already, or a prose writer who has not yet paused for 400 ms. It returns *which* rule fired, so the diagnostics can say why nothing
+Before any of that, `Quieting.reason` runs its ordered predicates and returns the first
+that fires: turned off here, secure field, marked text, a field that reports no caret to
+draw at, text selected, caret not at the end of its line, a field that says its own list
+of choices is open (`AXExpanded` on the focused field, as a combobox answers; one attribute
+read per turn), a word that opens the
+application's own mention, emoji, channel or slash-command picker (`AppPicker`, never on a
+terminal's command line), three suggestions typed past in this field already, or a prose
+writer who has not yet paused for 400 ms. It returns *which* rule fired, so the diagnostics can say why nothing
 was drawn instead of leaving silence indistinguishable from a broken feature.
 
 Composition does not gate. `PredictionContext.isComposing` is still read and carried, but
 `Quieting.reason` never consults it, and no reason is named for it. Every other silence does
 carry its reason: `SuggestionUpdate.silence` is set wherever the session or the engine
-settles on nothing — an empty or over-long line, a minimised field, the gates leaving
+settles on nothing — an empty or over-long line, a list line holding only its marker
+(`ListMarker`), a minimised field, the gates leaving
 nothing, evidence too thin, a budget overrun — and the coordinator logs that, never a reason
 recomputed from outside. [predict-ime.md](predict-ime.md) has what the composition signal
 reaches and what a gate on it cost.

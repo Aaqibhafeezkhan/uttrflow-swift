@@ -27,11 +27,19 @@ enum ShellSeparator: Equatable, Sendable {
     case background
 }
 
-/// One simple command: its words, the files it reads with `<`, and what ends it.
+/// One simple command: its words, the files it reads with `<`, the files a `>` empties before it runs, and what ends it.
 struct SimpleCommand: Equatable, Sendable {
     let words: [ShellWord]
     let inputs: [ShellWord]
+    let overwrites: [ShellWord]
     let separator: ShellSeparator
+
+    init(words: [ShellWord], inputs: [ShellWord], overwrites: [ShellWord] = [], separator: ShellSeparator) {
+        self.words = words
+        self.inputs = inputs
+        self.overwrites = overwrites
+        self.separator = separator
+    }
 }
 
 /// Splits a command line into simple commands the way a POSIX shell reads it, refusing whatever only running something could settle.
@@ -50,12 +58,15 @@ enum ShellWords {
         var commands: [SimpleCommand] = []
         var words: [ShellWord] = []
         var inputs: [ShellWord] = []
+        var overwrites: [ShellWord] = []
         var text = ""
         var inWord = false
         var isQuoted = false
         var isUnresolved = false
         /// Whether the next word is a redirection's target, and whether that target is read.
         var redirection: Bool?
+        /// Whether the pending redirection's target is emptied before the command runs, as standard output's `>`, `>|` and `&>` do.
+        var truncates = false
 
         init(characters: [Character], home: String) {
             self.characters = characters
@@ -72,7 +83,7 @@ enum ShellWords {
                 guard step() else { return nil }
             }
             guard endWord(), redirection == nil else { return nil }
-            if !words.isEmpty || !inputs.isEmpty { end(.end) }
+            if !words.isEmpty || !inputs.isEmpty || !overwrites.isEmpty { end(.end) }
             return commands
         }
 
@@ -140,7 +151,8 @@ enum ShellWords {
             }
             if peek() == ">" {
                 guard endWord() else { return false }
-                index += peek(2) == ">" ? 3 : 2
+                truncates = peek(2) != ">"
+                index += truncates ? 2 : 3
                 redirection = false
                 return true
             }
@@ -148,27 +160,45 @@ enum ShellWords {
             return close(.background)
         }
 
-        /// A redirection: `<`, `>`, `>>`, `>|`, `<>` and a descriptor duplication, the target of `<` kept as a file the command reads.
+        /// A redirection: `<`, `>`, `>>`, `>|`, `<>`, `>& file` and a descriptor duplication, the target of `<` kept as a file the command reads.
         mutating func redirect(_ character: Character) -> Bool {
             // A here-document, a here-string and a process substitution are all text only the shell can produce.
             if peek() == "(" || (character == "<" && peek() == "<") { return false }
             // A descriptor number written against the redirection belongs to it, not to the command.
-            if inWord, !isQuoted, !text.isEmpty, text.allSatisfy(\.isNumber) { resetWord() }
+            var descriptor = ""
+            if inWord, !isQuoted, !text.isEmpty, text.allSatisfy(\.isNumber) {
+                descriptor = text
+                resetWord()
+            }
             guard endWord(), redirection == nil else { return false }
             index += 1
             redirection = character == "<"
+            var operators = String(character)
             while let next = characters.dropFirst(index).first, next == ">" || next == "|" {
                 redirection = false
+                operators.append(next)
                 index += 1
             }
+            // Only standard output's `>` and `>|` empty their file; `>>` appends and `<>` opens it as it stands.
+            truncates = (operators == ">" || operators == ">|") && (descriptor.isEmpty || descriptor == "1")
             if characters.dropFirst(index).first == "&" {
                 index += 1
-                while let next = characters.dropFirst(index).first, next.isNumber || next == "-" {
-                    index += 1
+                let run = characters[index...].prefix { $0.isNumber || $0 == "-" }
+                let after = characters.dropFirst(index + run.count).first
+                // `>&` before a word that is not a descriptor sends both outputs to that file, as `&>` does.
+                if character == ">", run.isEmpty || !(after.map(Self.endsWord) ?? true) {
+                    return true
                 }
+                index += run.count
                 redirection = nil
+                truncates = false
             }
             return true
+        }
+
+        /// Whether a character ends an unquoted word.
+        static func endsWord(_ character: Character) -> Bool {
+            " \t\n;&|<>()".contains(character)
         }
 
         mutating func singleQuoted() -> Bool {
@@ -275,10 +305,11 @@ enum ShellWords {
             let word = ShellWord(text, isUnresolved: isUnresolved && !isBracket)
             switch redirection {
             case true?: inputs.append(word)
-            case false?: break
+            case false?: if truncates { overwrites.append(word) }
             case nil: words.append(word)
             }
             redirection = nil
+            truncates = false
             resetWord()
             return true
         }
@@ -286,15 +317,19 @@ enum ShellWords {
         /// Finishes the word and the simple command, false where an operator stands with nothing before it or a redirection with no target.
         mutating func close(_ separator: ShellSeparator) -> Bool {
             guard endWord(), redirection == nil else { return false }
-            guard !words.isEmpty || !inputs.isEmpty else { return separator == .sequence }
+            guard !words.isEmpty || !inputs.isEmpty || !overwrites.isEmpty else {
+                return separator == .sequence
+            }
             end(separator)
             return true
         }
 
         mutating func end(_ separator: ShellSeparator) {
-            commands.append(SimpleCommand(words: words, inputs: inputs, separator: separator))
+            commands.append(
+                SimpleCommand(words: words, inputs: inputs, overwrites: overwrites, separator: separator))
             words = []
             inputs = []
+            overwrites = []
         }
     }
 }

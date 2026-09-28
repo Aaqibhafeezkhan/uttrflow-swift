@@ -3,7 +3,7 @@
 import UttrflowUX
 import SwiftUI
 
-/// A dictation or a lost recording beside the day's rail; the hover buttons are only hidden, never removed.
+/// A dictation or a lost recording beside the day's rail; the hover buttons hide only their glyphs, never themselves.
 struct HistoryRailRow: View {
     let row: HistoryRow
     /// Where the row sits in its day, so the rail's line fades from the first row to the last.
@@ -27,15 +27,28 @@ struct HistoryRailRow: View {
         .padding(.bottom, 8)
         .background(alignment: .topLeading) { line }
         .contextMenu {
-            ForEach(row.more) { action in
-                Button(action.title, role: action.isDestructive ? .destructive : nil) {
-                    onIntent(action.intent)
-                }
+            ForEach(offered) { menuItem($0) }
+            if !offered.isEmpty && !row.more.isEmpty { Divider() }
+            ForEach(row.more) { menuItem($0) }
+        }
+    }
+
+    /// What the row's buttons do, offered again in its context menu and to VoiceOver.
+    private var offered: [MainAction] {
+        [row.recording?.play, row.recording?.retry].compactMap(\.self) + row.actions
+    }
+
+    /// One context menu item, its symbol beside it and red when it deletes.
+    private func menuItem(_ action: MainAction) -> some View {
+        Button(role: action.isDestructive ? .destructive : nil) {
+            onIntent(action.intent)
+        } label: {
+            if let symbol = action.symbolName {
+                Label(action.title, systemImage: symbol)
+            } else {
+                Text(action.title)
             }
         }
-        .rowActions(
-            [row.recording?.play, row.recording?.retry].compactMap(\.self) + row.actions + row.more,
-            onIntent: onIntent)
     }
 
     /// This row's stretch of the line, teal fading to faint across the day.
@@ -97,6 +110,7 @@ struct HistoryRailRow: View {
         }
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .contain)
+        .rowActions(offered + row.more, onIntent: onIntent)
     }
 
     /// The card's film, a little brighter when pointed at and tinted amber for a recording.
@@ -155,7 +169,7 @@ struct HistoryRailRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Hidden, not removed, and still hit-testable, so a VoiceOver user can activate these.
+    /// Only the glyphs wait for the pointer or the keyboard; the buttons stay reachable by VoiceOver.
     private var actions: some View {
         HStack(spacing: 5) {
             ForEach(row.actions) { action in
@@ -168,10 +182,14 @@ struct HistoryRailRow: View {
                             action.intent == .flagDictation(row.id) && row.isFlagged
                                 ? PagePalette.clipboard : PagePalette.text.opacity(0.7))
                 }
-                .buttonStyle(HomeQuietButtonStyle(isSquare: true))
+                .buttonStyle(
+                    HomeQuietButtonStyle(
+                        isSquare: true,
+                        isShown: RowReveal.isDrawn(isHovered: isHovered, focusedControl: focusedControl))
+                )
                 .help(action.title)
                 .accessibilityLabel(action.title)
-                .revealedInRow(action.id, isHovered: isHovered, focusedControl: $focusedControl)
+                .focused($focusedControl, equals: action.id)
             }
         }
     }

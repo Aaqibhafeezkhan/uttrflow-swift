@@ -58,6 +58,24 @@ struct ShellWordsTests {
     }
 
     @Test(
+        "`>&` before a file sends both outputs there and empties it, and before a descriptor duplicates it.")
+    func ampersandRedirection() throws {
+        for line in ["make >& build.log", "make >&build.log"] {
+            let command = try #require(ShellWords.commands(in: line, home: "/h"))
+            #expect(command.map { $0.words.map(\.text) } == [["make"]], "\(line)")
+            #expect(command[0].overwrites.map(\.text) == ["build.log"], "\(line)")
+        }
+        for line in ["make 2>&1", "echo x >&2", "echo x 1>&-", "echo x >&2 && ls", "make >&2| tee"] {
+            let command = try #require(ShellWords.commands(in: line, home: "/h"))
+            #expect(command.allSatisfy { $0.overwrites.isEmpty }, "\(line)")
+            #expect(command[0].words.map(\.text).allSatisfy { !$0.hasPrefix("&") && $0 != "2" }, "\(line)")
+        }
+        #expect(
+            try #require(ShellWords.commands(in: "make >&2x", home: "/h"))[0].overwrites.map(\.text) == ["2x"]
+        )
+    }
+
+    @Test(
         "A line only running something could settle is not read at all.",
         arguments: [
             "(cd x)", "ls $(pwd)", "ls `pwd`", "echo \"`pwd`\"", "cat <<EOF", "cat <<<word", "diff <(a) <(b)",

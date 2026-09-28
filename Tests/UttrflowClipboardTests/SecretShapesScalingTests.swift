@@ -20,6 +20,8 @@ extension HeavyClipScans {
             "schemes": "ab+c",
             "scheme separators": "a://b:",
             "signed addresses": "a://b?sig=&",
+            "nested addresses": "a://b?n=",
+            "encoded names": "a://b?%5F%=",
             "quoted values and comments": "pwd=\"a\" x,",
             "quoted values and key lists": "pwd='a', k x",
             "keyword assignments": "pwd=",
@@ -33,6 +35,11 @@ extension HeavyClipScans {
             "calls": "pwd=f();",
             "prefixed keywords": "a_pwd=",
             "camelCase keywords": "xPwd=",
+            "flags": "-p ",
+            "programs and flags": "mysql -pa ",
+            "headers": "Authorization: ",
+            "open quotes": "'a\" ",
+            "userinfo": "a://b@",
         ]
 
         private static func text(_ unit: String, length: Int) -> String {
@@ -47,6 +54,8 @@ extension HeavyClipScans {
                 _ = SecretShapes.hasCredentialledURL(text)
                 _ = SecretShapes.hasBearerURL(text)
                 _ = SecretShapes.hasNamedSecret(text)
+                _ = SecretShapes.hasTokenUserinfoURL(text)
+                _ = SecretShapes.hasCommandCredential(text)
             }
             return tally.count
         }
