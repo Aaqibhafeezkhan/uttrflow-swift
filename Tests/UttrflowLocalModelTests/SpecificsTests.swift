@@ -18,6 +18,13 @@ private func code() -> GenerationSituation {
         recentLines: ["}", "    return a + b", "func add(a: Int, b: Int) -> Int {"], isMultiline: true)
 }
 
+/// A shell with commands above the line, which reads as the command register.
+private func shell() -> GenerationSituation {
+    GenerationSituation(
+        application: "Terminal", field: "shell", document: "~/src/app", preceding: "$ git status",
+        recentLines: ["git status", "ls -la ~/src", "cd ~/src/app && make -j"], isMultiline: true)
+}
+
 /// A query editor with a query above the line, which reads as the code register.
 private func sql() -> GenerationSituation {
     GenerationSituation(
@@ -89,6 +96,9 @@ struct SpecificsTests {
             ("0.0", "let off", "let offset = 0.0"),
             ("1.0", "view.al", "view.alpha = 1.0"),
             ("0 as an index", "let fi", "let first = items[0]"),
+            ("0 as an index into ids", "let fi", "let first = ids[0]"),
+            ("0 passed to a call", "let fi", "let first = items.remove(at: 0)"),
+            ("1 as a call's argument", "sle", "sleep(1)"),
             ("0 as a bound", "for i", "for i in range(0, n):"),
             ("1 as a limit", "SELECT * FROM users ", "SELECT * FROM users LIMIT 1;"),
             ("1 taken from a count", "let last = ", "let last = count - 1"),
@@ -123,6 +133,15 @@ struct SpecificsTests {
             ("a key of 1", "WHERE ", "WHERE user_id = 1"),
             ("a camel-case key of 0", "fetch(", "fetch(userId: 0)"),
             ("a quoted key of 1", "{\"", "{\"id\": 1}"),
+            (
+                "an id passed to a finder", "let user = try await repo.findById(",
+                "let user = try await repo.findById(1)"
+            ),
+            ("an id passed by name", "let order = orders.by", "let order = orders.byId(0)"),
+            ("an id passed to a getter", "let name = get", "let name = getUserId(1)"),
+            ("a quoted id passed to a finder", "find", "findById(\"1\")"),
+            ("an id list", "WHERE ", "WHERE id IN (1)"),
+            ("a key list", "WHERE user_id IN (0, ", "WHERE user_id IN (0, 1)"),
             ("a threshold of 0", "HAVING count", "HAVING count(o.id) > 0"),
             ("a threshold of 0 or more", "guard ", "guard a >= 0 else { return }"),
             ("a bound below 1", "if n ", "if n < 1 {"),
@@ -132,6 +151,31 @@ struct SpecificsTests {
     func inventedLiteralsAreRefusedInCode(entry: String, typed: String, line: String) {
         #expect(!Specifics.areGrounded(line, typed: typed, in: code(), writesCode: true), "\(entry)")
         #expect(CompletionText.finished([line], typed: typed, in: code()).isEmpty, "\(entry)")
+    }
+
+    @Test(
+        "In a shell a number a command acts on is refused unless someone wrote it.",
+        arguments: [
+            ("a commit count", "git reset --hard HEAD", "git reset --hard HEAD~1"),
+            ("a parent", "git show HEAD", "git show HEAD^1"),
+            ("a process id", "kill ", "kill 1"),
+            ("a line count", "tail -n ", "tail -n 1"),
+            ("a count flag", "git log ", "git log -1"),
+            ("a delay", "sle", "sleep 1"),
+        ])
+    func commandArgumentsAreRefused(entry: String, typed: String, line: String) {
+        #expect(!Specifics.areGrounded(line, typed: typed, in: shell(), writesCode: true), "\(entry)")
+        #expect(CompletionText.finished([line], typed: typed, in: shell()).isEmpty, "\(entry)")
+    }
+
+    @Test("In a shell a number someone wrote is kept.")
+    func groundedCommandArgumentsAreKept() {
+        let situation = GenerationSituation(
+            application: "Terminal", field: "shell", preceding: "$ git log --oneline -1",
+            recentLines: ["git status", "git reset --hard HEAD~1"], isMultiline: true)
+        #expect(
+            Specifics.areGrounded(
+                "git reset --hard HEAD~1", typed: "git reset --hard", in: situation, writesCode: true))
     }
 
     @Test("A query keeps a conventional limit and refuses a made-up id.")

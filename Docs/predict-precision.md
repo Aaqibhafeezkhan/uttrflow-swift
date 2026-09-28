@@ -119,7 +119,13 @@ Code, queries and commands write a few numbers that carry no value of their own.
 registers (not prose, an address bar or a search box) a word whose every number is one of these
 is not a specific. A number assigned to or compared with a name whose last word is `id`, `ids`,
 `pid`, `uid`, `uuid` or `guid` is still an invented id, and one after `<` or `>` is an invented
-threshold. Each row has a case in `SpecificsTests`.
+threshold. So is one passed as the argument of a call whose name ends in one of those words
+(`findById(1)`, `byId(0)`, `getUserId(1)`), or listed in `IN (…)` after such a column. The
+exemption holds only where the number is an operand of code: after an assignment,
+a bracket, a separator, an operator or a member, or after `return`, `in`, `case`, `limit` and
+the like. A number standing as a word after a command's word or after `~` or `^` is an argument
+the command acts on, as in `kill 1`, `HEAD~1` or `tail -n 1`, and is a specific. Each row has a
+case in `SpecificsTests`.
 
 | literal | in code, a query or a command | in prose | why |
 |---|---|---|---|
@@ -128,7 +134,9 @@ threshold. Each row has a case in `SpecificsTests`.
 | `true`, `false`, `nil`, `null`, `None` | kept | kept | words, never a specific |
 | `""`, `''`, `[]`, `{}` | kept | kept | empty values, never a specific |
 | `id = 1`, `user_id = 1`, `userId: 0`, `"id": 1` | refused | refused | a record nobody named |
+| `findById(1)`, `getUserId(0)`, `id IN (1)` | refused | refused | a record nobody named, passed as an argument |
 | `> 0`, `>= 0`, `< 1` | refused | refused | a threshold is a choice the line never showed |
+| `kill 1`, `HEAD~1`, `tail -n 1`, `sleep 1` | refused | refused | an argument a command acts on: a process, a commit, a count |
 | `2`, `10`, `1042`, `0.5`, `19.99` | refused | refused | a count, an id or an amount |
 | `01`, `1e9`, `0x1f`, `1_000`, `1s` | refused | refused | a literal with a form, a base or a unit carries a choice |
 | `$0`, `0%` | refused | refused | an amount sign or a percent sign reads as an amount |
