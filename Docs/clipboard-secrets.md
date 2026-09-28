@@ -210,7 +210,7 @@ clip each pattern is handed. `PatternWindows.swift` holds the pieces.
   decides every prefix more than 48 characters before its end, and those are not read again.
   SendGrid's first segment has no longest length, so its window runs to the end of the token.
 - **The card-number pattern on runs.** It runs only over runs of digits (ASCII or fullwidth),
-  spaces of any horizontal kind, hyphens and full stops that hold at least thirteen digits, the fewest any grouping has, cut at character boundaries so a
+  spaces and line breaks of any kind, hyphens and full stops (ASCII or fullwidth) that hold at least thirteen digits, the fewest any grouping has, cut at character boundaries so a
   digit carrying a combining mark stays a non-digit.
 - **ASCII clips byte for byte.** The statistical rule and the shell-command rule read an ASCII
   clip's bytes as its characters, which they are.
@@ -260,10 +260,11 @@ like one.
 `CardNumberShape` accepts 13 to 19 digits, written unbroken or in the groups cards are printed
 in (4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4, 4-3-3-3) with one separator, a space, dash or full stop,
 used throughout. Checkout pages, statements and some password managers group with a no-break,
-thin or other Unicode space, and some input methods type fullwidth digits, so the number is read
-in its printed form first: fullwidth digits as ASCII and every horizontal space as U+0020. A line
-break is not a separator, so a column of four-digit numbers stays text. The
-digits must then carry a prefix some network issues under at that length (Visa, Mastercard,
+thin or other Unicode space, some copies break the groups across lines, and some input methods
+type fullwidth digits and separators, so the number is read in its printed form first: fullwidth
+forms as ASCII, every line break (`Character.isNewline`) as `\n` and every other
+`Character.isWhitespace` space as U+0020. A space and a line break do not mix within one
+number, so a line of groups beside a column of them stays text. The digits must then carry a prefix some network issues under at that length (Visa, Mastercard,
 American Express, Diners Club, JCB, Discover, UnionPay, RuPay, Mir, Maestro) and pass the Luhn
 check.
 
