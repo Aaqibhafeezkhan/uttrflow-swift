@@ -152,6 +152,23 @@ struct SavedClipsTests {
 
         #expect(clips.map(\.text) == ["newest", "saved", "oldest"])
     }
+
+    /// A clip the user kept and then chose to keep again must not be aged out by the move.
+    @Test("deleting a collection while keeping its clips preserves the kept status")
+    func keepOnDeletePreservesKeptStatus() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let old = clip("a month old", at: -30 * 86_400)
+        // Recorded while the window still covers it, so the clip lands on disk.
+        try await store.record(old, keeping: week(from: old.copiedAt))
+        try await store.setCategory("Work", of: old.id, keeping: week(from: old.copiedAt))
+
+        _ = try await store.moveCategory("Work", to: nil, keeping: week())
+
+        let reopened = await ClipboardStore(file: file.url).clips(keeping: week())
+        #expect(reopened.map(\.id) == [old.id], "the clip is not deleted by the move")
+        #expect(reopened.first?.isKept == true, "the clip is still kept, so it cannot age out")
+    }
 }
 
 /// A collection is one gesture, so it is one write per file however many clips it holds.
@@ -205,6 +222,23 @@ struct ClipboardWriteCountTests {
         let reopened = await ClipboardStore(file: file.url).clips(keeping: week())
         #expect(reopened.count == 41)
         #expect(reopened.allSatisfy { $0.category == nil })
+    }
+
+    /// An old clip kept in a collection stays kept when the collection is deleted and the user picks "keep clips".
+    @Test("deleting a collection keeps older clips that were filed in it")
+    func moveOutPreservesOldClipsThatWereFiledThere() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let old = Clip(text: "door code", kind: .text, copiedAt: noon.addingTimeInterval(-30 * 86_400))
+        // Recorded while the window still covers the clip, so it lands on disk in the first place.
+        try await store.record(old, keeping: week(from: old.copiedAt))
+        try await store.setCategory("Work", of: old.id, keeping: week(from: old.copiedAt))
+
+        let written = try await Self.writes { try await store.moveCategory("Work", to: nil, keeping: week()) }
+
+        #expect(written <= 2)
+        let reopened = await ClipboardStore(file: file.url).clips(keeping: week())
+        #expect(reopened.contains { $0.id == old.id && $0.text == "door code" })
     }
 
     @Test("deleting a collection with its clips writes each file once")
