@@ -427,4 +427,27 @@ struct DestructiveCommandTests {
     func workloadReadsAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A system command that deletes backups or removes a service is destructive.",
+        arguments: [
+            "sudo tmutil delete -d /Volumes/Backup -t 2026-09-01-120000", "tmutil deletelocalsnapshots /",
+            "sudo tmutil thinlocalsnapshots / 10000000000 4", "launchctl remove com.example.agent",
+            "sudo launchctl bootout system/com.example.daemon",
+            "launchctl unload ~/Library/LaunchAgents/x.plist",
+        ])
+    func systemRemovalIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A system command that only reads or starts is ordinary.",
+        arguments: [
+            "tmutil listbackups", "tmutil listlocalsnapshots /", "tmutil status", "launchctl list",
+            "launchctl print system/com.example.daemon", "launchctl load /Library/LaunchAgents/x.plist",
+        ])
+    func systemReadsAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }

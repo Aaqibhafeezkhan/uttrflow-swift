@@ -106,7 +106,7 @@ public enum DestructiveCommand {
         let destroys: @Sendable (_ positionals: [String], _ arguments: [String]) -> Bool
     }
 
-    /// Cluster, cloud and hosting tools, each judged by the verbs its option flags leave.
+    /// Cluster, cloud, hosting, container and system tools, each judged by the verbs its option flags leave.
     private static let verbTools: [String: VerbTool] = [
         "kubectl": VerbTool(
             valued: [
@@ -170,6 +170,15 @@ public enum DestructiveCommand {
                 "--registry-config", "--repository-cache", "--repository-config", "--burst-limit", "--qps",
             ],
             destroys: { positionals, _ in ["uninstall", "delete", "del", "un"].contains(positionals.first) }),
+        "tmutil": VerbTool(
+            valued: [],
+            destroys: { positionals, _ in
+                ["delete", "deletelocalsnapshots", "thinlocalsnapshots", "deleteinprogress"].contains(
+                    positionals.first)
+            }),
+        "launchctl": VerbTool(
+            valued: [],
+            destroys: { positionals, _ in ["remove", "bootout", "unload"].contains(positionals.first) }),
     ]
 
     /// Docker and Podman, which destroy by pruning, by removing a volume, or by forcing a container or an image out.
