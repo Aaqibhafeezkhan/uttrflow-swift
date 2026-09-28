@@ -390,6 +390,8 @@ public actor ClipboardStore {
         var clips = loaded()
         for index in clips.indices where clips[index].category == name {
             clips[index].category = destination
+            // A move-out keeps the clips while losing the collection, so the kept promise the category carried moves to a pin.
+            if destination == nil { clips[index].isPinned = true }
         }
         return try settled(clips, keeping: retention)
     }
