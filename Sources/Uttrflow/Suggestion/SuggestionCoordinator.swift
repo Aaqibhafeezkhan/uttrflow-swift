@@ -121,6 +121,8 @@ final class SuggestionCoordinator {
         let store = try PredictStore(
             path: PredictStore.defaultFile(in: container).path(percentEncoded: false))
         self.store = store
+        // Lines learned before the credential rules last widened are removed once, off the typing path.
+        Task.detached(priority: .utility) { _ = try? await CaptureGate.sweepSecrets(from: store) }
         // One index behind both, so asking the machine for a completion also warms what attests it.
         let index = EnvironmentIndex(reader: SystemEnvironmentReader())
         environment = EnvironmentSource(index: index)

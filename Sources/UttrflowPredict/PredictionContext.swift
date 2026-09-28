@@ -26,6 +26,8 @@ public struct PredictionContext: Sendable, Equatable {
     public let canDraw: Bool
     /// Whether the field is a terminal's command line, where `@`, `:` and `/` open no picker.
     public let isCommandLine: Bool
+    /// Whether the field says the application's own list of choices is open, which owns Tab, Escape and the arrows.
+    public let showsOwnList: Bool
 
     /// One moment in one field, everything but the line defaulted to the ordinary case.
     public init(
@@ -33,7 +35,7 @@ public struct PredictionContext: Sendable, Equatable {
         isComposing: Bool = false, isSecure: Bool = false, isProse: Bool = false,
         millisecondsSinceKeystroke: Int = 1_000, isEnabledHere: Bool = true,
         isMinimised: Bool = false, rejectionsThisSession: Int = 0, canDraw: Bool = true,
-        markedText: MarkedText = .unanswered, isCommandLine: Bool = false
+        markedText: MarkedText = .unanswered, isCommandLine: Bool = false, showsOwnList: Bool = false
     ) {
         self.typed = typed
         self.caretAtLineEnd = caretAtLineEnd
@@ -48,5 +50,6 @@ public struct PredictionContext: Sendable, Equatable {
         self.rejectionsThisSession = rejectionsThisSession
         self.canDraw = canDraw
         self.isCommandLine = isCommandLine
+        self.showsOwnList = showsOwnList
     }
 }

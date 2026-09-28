@@ -105,6 +105,13 @@ left the commonest dictation length one piece — which is what #917 was. A piec
 recogniser's own window, and with no pause at all it is cut there — which is exactly
 what the recogniser would have done to it anyway.
 
+**A pause ends a piece only once the piece holds 0.8 s of speech.** After a long pause the
+silence alone passes five seconds, so one word said between two long pauses became a piece
+of its own, and the recogniser, given one function word in seconds of silence, wrote "the"
+as "Duh!", "a" as "Ah." and "and" as nothing (#2319). The word now stays with the next
+phrase, and a last window at key-up holding only a word or two joins the one before it.
+A lone word after a piece already recognised while recording still goes alone.
+
 The longer early pause protects a repeated-sentence case. The default recogniser returned
 one copy from a 6.65 s English clip containing two identical sentences separated by 1.1 s
 of silence, while it returned one copy from each half decoded separately. With the early

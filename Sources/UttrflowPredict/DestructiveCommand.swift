@@ -66,7 +66,7 @@ public enum DestructiveCommand {
     private static let destroyers: Set<String> = [
         "rm", "rmdir", "shred", "srm", "unlink", "dd", "mkfs", "fdisk", "parted", "shutdown", "reboot",
         "halt",
-        "poweroff",
+        "poweroff", "dropdb", "dropuser",
     ]
 
     private enum Command {
@@ -106,7 +106,7 @@ public enum DestructiveCommand {
         let destroys: @Sendable (_ positionals: [String], _ arguments: [String]) -> Bool
     }
 
-    /// Cluster, cloud and hosting tools, each judged by the verbs its option flags leave.
+    /// Cluster, cloud, hosting, container and system tools, each judged by the verbs its option flags leave.
     private static let verbTools: [String: VerbTool] = [
         "kubectl": VerbTool(
             valued: [
@@ -160,7 +160,67 @@ public enum DestructiveCommand {
                 positionals.first == "rm" || positionals.first == "rb"
                     || (positionals.first == "rsync" && arguments.contains("-d"))
             }),
+        "docker": containerTool, "podman": containerTool,
+        "docker-compose": VerbTool(valued: composeValued, destroys: composeDownDeletesVolumes),
+        "podman-compose": VerbTool(valued: composeValued, destroys: composeDownDeletesVolumes),
+        "helm": VerbTool(
+            valued: [
+                "-n", "--namespace", "--kube-context", "--kubeconfig", "--kube-apiserver", "--kube-as-user",
+                "--kube-as-group", "--kube-token", "--kube-ca-file", "--kube-tls-server-name",
+                "--registry-config", "--repository-cache", "--repository-config", "--burst-limit", "--qps",
+            ],
+            destroys: { positionals, _ in ["uninstall", "delete", "del", "un"].contains(positionals.first) }),
+        "tmutil": VerbTool(
+            valued: [],
+            destroys: { positionals, _ in
+                ["delete", "deletelocalsnapshots", "thinlocalsnapshots", "deleteinprogress"].contains(
+                    positionals.first)
+            }),
+        "launchctl": VerbTool(
+            valued: [],
+            destroys: { positionals, _ in ["remove", "bootout", "unload"].contains(positionals.first) }),
     ]
+
+    /// Docker and Podman, which destroy by pruning, by removing a volume, or by forcing a container or an image out.
+    private static let containerTool = VerbTool(
+        valued: [
+            "-H", "--host", "-c", "--context", "--config", "-l", "--log-level", "--tlscacert", "--tlscert",
+            "--tlskey", "--url", "--connection", "--root", "--runroot", "--storage-driver", "--identity",
+        ].reduce(into: Set<String>()) { $0.insert($1.lowercased()) },
+        destroys: { positionals, arguments in
+            if arguments.contains("prune") { return true }
+            let object = positionals.dropFirst().first
+            switch positionals.first {
+            case "volume": return object == "rm" || object == "remove"
+            case "rm", "rmi": return forces(arguments)
+            case "container", "image": return (object == "rm" || object == "remove") && forces(arguments)
+            case "compose":
+                guard let compose = arguments.firstIndex(of: "compose") else { return false }
+                let rest = Array(arguments[(compose + 1)...])
+                return composeDownDeletesVolumes(
+                    DestructiveCommand.positionals(rest, valued: composeValued), rest)
+            default: return false
+            }
+        })
+
+    /// Compose's own flags that take a value, read past before its verb.
+    private static let composeValued: Set<String> = [
+        "-f", "--file", "-p", "--project-name", "--env-file", "--profile", "--project-directory", "--ansi",
+        "--parallel", "--progress",
+    ]
+
+    /// Whether a compose command takes its services down and deletes their named volumes with them.
+    private static func composeDownDeletesVolumes(
+        _ positionals: [String], _ arguments: [String]
+    ) -> Bool {
+        positionals.first == "down"
+            && arguments.contains { $0 == "--volumes" || shortFlags($0, include: "v", valuesAfter: ["t"]) }
+    }
+
+    /// Whether lowercased arguments force the removal, alone or in a cluster of short flags.
+    private static func forces(_ arguments: [String]) -> Bool {
+        arguments.contains { $0 == "--force" || shortFlags($0, include: "f", valuesAfter: []) }
+    }
 
     /// The words a tool's option flags leave, each flag's value skipped and everything after `--` kept.
     private static func positionals(_ lowered: [String], valued: Set<String>) -> [String] {
@@ -219,12 +279,13 @@ public enum DestructiveCommand {
                 "deletecontainer",
             ]
             if lowered.contains(where: { word in verbs.contains(where: word.hasPrefix) }) { return true }
-        case "docker", "podman":
-            if lowered.contains("prune") || (lowered.first == "volume" && lowered.dropFirst().first == "rm") {
-                return true
-            }
         case "terraform", "tofu":
             if lowered.contains("destroy") || lowered.contains("-destroy") { return true }
+        case "redis-cli", "valkey-cli", "keydb-cli":
+            if lowered.contains(where: { $0 == "flushall" || $0 == "flushdb" }) { return true }
+        case "mongo", "mongosh":
+            let script = lowered.joined(separator: " ")
+            if mongoDeletions.contains(where: script.contains) { return true }
         case "crontab":
             if lowered.contains("-r") { return true }
         case "sh", "bash", "zsh", "dash", "ksh", "fish":
@@ -251,13 +312,20 @@ public enum DestructiveCommand {
 
         guard sqlVerbs.contains(command) || sqlClients.contains(command) else { return false }
         // SQL that drops or empties a table, wherever the verb sits in the statement.
-        let words = Set(
-            ([command] + lowered).flatMap {
-                $0.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" }).map(String.init)
-            })
+        let sequence = ([command] + lowered).flatMap {
+            $0.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" }).map(String.init)
+        }
+        let words = Set(sequence)
         if words.contains("drop"), words.contains(where: droppableObject) { return true }
+        // A DELETE empties rows wherever its FROM follows, with or without a WHERE.
+        if let delete = sequence.firstIndex(of: "delete"), sequence[delete...].contains("from") {
+            return true
+        }
         return words.contains("truncate")
     }
+
+    /// Calls in a MongoDB shell script that drop a database or a collection, or delete its documents.
+    private static let mongoDeletions = ["dropdatabase(", ".drop(", ".deletemany(", ".remove("]
 
     /// The command string a shell is given with `-c`, which it runs as a line of its own.
     private static func shellScript(_ arguments: [String]) -> String? {
@@ -270,7 +338,7 @@ public enum DestructiveCommand {
     }
 
     /// SQL verbs that begin a statement typed straight into a database prompt.
-    private static let sqlVerbs: Set<String> = ["drop", "truncate", "alter"]
+    private static let sqlVerbs: Set<String> = ["drop", "truncate", "alter", "delete"]
 
     /// Programs that run the SQL they are given.
     private static let sqlClients: Set<String> = [
@@ -280,9 +348,10 @@ public enum DestructiveCommand {
         "trino", "presto", "spark-sql", "hive", "beeline", "cqlsh", "impala-shell", "vsql", "redshift",
     ]
 
-    /// Whether a git clause throws work away for good: a forced, deleting, mirroring or pruning push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, or changes discarded by a checkout, switch or restore.
+    /// Whether a git clause throws work away for good: a forced, deleting, mirroring or pruning push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, changes discarded by a checkout, switch or restore, or history rewritten or pruned.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
         let head = subcommandIndex(arguments)
+        if let head, historyDestroyers.contains(arguments[head]) { return true }
         // The flags of the clause's own subcommand, so the same word as a message or path is not one.
         func flags(after subcommand: String) -> ArraySlice<String>? {
             guard let head, arguments[head] == subcommand else { return nil }
@@ -329,8 +398,22 @@ public enum DestructiveCommand {
         if let flags = flags(after: "restore"), !flags.contains("--staged") || flags.contains("--worktree") {
             return true
         }
+        if let flags = flags(after: "update-ref"), flags.contains("-d") || flags.contains("--delete") {
+            return true
+        }
+        if let flags = flags(after: "reflog"), flags.first == "expire" || flags.first == "delete" {
+            return true
+        }
+        if let flags = flags(after: "gc"),
+            flags.contains(where: { ["--prune=now", "--prune=all"].contains($0) })
+        {
+            return true
+        }
         return false
     }
+
+    /// Git subcommands that rewrite every commit or drop unreachable objects whatever their flags.
+    private static let historyDestroyers: Set<String> = ["filter-branch", "filter-repo", "prune"]
 
     /// Whether a cluster of short flags holds this one, read only up to the first flag whose value runs on in the same word.
     private static func shortFlags(
