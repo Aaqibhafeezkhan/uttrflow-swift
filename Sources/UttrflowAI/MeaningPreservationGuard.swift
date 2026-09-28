@@ -322,7 +322,8 @@ public struct MeaningPreservationGuard: Sendable {
         let composed = composedNumbers(keptTokens, in: Set(written.map(\.matching)))
         let carried = keptTokens.indices.filter { index in
             let token = keptTokens[index]
-            return token.isPlain && isContent(token) && !composed.contains(index) && !excused.contains(index)
+            return token.isPlain && (isContent(token) || FunctionWords.isMeaningBearing(token.lookup))
+                && !composed.contains(index) && !excused.contains(index)
         }
         if case .rejected(let reason, let kind) = survivalVerdict(carried.map { keptTokens[$0] }, in: written)
         {
@@ -603,8 +604,22 @@ public struct MeaningPreservationGuard: Sendable {
         if let index = IrregularVerbForms.setIndex[word] {
             return IrregularVerbForms.setIndex[candidate.matching] == index
         }
+        // An auxiliary the rewrite contracted to its "n't" form is the same word.
+        if Self.auxContractionRoots.contains(word), candidate.matching == "\(word)nt" { return true }
+        if Self.auxContractionRoots.contains(candidate.matching), word == "\(candidate.matching)nt" {
+            return true
+        }
         return false
     }
+
+    /// Aux verbs the rewrite can still contract to the same word; a dropped or substituted one is a rewrite.
+    static let auxContractionRoots: Set<String> = [
+        "do", "does", "did",
+        "is", "are", "was", "were",
+        "have", "has", "had",
+        "will", "would", "shall", "should",
+        "can", "could", "may", "might", "must",
+    ]
 
     /// Whether two words are one word in two forms: the same word, or one of them inflected from the other.
     static func sameForm(_ word: String, _ other: String) -> Bool {

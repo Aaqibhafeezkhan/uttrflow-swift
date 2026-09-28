@@ -14,6 +14,29 @@ public enum FunctionWords {
         return leadingOn.contains(key) || Restatement.contractedSubjects.contains(key)
     }
 
+    /// Whether the small word carries meaning the rewrite must keep: who acts, whether it is possible or required, or where it goes.
+    public static func isMeaningBearing(_ word: String) -> Bool {
+        let key = word.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
+        return meaningBearing.contains(key)
+    }
+
+    /// Pronouns, modals and prepositions that set a direction; their removal or substitution changes what was said.
+    public static let meaningBearing: Set<String> = [
+        "i", "you", "he", "she", "it", "we", "they",
+        "me", "him", "her", "us", "them",
+        "my", "your", "his", "its", "our", "their",
+        "mine", "yours", "hers", "ours", "theirs",
+        "this", "these", "those", "there",
+        "who", "whom", "whose", "which", "what",
+        "myself", "yourself", "himself", "herself", "itself",
+        "ourselves", "yourselves", "themselves",
+        "will", "would", "shall", "should",
+        "can", "could", "may", "might", "must", "ought",
+        "to", "from", "without", "into", "onto",
+        "through", "across", "behind", "beyond",
+        "toward", "towards", "between", "against",
+    ]
+
     /// Articles, possessives, conjunctions, prepositions that take an object, and the copula.
     static let leadingOn: Set<String> = [
         "a", "an", "the", "my", "your", "our", "their", "its",
