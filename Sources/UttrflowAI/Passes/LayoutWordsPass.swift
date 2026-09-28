@@ -56,7 +56,9 @@ public struct LayoutWordsPass: CleaningPass {
         let length = found.length
         // Asked of the sentence, not the text, so a sentence before it cannot turn "number one is broken" into an item.
         guard position == 0 || draft.shape(at: live[position - 1]).endsSentence else {
-            return !MentionGuard.isMentioned(at: position, spanning: length, in: live, of: draft)
+            return !MentionGuard.isMentioned(
+                at: position, spanning: length, in: live, of: draft, reach: MentionGuard.phraseReach,
+                bridgedBy: MentionGuard.modifiers)
         }
         // A break straight after a sentence's stop is how people dictate one: "full stop new paragraph".
         if position > 0, found.mark.allSatisfy(\.isNewline) { return true }

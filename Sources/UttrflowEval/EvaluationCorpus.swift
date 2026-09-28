@@ -472,6 +472,12 @@ public enum EvaluationCorpus {
             mustNotAdd: ["paragraph", "full stop"]
         ),
         .init(
+            id: "new-line-after-a-modifier-kept", category: .everyday,
+            spoken: "our best new line got a laugh",
+            expected: "Our best new line got a laugh.",
+            mustKeep: ["best new line", "got a laugh"]
+        ),
+        .init(
             id: "question-mark-new-line", category: .everyday,
             spoken: "is it ready question mark new line yes",
             expected: "Is it ready?\nYes.",
