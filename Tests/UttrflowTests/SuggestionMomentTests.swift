@@ -61,6 +61,10 @@ struct SuggestionMomentTests {
         #expect(context.canDraw)
         let nowhere = FocusedFieldSnapshot(bundleIdentifier: "a.b", applicationName: "B", role: "AXTextField")
         #expect(!SuggestionMoment.context(of: nowhere, millisecondsSinceKeystroke: 0).canDraw)
+        #expect(!context.showsOwnList)
+        let listing = FocusedFieldSnapshot(
+            bundleIdentifier: "a.b", applicationName: "B", role: "AXTextField", showsOwnList: true)
+        #expect(SuggestionMoment.context(of: listing, millisecondsSinceKeystroke: 0).showsOwnList)
     }
 
     @Test("The situation holds the preceding text, the screen around the field and the recent lines")

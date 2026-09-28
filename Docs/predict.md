@@ -496,7 +496,9 @@ full separation, and never appears among the alternatives of a `.choice` at any 
 
 Before any of that, `Quieting.reason` runs its ordered predicates and returns the first
 that fires: turned off here, secure field, marked text, a field that reports no caret to
-draw at, text selected, caret not at the end of its line, a word that opens the
+draw at, text selected, caret not at the end of its line, a field that says its own list
+of choices is open (`AXExpanded` on the focused field, as a combobox answers; one attribute
+read per turn), a word that opens the
 application's own mention, emoji, channel or slash-command picker (`AppPicker`, never on a
 terminal's command line), three suggestions typed past in this field already, or a prose
 writer who has not yet paused for 400 ms. It returns *which* rule fired, so the diagnostics can say why nothing

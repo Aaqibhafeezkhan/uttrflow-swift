@@ -19,6 +19,7 @@ public enum Quieting {
         if !context.canDraw { return .nowhereToDraw }
         if context.hasSelection { return .textSelected }
         if !context.caretAtLineEnd { return .caretInsideText }
+        if context.showsOwnList { return .applicationPicker }
         if !context.isCommandLine, AppPicker.isOpen(after: context.typed) { return .applicationPicker }
         if context.rejectionsThisSession >= rejectionsBeforeSilence { return .rejectedTooOften }
         if context.isProse, context.millisecondsSinceKeystroke < proseHesitationInMilliseconds {
@@ -41,7 +42,7 @@ public enum Quieting {
         case textSelected
         /// The caret is not at the end of its line.
         case caretInsideText
-        /// The word being typed opens the application's own mention, emoji or command picker, which owns Tab and Escape.
+        /// The application's own picker or list is open over the line, by the word typed or by the field's word, and owns Tab and Escape.
         case applicationPicker
         /// Enough suggestions were typed past in this field to silence it.
         case rejectedTooOften

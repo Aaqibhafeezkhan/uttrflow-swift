@@ -44,6 +44,25 @@ struct AppPickerTests {
         }
     }
 
+    @Test("a field that says its own list is open settles quiet, on any line and in a terminal too")
+    func ownListLeavesTabAndEscape() {
+        for (line, isCommandLine) in [("Thanks for the", false), ("git che", true)] {
+            var session = SuggestionSession()
+            let context = PredictionContext(typed: line, isCommandLine: isCommandLine, showsOwnList: true)
+            guard case .settled(let update) = session.turn(in: composer, at: context).step else {
+                Issue.record("\(line) asked for candidates while the field's own list is open")
+                continue
+            }
+            #expect(update.silence == .applicationPicker)
+            #expect(update.armed.isEmpty)
+            #expect(
+                KeyRouting.decision(for: KeyStroke(.tab), showing: update.suggestion) == .passThrough)
+            #expect(
+                KeyRouting.decision(for: KeyStroke(.escape), showing: update.suggestion) == .passThrough)
+        }
+        #expect(Quieting.reason(PredictionContext(typed: "Thanks for the")) == nil)
+    }
+
     @Test("a terminal's command line opens no picker, so a path or a flag still asks")
     func commandLineIsNotAPicker() {
         let context = PredictionContext(typed: "/usr", isCommandLine: true)
