@@ -17,6 +17,9 @@ public protocol CandidateScoring: Sendable {
 
     /// The whole candidate line's mean log-likelihood per token past what is typed, in one pass, abandoned when cancelled.
     func logLikelihood(of candidate: String, following context: String) async -> Double?
+
+    /// How sure the pass that wrote a generated line was of it, read from that pass with no second one; nothing for a line no recent pass wrote.
+    func confidence(ofGenerated line: String) async -> Double?
 }
 
 /// Marks a candidate wrong wherever it is remembered, so it stops accruing weight.

@@ -58,6 +58,9 @@ actor ScriptedScoring: CandidateScoring {
         }
         return score
     }
+
+    /// The same score for a line it wrote, which is what the generation gate reads.
+    func confidence(ofGenerated line: String) async -> Double? { score }
 }
 
 /// Holds the task under test, filled in only after the task exists, so a double running inside it can cancel it.
@@ -87,6 +90,8 @@ actor CancellingScoring<Success: Sendable>: CandidateScoring {
         box.task?.cancel()
         return score
     }
+
+    func confidence(ofGenerated line: String) async -> Double? { score }
 }
 
 /// A thread hold a test releases by hand, and whether it has ended yet.
@@ -142,6 +147,8 @@ actor NoncooperativeScoring: CandidateScoring {
         }
         return score
     }
+
+    func confidence(ofGenerated line: String) async -> Double? { score }
 }
 
 /// A store that only remembers being told a candidate was wrong.
