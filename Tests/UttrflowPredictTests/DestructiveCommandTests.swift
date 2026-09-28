@@ -348,4 +348,106 @@ struct DestructiveCommandTests {
     func cloudReadsAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A git command that rewrites history or deletes its recovery path is destructive.",
+        arguments: [
+            "git filter-branch --force --index-filter 'git rm --cached secret' HEAD",
+            "git filter-branch -f HEAD",
+            "git filter-repo --path secret --invert-paths", "git update-ref -d refs/heads/feature",
+            "git update-ref --delete refs/heads/feature", "git reflog expire --expire=now --all",
+            "git reflog delete HEAD@{1}", "git gc --prune=now", "git gc --aggressive --prune=all",
+            "git prune",
+            "git -C repo reflog expire --expire=now --all", "git -C repo filter-repo --invert-paths --path a",
+            "git -C repo gc --prune=now",
+        ])
+    func historyDestroyingGitIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A git command that only reads or tidies history is ordinary.",
+        arguments: [
+            "git gc", "git gc --aggressive", "git reflog", "git reflog show main",
+            "git update-ref refs/heads/x HEAD",
+            "git remote prune origin", "git worktree prune", "git log --grep filter-branch",
+        ])
+    func historyReadingGitIsOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "A datastore command that drops a database or deletes its data is destructive.",
+        arguments: [
+            "dropdb mydb", "dropdb -h db.example.com mydb", "dropuser app", "redis-cli FLUSHALL",
+            "redis-cli -h cache.example.com -n 2 flushdb", "valkey-cli flushall",
+            #"mongosh mydb --eval "db.dropDatabase()""#, #"mongo mydb --eval "db.users.drop()""#,
+            #"mongosh --eval "db.users.deleteMany({})""#, #"sqlite3 app.db "DELETE FROM users""#,
+            #"psql -c "DELETE FROM users WHERE id = 1""#, "DELETE FROM users",
+        ])
+    func datastoreDeletionsAreDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A datastore command that only reads or writes is ordinary.",
+        arguments: [
+            #"psql -c "select 1""#, "redis-cli get k", "redis-cli info", #"mongosh --eval "db.users.find()""#,
+            #"sqlite3 app.db "SELECT * FROM users""#, "createdb mydb",
+        ])
+    func datastoreReadsAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "A container or release command that removes workloads or their data is destructive.",
+        arguments: [
+            "docker rm -f db", "docker rm -fv db", "docker container rm -f db", "docker rmi -f app:latest",
+            "docker image rm --force app", "docker compose down -v",
+            "docker compose -f prod.yml down --volumes",
+            "docker-compose down -v", "podman rm -f db", "docker -c remote rm -f db", "docker volume rm data",
+            "docker system prune -a", "helm uninstall prod", "helm delete prod", "helm -n prod uninstall api",
+            "helm --kube-context prod uninstall api",
+        ])
+    func workloadRemovalIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A container or release command that lists, runs or stops is ordinary.",
+        arguments: [
+            "docker ps", "docker rm db", "docker container rm db", "docker run --rm -it app",
+            "docker rmi app:old", "docker compose down",
+            "docker compose up -d", "docker-compose down", "podman images", "helm list", "helm -n prod list",
+            "helm upgrade --install api ./chart",
+        ])
+    func workloadReadsAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
+
+    @Test(
+        "A system command that deletes backups or removes a service is destructive.",
+        arguments: [
+            "sudo tmutil delete -d /Volumes/Backup -t 2026-09-01-120000", "tmutil deletelocalsnapshots /",
+            "sudo tmutil thinlocalsnapshots / 10000000000 4", "launchctl remove com.example.agent",
+            "sudo launchctl bootout system/com.example.daemon",
+            "launchctl unload ~/Library/LaunchAgents/x.plist",
+        ])
+    func systemRemovalIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A system command that only reads or starts is ordinary.",
+        arguments: [
+            "tmutil listbackups", "tmutil listlocalsnapshots /", "tmutil status", "launchctl list",
+            "launchctl print system/com.example.daemon", "launchctl load /Library/LaunchAgents/x.plist",
+        ])
+    func systemReadsAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
