@@ -20,7 +20,7 @@ public enum FunctionWords {
         return meaningBearing.contains(key)
     }
 
-    /// Pronouns, modals and prepositions that set a direction; their removal or substitution changes what was said.
+    /// Pronouns, modals, copula and perfect aux, and prepositions that set a direction; their removal or substitution changes what was said.
     public static let meaningBearing: Set<String> = [
         "i", "you", "he", "she", "it", "we", "they",
         "me", "him", "her", "us", "them",
@@ -30,6 +30,8 @@ public enum FunctionWords {
         "who", "whom", "whose", "which", "what",
         "myself", "yourself", "himself", "herself", "itself",
         "ourselves", "yourselves", "themselves",
+        "am", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "having",
         "will", "would", "shall", "should",
         "can", "could", "may", "might", "must", "ought",
         "to", "from", "without", "into", "onto",
