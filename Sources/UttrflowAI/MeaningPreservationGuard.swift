@@ -765,7 +765,7 @@ public struct MeaningPreservationGuard: Sendable {
     }
 
     /// Digits people dictate as words, in English and Hindi; traps on first use if the tables share a word.
-    static let numberWords: [String: String] = Dictionary(
+    private static let numberWords: [String: String] = Dictionary(
         uniqueKeysWithValues: Array(englishNumberWords) + Array(hindiNumberWords))
 
     /// Hindi number words in both scripts, without which every Hindi utterance with a number fails the guard.

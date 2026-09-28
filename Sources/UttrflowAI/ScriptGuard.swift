@@ -18,45 +18,16 @@ extension MeaningPreservationGuard {
                 reason: "the rewrite repeats the worked example '\(example)'", kind: .echoedExample)
         }
         guard Romaniser.containsDevanagari(draft) else { return .accepted }
-        let said = Self.withoutStammers(Self.romanisedKeys(Romaniser.romanised(draft)))
-        let written = Self.withoutStammers(Self.romanisedKeys(rewritten))
+        let heard = Set(WordShape.words(Romaniser.romanised(draft)).map(Romaniser.soundKey))
+        // A number is the number checks' to judge, whichever way it is written.
+        let written = WordShape.words(rewritten).filter { !$0.allSatisfy(\.isNumber) }
         guard !written.isEmpty else { return .accepted }
-        let heard = Set(said)
-        let strangers = written.filter { !heard.contains($0) }.count
+        let strangers = written.filter { !heard.contains(Romaniser.soundKey($0)) }.count
         guard Double(strangers) <= Double(written.count) * Self.mostStrangerWords else {
             return .rejected(
                 reason: "the rewrite translated the Hindi instead of romanising it", kind: .translated)
         }
-        if let changed = Self.changedWord(said: said, written: written) {
-            return .rejected(
-                reason: "the rewrite changed '\(changed)' while romanising the Hindi", kind: .lostWord)
-        }
         return .accepted
-    }
-
-    /// The words of a romanised text as sound keys, a number word as its digits and a filler dropped.
-    static func romanisedKeys(_ text: String) -> [String] {
-        WordShape.words(text).compactMap { word in
-            guard !FillersPass.fillerWords.contains(word) else { return nil }
-            if let digits = numberWords[word] { return digits }
-            return word.allSatisfy(\.isNumber) ? word : Romaniser.soundKey(word)
-        }
-    }
-
-    /// The keys with each run of one word said again kept once, so a stammer dropped or kept is no change.
-    static func withoutStammers(_ keys: [String]) -> [String] {
-        keys.enumerated().filter { $0.offset == 0 || keys[$0.offset - 1] != $0.element }.map(\.element)
-    }
-
-    /// The first word the rewrite substituted, dropped or added against the romanised draft, in order.
-    static func changedWord(said: [String], written: [String]) -> String? {
-        for operation in WordErrorRate.measure(reference: said, hypothesis: written).alignment {
-            switch operation {
-            case .match: continue
-            case .deletion(let word), .substitution(let word, _), .insertion(let word): return word
-            }
-        }
-        return nil
     }
 
     /// The worked example a rewrite copies while the draft does not say it, or `nil`.
