@@ -198,18 +198,25 @@ public struct Register: Sendable, Equatable {
         guard let first = label.first, first.isLetter, label.count <= speakerLength,
             label.split(separator: " ").count <= speakerWords,
             label.allSatisfy({ $0.isLetter || $0.isNumber || " ()._-'".contains($0) }),
-            !fieldLabels.contains(label.lowercased())
+            !namesField(label)
         else { return nil }
         return label
     }
 
-    /// Labels a record, a form, a mail header or a report repeats for each entry, which name a field and never a person.
+    /// Whether a label names a field, by its whole text or its head word, so "Expected result" and "Assigned to" are fields.
+    static func namesField(_ label: String) -> Bool {
+        let lowered = label.lowercased()
+        let head = lowered.prefix { $0.isLetter }
+        return fieldLabels.contains(lowered) || fieldLabels.contains(String(head))
+    }
+
+    /// Words a record, a form, a mail header or a report opens its repeated labels with, which name a field and never a person.
     static let fieldLabels: Set<String> = [
-        "actual", "address", "amount", "assignee", "attendees", "bcc", "category", "cc", "date", "deadline",
-        "description", "due", "due date", "email", "end", "end date", "expected", "from", "id", "location",
-        "name", "note", "notes", "owner", "phone", "priority", "reporter", "result", "sent", "start",
-        "start date", "status", "steps", "subject", "summary", "tags", "time", "title", "to", "total", "type",
-        "when", "where",
+        "actual", "address", "amount", "assigned", "assignee", "attendees", "bcc", "category", "cc",
+        "created", "date", "deadline", "description", "due", "email", "end", "environment", "expected",
+        "from", "id", "location", "name", "note", "notes", "owner", "phone", "priority", "reported",
+        "reporter", "result", "sent", "severity", "start", "status", "steps", "subject", "summary", "tags",
+        "time", "title", "to", "total", "type", "updated", "version", "when", "where",
     ]
 
     /// The longest a speaker's name may run, in characters, before the text before a colon reads as a sentence.
