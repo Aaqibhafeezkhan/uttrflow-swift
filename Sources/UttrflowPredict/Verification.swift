@@ -56,6 +56,12 @@ public enum Verification {
     /// How unlikely, per token, a candidate may be before the model's objection counts, set from `uttrflow-bakeoff score`.
     public static let plausibilityFloor = -6.0
 
+    /// How unlikely, per token, a generated line may be and still be drawn as the only line offered, set from `uttrflow-bakeoff score`. See `Docs/predict-precision.md`.
+    public static let certainFloor = -3.0
+
+    /// How unlikely, per token, a generated line may be and still be drawn among alternatives, set from `uttrflow-bakeoff score`. See `Docs/predict-precision.md`.
+    public static let choiceFloor = plausibilityFloor
+
     /// The dearest slip a correction may explain away, which is one plain insertion or deletion.
     public static let correctionCeiling = TypoModel.indelCost
 

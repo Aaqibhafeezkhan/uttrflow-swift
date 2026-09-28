@@ -866,6 +866,92 @@ struct GeneratedSuggestionTests {
     }
 }
 
+@Suite("Generated lines are scored before draw")
+struct SuggestionScoringTests {
+    /// The query one turn asks, or a failure saying it asked nothing.
+    private func asked(
+        _ session: inout SuggestionSession, typing typed: String
+    ) throws
+        -> SuggestionQuery
+    {
+        try query(session.turn(in: field, at: PredictionContext(typed: typed)))
+    }
+
+    @Test("A single generated line that scores below the certainty floor leaves the turn quiet.")
+    func loneLowScoreIsQuiet() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "I think we should")
+        let belowFloor = Verification.certainFloor - 1
+        let update = session.resolveGenerated(
+            ["I think we should meet at the north gate at noon"], for: asked,
+            elapsedMilliseconds: 0, scores: ["I think we should meet at the north gate at noon": belowFloor])
+        #expect(update == .quiet(because: .nothingOffered))
+    }
+
+    @Test("A single generated line that scores above the certainty floor is drawn as certain.")
+    func loneHighScoreIsCertain() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        let aboveFloor = Verification.certainFloor + 1
+        let update = session.resolveGenerated(
+            ["git commit -m"], for: asked, elapsedMilliseconds: 0,
+            scores: ["git commit -m": aboveFloor])
+        #expect(update?.suggestion == .certain("git commit -m"))
+    }
+
+    @Test("A low-scored leader is offered as a choice when an alternative clears the choice floor.")
+    func leaderLowScoreFallsBackToChoice() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        let belowCertain = Verification.certainFloor - 1
+        let aboveChoice = Verification.choiceFloor + 1
+        let update = session.resolveGenerated(
+            ["git checkout", "git commit"], for: asked, elapsedMilliseconds: 0,
+            scores: [
+                "git checkout": belowCertain,
+                "git commit": aboveChoice,
+            ])
+        #expect(update?.suggestion == .choice(leader: "git checkout", others: ["git commit"]))
+    }
+
+    @Test("All lines below the choice floor leave the turn quiet.")
+    func allLowScoreIsQuiet() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        let belowFloor = Verification.choiceFloor - 1
+        let update = session.resolveGenerated(
+            ["git checkout", "git commit"], for: asked, elapsedMilliseconds: 0,
+            scores: [
+                "git checkout": belowFloor,
+                "git commit": belowFloor,
+            ])
+        #expect(update == .quiet(because: .nothingOffered))
+    }
+
+    @Test("A leader below both floors and no alternatives clears them leaves the turn quiet.")
+    func loneBelowChoiceFloorIsQuiet() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "I think we should")
+        let belowFloor = Verification.choiceFloor - 1
+        let update = session.resolveGenerated(
+            ["I think we should meet at the north gate at noon"], for: asked,
+            elapsedMilliseconds: 0, scores: ["I think we should meet at the north gate at noon": belowFloor])
+        #expect(update == .quiet(because: .nothingOffered))
+    }
+
+    @Test("A missing score for a line is treated as no opinion, which never refuses.")
+    func missingScoresArePassThroughs() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        // Leader scores well, alternative has no score: alternative is kept.
+        let aboveCertain = Verification.certainFloor + 1
+        let update = session.resolveGenerated(
+            ["git checkout", "git commit"], for: asked, elapsedMilliseconds: 0,
+            scores: ["git checkout": aboveCertain])
+        #expect(update?.suggestion == .choice(leader: "git checkout", others: ["git commit"]))
+    }
+}
+
 @Suite("Typing through a drawn ghost")
 struct SuggestionTypeThroughTests {
     @Test("Five keys that each type the ghost's next letter keep it drawn, armed and takeable.")
