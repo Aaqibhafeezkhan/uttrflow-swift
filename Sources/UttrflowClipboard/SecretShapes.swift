@@ -22,10 +22,13 @@ public enum SecretShapes {
         }
         if literals.pem, text.contains(pemHeader) { return true }
         if literals.jwt, hasJSONWebToken(text) { return true }
-        if literals.url, hasCredentialledURL(text) || hasBearerURL(text) { return true }
+        if literals.url, hasCredentialledURL(text) || hasBearerURL(text) || hasTokenUserinfoURL(text) {
+            return true
+        }
         if VendorKeyWindows.matches(text, pattern: vendorKey, tally: patternTally) { return true }
         if NamedSecretStems.present(in: text), hasNamedSecret(text) { return true }
         if CardNumberShape.matches(text) { return true }
+        if hasCommandCredential(text) { return true }
         return hasHighEntropyToken(text)
     }
 
@@ -46,6 +49,32 @@ public enum SecretShapes {
         var read = 0
         defer { tally?.record(read) }
         return CredentialledURLScan.matches(text, read: &read)
+    }
+
+    /// A URL whose userinfo is one generated token with no colon, as `https://<token>@host/repo` carries it.
+    static func hasTokenUserinfoURL(_ text: String) -> Bool {
+        var read = 0
+        defer { tally?.record(read) }
+        var rest = Substring(text)
+        while let scheme = rest.firstRange(of: "://") {
+            let userinfo = rest[scheme.upperBound...].prefix { !($0.isWhitespace || "/@:".contains($0)) }
+            read += 3 + userinfo.count
+            let after = userinfo.endIndex
+            if after < rest.endIndex, rest[after] == "@", rest.index(after: after) < rest.endIndex,
+                !rest[rest.index(after: after)].isWhitespace, looksGenerated(String(userinfo))
+            {
+                return true
+            }
+            rest = rest[after...]
+        }
+        return false
+    }
+
+    /// A password handed to a command as an argument, or an authorization header's value.
+    static func hasCommandCredential(_ text: String) -> Bool {
+        var read = 0
+        defer { tally?.record(read) }
+        return CommandCredentialShape.matches(text, read: &read)
     }
 
     /// A chat webhook, or a URL signed or carrying a token, which acts for whoever holds it.
@@ -151,7 +180,7 @@ public enum SecretShapes {
         return bits >= entropyFloor && !isJoinedWords(String(decoding: token, as: UTF8.self))
     }
 
-    private static func looksGenerated(_ token: String) -> Bool {
+    static func looksGenerated(_ token: String) -> Bool {
         guard !isPathLike(token) else { return false }
 
         // Hex has a sixteen-symbol alphabet and can never reach the general floor.
