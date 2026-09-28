@@ -376,4 +376,28 @@ struct DestructiveCommandTests {
     func historyReadingGitIsOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A datastore command that drops a database or deletes its data is destructive.",
+        arguments: [
+            "dropdb mydb", "dropdb -h db.example.com mydb", "dropuser app", "redis-cli FLUSHALL",
+            "redis-cli -h cache.example.com -n 2 flushdb", "valkey-cli flushall",
+            #"mongosh mydb --eval "db.dropDatabase()""#, #"mongo mydb --eval "db.users.drop()""#,
+            #"mongosh --eval "db.users.deleteMany({})""#, #"sqlite3 app.db "DELETE FROM users""#,
+            #"psql -c "DELETE FROM users WHERE id = 1""#, "DELETE FROM users",
+        ])
+    func datastoreDeletionsAreDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A datastore command that only reads or writes is ordinary.",
+        arguments: [
+            #"psql -c "select 1""#, "redis-cli get k", "redis-cli info", #"mongosh --eval "db.users.find()""#,
+            #"sqlite3 app.db "SELECT * FROM users""#, "createdb mydb",
+        ])
+    func datastoreReadsAreOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }

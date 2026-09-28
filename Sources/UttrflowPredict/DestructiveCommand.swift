@@ -66,7 +66,7 @@ public enum DestructiveCommand {
     private static let destroyers: Set<String> = [
         "rm", "rmdir", "shred", "srm", "unlink", "dd", "mkfs", "fdisk", "parted", "shutdown", "reboot",
         "halt",
-        "poweroff",
+        "poweroff", "dropdb", "dropuser",
     ]
 
     private enum Command {
@@ -225,6 +225,11 @@ public enum DestructiveCommand {
             }
         case "terraform", "tofu":
             if lowered.contains("destroy") || lowered.contains("-destroy") { return true }
+        case "redis-cli", "valkey-cli", "keydb-cli":
+            if lowered.contains(where: { $0 == "flushall" || $0 == "flushdb" }) { return true }
+        case "mongo", "mongosh":
+            let script = lowered.joined(separator: " ")
+            if mongoDeletions.contains(where: script.contains) { return true }
         case "crontab":
             if lowered.contains("-r") { return true }
         case "sh", "bash", "zsh", "dash", "ksh", "fish":
@@ -251,13 +256,20 @@ public enum DestructiveCommand {
 
         guard sqlVerbs.contains(command) || sqlClients.contains(command) else { return false }
         // SQL that drops or empties a table, wherever the verb sits in the statement.
-        let words = Set(
-            ([command] + lowered).flatMap {
-                $0.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" }).map(String.init)
-            })
+        let sequence = ([command] + lowered).flatMap {
+            $0.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" }).map(String.init)
+        }
+        let words = Set(sequence)
         if words.contains("drop"), words.contains(where: droppableObject) { return true }
+        // A DELETE empties rows wherever its FROM follows, with or without a WHERE.
+        if let delete = sequence.firstIndex(of: "delete"), sequence[delete...].contains("from") {
+            return true
+        }
         return words.contains("truncate")
     }
+
+    /// Calls in a MongoDB shell script that drop a database or a collection, or delete its documents.
+    private static let mongoDeletions = ["dropdatabase(", ".drop(", ".deletemany(", ".remove("]
 
     /// The command string a shell is given with `-c`, which it runs as a line of its own.
     private static func shellScript(_ arguments: [String]) -> String? {
@@ -270,7 +282,7 @@ public enum DestructiveCommand {
     }
 
     /// SQL verbs that begin a statement typed straight into a database prompt.
-    private static let sqlVerbs: Set<String> = ["drop", "truncate", "alter"]
+    private static let sqlVerbs: Set<String> = ["drop", "truncate", "alter", "delete"]
 
     /// Programs that run the SQL they are given.
     private static let sqlClients: Set<String> = [
