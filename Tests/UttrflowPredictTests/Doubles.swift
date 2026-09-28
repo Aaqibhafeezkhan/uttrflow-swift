@@ -168,3 +168,25 @@ actor RecordingSupersession: SupersessionRecording {
         rejected.append(text)
     }
 }
+
+extension SuggestionSession {
+    /// The model's lines resolved as if the pass that wrote each one were sure of it, for tests about everything but the floor.
+    mutating func resolveSure(
+        _ completions: [String], for query: SuggestionQuery, elapsedMilliseconds: Int,
+        whenEmpty silence: Quieting.Reason = .nothingOffered
+    ) -> SuggestionUpdate? {
+        resolveGenerated(
+            completions, for: query, elapsedMilliseconds: elapsedMilliseconds, whenEmpty: silence,
+            scores: Self.sure(completions))
+    }
+
+    /// The model's later alternatives added as if the pass that wrote each one were sure of it.
+    mutating func expandSure(_ others: [String], for query: SuggestionQuery) -> SuggestionUpdate? {
+        expandGenerated(others, for: query, scores: Self.sure(others))
+    }
+
+    /// Every line at the best score a pass can give.
+    static func sure(_ lines: [String]) -> [String: Double] {
+        Dictionary(lines.map { ($0, 0.0) }, uniquingKeysWith: { first, _ in first })
+    }
+}

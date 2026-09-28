@@ -281,10 +281,10 @@ struct SuggestionRejectionTests {
     func generatedSilenceIsNamed() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "vim .env")))
-        let denied = session.resolveGenerated(
+        let denied = session.resolveSure(
             [], for: asked, elapsedMilliseconds: 0, whenEmpty: .notOnThisMachine)
         #expect(denied?.silence == .notOnThisMachine)
-        #expect(session.resolveGenerated([], for: asked, elapsedMilliseconds: 0)?.silence == .nothingOffered)
+        #expect(session.resolveSure([], for: asked, elapsedMilliseconds: 0)?.silence == .nothingOffered)
     }
 
     @Test(
@@ -304,7 +304,7 @@ struct SuggestionRejectionTests {
     func aGeneratedGuessCountsButIsNotBlamed() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git checkout"], for: asked, elapsedMilliseconds: 0)
+        _ = session.resolveSure(["git checkout"], for: asked, elapsedMilliseconds: 0)
         #expect(session.suggestion == .certain("git checkout"))
         let turn = session.turn(in: field, at: PredictionContext(typed: "git x"))
         #expect(turn.rejected == nil)
@@ -316,7 +316,7 @@ struct SuggestionRejectionTests {
         var session = SuggestionSession()
         for _ in 0..<Quieting.rejectionsBeforeSilence {
             let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-            _ = session.resolveGenerated(["git checkout"], for: asked, elapsedMilliseconds: 0)
+            _ = session.resolveSure(["git checkout"], for: asked, elapsedMilliseconds: 0)
             #expect(session.turn(in: field, at: PredictionContext(typed: "git x")).rejected == nil)
         }
         #expect(session.rejectionsHere == Quieting.rejectionsBeforeSilence)
@@ -330,8 +330,8 @@ struct SuggestionRejectionTests {
     func alternativesExpandTheGeneratedLine() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
-        let expanded = session.expandGenerated(
+        _ = session.resolveSure(["git commit -m"], for: asked, elapsedMilliseconds: 0)
+        let expanded = session.expandSure(
             ["git checkout main", "git commit -m", "svn clone", "git c", "git clone"], for: asked)
         #expect(
             expanded?.suggestion
@@ -346,8 +346,8 @@ struct SuggestionRejectionTests {
     func aRedrawOfTheSameLineKeepsItsList() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
-        _ = session.expandGenerated(["git checkout main"], for: asked)
+        _ = session.resolveSure(["git commit -m"], for: asked, elapsedMilliseconds: 0)
+        _ = session.expandSure(["git checkout main"], for: asked)
         let again = try draw(&session, typing: "git c")
         #expect(again?.suggestion == .choice(leader: "git commit -m", others: ["git checkout main"]))
         #expect(again?.armed.contains(.optionDownArrow) == true)
@@ -387,8 +387,8 @@ struct SuggestionRejectionTests {
     func aNarrowedListDropsTheHighlight() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
-        _ = session.expandGenerated(["git commit --amend", "git checkout main"], for: asked)
+        _ = session.resolveSure(["git commit -m"], for: asked, elapsedMilliseconds: 0)
+        _ = session.expandSure(["git commit --amend", "git checkout main"], for: asked)
         _ = session.route(KeyStroke(.downArrow, modifiers: .option))
         _ = session.route(KeyStroke(.downArrow, modifiers: .option))
         #expect(session.selection == SuggestionSelection(index: 2, hasMoved: true))
@@ -404,8 +404,8 @@ struct SuggestionRejectionTests {
     func quietModeKeepsNoList() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
-        _ = session.expandGenerated(["git checkout main"], for: asked)
+        _ = session.resolveSure(["git commit -m"], for: asked, elapsedMilliseconds: 0)
+        _ = session.expandSure(["git checkout main"], for: asked)
 
         let again = try draw(&session, typing: "git c", isQuiet: true)
 
@@ -417,12 +417,12 @@ struct SuggestionRejectionTests {
     func emptyOrStaleAlternativesAreDropped() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
-        #expect(session.expandGenerated([], for: asked) == nil)
-        #expect(session.expandGenerated(["git commit -m", "svn clone"], for: asked) == nil)
+        _ = session.resolveSure(["git commit -m"], for: asked, elapsedMilliseconds: 0)
+        #expect(session.expandSure([], for: asked) == nil)
+        #expect(session.expandSure(["git commit -m", "svn clone"], for: asked) == nil)
         #expect(session.suggestion == .certain("git commit -m"))
         _ = session.turn(in: field, at: PredictionContext(typed: "git co"))
-        #expect(session.expandGenerated(["git checkout main"], for: asked) == nil)
+        #expect(session.expandSure(["git checkout main"], for: asked) == nil)
     }
 
     @Test("Alternatives never attach to a remembered line, which the gates chose and the model did not.")
@@ -431,14 +431,14 @@ struct SuggestionRejectionTests {
         _ = try draw(&session, typing: "git c")
         let current = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
         #expect(session.suggestion == .certain("git commit -m"))
-        #expect(session.expandGenerated(["git checkout main"], for: current) == nil)
+        #expect(session.expandSure(["git checkout main"], for: current) == nil)
     }
 
     @Test("A remembered suggestion drawn after a generated one is blamed again when typed past.")
     func aRememberedSuggestionCountsAgain() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git checkout"], for: asked, elapsedMilliseconds: 0)
+        _ = session.resolveSure(["git checkout"], for: asked, elapsedMilliseconds: 0)
         _ = try draw(&session, typing: "git co")
         #expect(session.turn(in: field, at: PredictionContext(typed: "git x")).rejected == "git commit -m")
         #expect(session.rejectionsHere == 2)
@@ -586,7 +586,7 @@ struct SuggestionRoutingTests {
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "meet at")))
         session.invalidate()
         #expect(
-            session.resolveGenerated(["meet at the north gate at noon"], for: asked, elapsedMilliseconds: 0)
+            session.resolveSure(["meet at the north gate at noon"], for: asked, elapsedMilliseconds: 0)
                 == nil)
         #expect(session.suggestion == .silent)
     }
@@ -595,11 +595,11 @@ struct SuggestionRoutingTests {
     func lateAlternativesAreDropped() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(["git commit -m"], for: asked, elapsedMilliseconds: 0)
+        _ = session.resolveSure(["git commit -m"], for: asked, elapsedMilliseconds: 0)
         #expect(session.isCurrent)
         session.invalidate()
         #expect(!session.isCurrent)
-        #expect(session.expandGenerated(["git checkout main"], for: asked) == nil)
+        #expect(session.expandSure(["git checkout main"], for: asked) == nil)
     }
 
     @Test("Of two quick turns only the latest one's answer is drawn, whichever finishes last.")
@@ -610,10 +610,10 @@ struct SuggestionRoutingTests {
         let second = try query(
             session.turn(
                 in: field, at: PredictionContext(typed: "meet at"), sawKeystrokes: session.keystrokes))
-        let latest = session.resolveGenerated(
+        let latest = session.resolveSure(
             ["meet at the north gate at noon"], for: second, elapsedMilliseconds: 0)
         #expect(latest?.suggestion == .certain("meet at the north gate at noon"))
-        #expect(session.resolveGenerated(["meet me later"], for: first, elapsedMilliseconds: 0) == nil)
+        #expect(session.resolveSure(["meet me later"], for: first, elapsedMilliseconds: 0) == nil)
         #expect(session.suggestion == .certain("meet at the north gate at noon"))
         #expect(session.isCurrent)
     }
@@ -622,7 +622,7 @@ struct SuggestionRoutingTests {
     func aGeneratedLineKeepsTheTypedCase() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "Meet a")))
-        let update = session.resolveGenerated(
+        let update = session.resolveSure(
             ["meet at the north gate at noon"], for: asked, elapsedMilliseconds: 0)
         #expect(update?.suggestion == .certain("Meet at the north gate at noon"))
     }
@@ -800,7 +800,7 @@ struct GeneratedSuggestionTests {
     func loneGenerated() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "git c")
-        let update = session.resolveGenerated(["git checkout"], for: asked, elapsedMilliseconds: 0)
+        let update = session.resolveSure(["git checkout"], for: asked, elapsedMilliseconds: 0)
         #expect(update?.suggestion == .certain("git checkout"))
     }
 
@@ -808,7 +808,7 @@ struct GeneratedSuggestionTests {
     func rankedChoice() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "git c")
-        let update = session.resolveGenerated(
+        let update = session.resolveSure(
             ["git checkout", "git commit", "git cherry-pick"], for: asked, elapsedMilliseconds: 0)
         #expect(
             update?.suggestion
@@ -819,7 +819,7 @@ struct GeneratedSuggestionTests {
     func mustExtendTyped() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "git c")
-        let update = session.resolveGenerated(
+        let update = session.resolveSure(
             ["svn commit", "git commit"], for: asked, elapsedMilliseconds: 0)
         #expect(update?.suggestion == .certain("git commit"))
     }
@@ -828,7 +828,7 @@ struct GeneratedSuggestionTests {
     func theTypedLineInAnotherCaseIsNotADrawable() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "Meet a")
-        let update = session.resolveGenerated(["meet a"], for: asked, elapsedMilliseconds: 0)
+        let update = session.resolveSure(["meet a"], for: asked, elapsedMilliseconds: 0)
         #expect(update == .quiet(because: .nothingOffered))
     }
 
@@ -836,7 +836,7 @@ struct GeneratedSuggestionTests {
     func nothingUsable() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "git c")
-        let update = session.resolveGenerated(["svn commit"], for: asked, elapsedMilliseconds: 0)
+        let update = session.resolveSure(["svn commit"], for: asked, elapsedMilliseconds: 0)
         #expect(update == .quiet(because: .nothingOffered))
     }
 
@@ -844,14 +844,14 @@ struct GeneratedSuggestionTests {
     func caseVariantsAreOneLine() throws {
         var session = SuggestionSession()
         let first = try asked(&session, typing: "git c")
-        let update = session.resolveGenerated(
+        let update = session.resolveSure(
             ["git checkout", "Git Checkout", "git commit"], for: first, elapsedMilliseconds: 0)
         #expect(update?.suggestion == .choice(leader: "git checkout", others: ["git commit"]))
         var again = SuggestionSession()
         let lone = try asked(&again, typing: "git c")
-        _ = again.resolveGenerated(["git checkout"], for: lone, elapsedMilliseconds: 0)
-        #expect(again.expandGenerated(["GIT CHECKOUT", "Git Checkout"], for: lone) == nil)
-        let expanded = again.expandGenerated(["Git Checkout", "git commit", "GIT COMMIT"], for: lone)
+        _ = again.resolveSure(["git checkout"], for: lone, elapsedMilliseconds: 0)
+        #expect(again.expandSure(["GIT CHECKOUT", "Git Checkout"], for: lone) == nil)
+        let expanded = again.expandSure(["Git Checkout", "git commit", "GIT COMMIT"], for: lone)
         #expect(expanded?.suggestion == .choice(leader: "git checkout", others: ["git commit"]))
     }
 
@@ -859,7 +859,7 @@ struct GeneratedSuggestionTests {
     func pastBudget() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "git c")
-        let update = session.resolveGenerated(
+        let update = session.resolveSure(
             ["git checkout"], for: asked,
             elapsedMilliseconds: SuggestionSession.turnBudgetInMilliseconds + 1)
         #expect(update == .quiet(because: .overBudget))
@@ -885,7 +885,7 @@ struct SuggestionScoringTests {
         let update = session.resolveGenerated(
             ["I think we should meet at the north gate at noon"], for: asked,
             elapsedMilliseconds: 0, scores: ["I think we should meet at the north gate at noon": belowFloor])
-        #expect(update == .quiet(because: .nothingOffered))
+        #expect(update == .quiet(because: .modelUnsure))
     }
 
     @Test("A single generated line that scores above the certainty floor is drawn as certain.")
@@ -903,8 +903,8 @@ struct SuggestionScoringTests {
     func leaderLowScoreFallsBackToChoice() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "git c")
-        let belowCertain = Verification.certainFloor - 1
-        let aboveChoice = Verification.choiceFloor + 1
+        let belowCertain = (Verification.certainFloor + Verification.choiceFloor) / 2
+        let aboveChoice = Verification.certainFloor
         let update = session.resolveGenerated(
             ["git checkout", "git commit"], for: asked, elapsedMilliseconds: 0,
             scores: [
@@ -925,7 +925,7 @@ struct SuggestionScoringTests {
                 "git checkout": belowFloor,
                 "git commit": belowFloor,
             ])
-        #expect(update == .quiet(because: .nothingOffered))
+        #expect(update == .quiet(because: .modelUnsure))
     }
 
     @Test("A leader below both floors and no alternatives clears them leaves the turn quiet.")
@@ -936,19 +936,71 @@ struct SuggestionScoringTests {
         let update = session.resolveGenerated(
             ["I think we should meet at the north gate at noon"], for: asked,
             elapsedMilliseconds: 0, scores: ["I think we should meet at the north gate at noon": belowFloor])
-        #expect(update == .quiet(because: .nothingOffered))
+        #expect(update == .quiet(because: .modelUnsure))
     }
 
-    @Test("A missing score for a line is treated as no opinion, which never refuses.")
-    func missingScoresArePassThroughs() throws {
+    @Test("The line drawn alone clears a stricter floor than a line offered in a list.")
+    func certainFloorIsStricter() {
+        #expect(Verification.certainFloor > Verification.choiceFloor)
+    }
+
+    @Test("A line no pass scored is never drawn, alone or as a list's leader.")
+    func unscoredLineIsNeverDrawn() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "I think we should")
+        let lone = session.resolveGenerated(
+            ["I think we should meet at the north gate at noon"], for: asked, elapsedMilliseconds: 0,
+            scores: [:])
+        #expect(lone == .quiet(because: .modelUnsure))
+        let listed = session.resolveGenerated(
+            ["I think we should wait", "I think we should go"], for: asked, elapsedMilliseconds: 0,
+            scores: ["I think we should go": 0])
+        #expect(listed == .quiet(because: .modelUnsure))
+    }
+
+    @Test("An alternative no pass scored is dropped, leaving a sure leader drawn alone.")
+    func unscoredAlternativeIsDropped() throws {
         var session = SuggestionSession()
         let asked = try asked(&session, typing: "git c")
-        // Leader scores well, alternative has no score: alternative is kept.
-        let aboveCertain = Verification.certainFloor + 1
         let update = session.resolveGenerated(
             ["git checkout", "git commit"], for: asked, elapsedMilliseconds: 0,
-            scores: ["git checkout": aboveCertain])
-        #expect(update?.suggestion == .choice(leader: "git checkout", others: ["git commit"]))
+            scores: ["git checkout": Verification.certainFloor + 1])
+        #expect(update?.suggestion == .certain("git checkout"))
+    }
+
+    @Test("A leader between the floors is quiet alone, since only a list may offer it.")
+    func leaderBetweenFloorsAloneIsQuiet() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        let between = (Verification.certainFloor + Verification.choiceFloor) / 2
+        let update = session.resolveGenerated(
+            ["git checkout"], for: asked, elapsedMilliseconds: 0, scores: ["git checkout": between])
+        #expect(update == .quiet(because: .modelUnsure))
+    }
+
+    @Test("A line scored exactly at the certainty floor clears it.")
+    func scoreAtFloorClears() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        let update = session.resolveGenerated(
+            ["git checkout"], for: asked, elapsedMilliseconds: 0,
+            scores: ["git checkout": Verification.certainFloor])
+        #expect(update?.suggestion == .certain("git checkout"))
+    }
+
+    @Test(
+        "A model's later alternatives need a score over the choice floor; the machine's listed values need none."
+    )
+    func expansionScoresModelLinesOnly() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        _ = session.resolveGenerated(
+            ["git commit -m"], for: asked, elapsedMilliseconds: 0, scores: ["git commit -m": 0])
+        #expect(session.expandGenerated(["git checkout main"], for: asked, scores: [:]) == nil)
+        let low = ["git checkout main": Verification.choiceFloor - 1]
+        #expect(session.expandGenerated(["git checkout main"], for: asked, scores: low) == nil)
+        let listed = session.expandGenerated(["git checkout main"], for: asked, scores: nil)
+        #expect(listed?.suggestion == .choice(leader: "git commit -m", others: ["git checkout main"]))
     }
 }
 
@@ -1005,14 +1057,14 @@ struct SuggestionTypeThroughTests {
     func aListFollowsTheTyping() throws {
         var session = SuggestionSession()
         let asked = try query(session.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = session.resolveGenerated(
+        _ = session.resolveSure(
             ["git commit -m", "git checkout", "git cherry-pick"], for: asked, elapsedMilliseconds: 0)
         let through = session.typedThrough("o")
         #expect(through?.suggestion == .certain("git commit -m"))
 
         var moved = SuggestionSession()
         let again = try query(moved.turn(in: field, at: PredictionContext(typed: "git c")))
-        _ = moved.resolveGenerated(["git commit -m", "git checkout"], for: again, elapsedMilliseconds: 0)
+        _ = moved.resolveSure(["git commit -m", "git checkout"], for: again, elapsedMilliseconds: 0)
         _ = moved.route(KeyStroke(.downArrow, modifiers: .option))
         #expect(moved.typedThrough("o") == nil)
     }

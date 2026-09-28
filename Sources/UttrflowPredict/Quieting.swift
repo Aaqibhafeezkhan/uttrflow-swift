@@ -66,6 +66,8 @@ public enum Quieting {
         case notOnThisMachine
         /// The leader has less evidence than `PredictionEngine.supportFloor`.
         case evidenceTooThin
+        /// The model's own line scored under the floor it needed, or could not be scored at all. See `Docs/predict-precision.md`, P6.
+        case modelUnsure
         /// The leader, or every close rival to it, cannot be undone, so nothing is offered.
         case irreversibleNotCertain
         /// The turn ran past `SuggestionSession.turnBudgetInMilliseconds`.

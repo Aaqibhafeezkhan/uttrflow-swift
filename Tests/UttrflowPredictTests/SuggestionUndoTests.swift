@@ -54,7 +54,7 @@ struct SuggestionUndoTests {
             Issue.record("expected a query")
             return
         }
-        let update = session.resolveGenerated(
+        let update = session.resolveSure(
             ["git commit -m", "git commit --amend"], for: asked, elapsedMilliseconds: 0)
         #expect(update?.suggestion == .certain("git commit --amend"))
     }

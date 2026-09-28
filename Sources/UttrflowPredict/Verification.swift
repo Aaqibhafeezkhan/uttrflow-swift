@@ -59,11 +59,17 @@ public enum Verification {
     /// How unlikely, per token, a candidate may be before the model's objection counts, set from `uttrflow-bakeoff score`.
     public static let plausibilityFloor = -6.0
 
-    /// How unlikely, per token, a generated line may be and still be drawn as the only line offered, set from `uttrflow-bakeoff score`. See `Docs/predict-precision.md`.
-    public static let certainFloor = -3.0
+    /// The mean log-probability per token its own pass must have given a generated line for it to be drawn alone, set from `uttrflow-bakeoff complete --fixtures`. See `Docs/predict-precision.md`, P6.
+    public static let certainFloor = -0.9
 
-    /// How unlikely, per token, a generated line may be and still be drawn among alternatives, set from `uttrflow-bakeoff score`. See `Docs/predict-precision.md`.
-    public static let choiceFloor = plausibilityFloor
+    /// The same measure a generated line needs to be offered among alternatives, looser because the person picks from a list. See `Docs/predict-precision.md`, P6.
+    public static let choiceFloor = -1.5
+
+    /// Whether a generated line's score clears a floor; a line no pass scored never does.
+    public static func clears(_ score: Double?, floor: Double) -> Bool {
+        guard let score else { return false }
+        return score >= floor
+    }
 
     /// The dearest slip a correction may explain away, which is one plain insertion or deletion.
     public static let correctionCeiling = TypoModel.indelCost

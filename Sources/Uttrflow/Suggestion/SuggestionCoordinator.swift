@@ -551,7 +551,8 @@ final class SuggestionCoordinator {
                 modelPass.rememberEmpty(query, at: SuggestionMoment.place(of: snapshot))
                 guard
                     let quiet = session.resolveGenerated(
-                        [], for: query, elapsedMilliseconds: since(started), whenEmpty: .notOnThisMachine)
+                        [], for: query, elapsedMilliseconds: since(started), whenEmpty: .notOnThisMachine,
+                        scores: [:])
                 else { return }
                 settle(quiet, in: snapshot, since: started)
             case .among(let values):
@@ -680,9 +681,9 @@ final class SuggestionCoordinator {
         Self.log.debug(
             "\(SuggestionLog.generate(application: snapshot.applicationName, typed: query.typed, got: completions.count, elapsedMilliseconds: self.since(started), firstCompletion: completions.first), privacy: .public)"
         )
-        // Every generated line is scored in context before any is drawn, so a low-scored line leaves the turn quiet.
+        // Every generated line carries the score its own pass gave it, so a low or missing score leaves the turn quiet.
         entering(.score, turn: number)
-        let scores = await verifier.scoreCompletions(completions, following: query.typed)
+        let scores = await verifier.scoreCompletions(completions)
         guard turns.isCurrent(number) else { return }
         guard
             let update = session.resolveGenerated(
@@ -703,10 +704,9 @@ final class SuggestionCoordinator {
             // The machine's values still pass the gate, since a listed name can be destructive or stale by now.
             entering(.attest, turn: number)
             let others = await attested(listed, for: query)
-            entering(.score, turn: number)
-            let otherScores = await verifier.scoreCompletions(others, following: query.typed)
+            // A value the machine listed exists, so it needs no score to stand among the alternatives.
             guard turns.isCurrent(number), !others.isEmpty,
-                let expanded = session.expandGenerated(others, for: query, scores: otherScores)
+                let expanded = session.expandGenerated(others, for: query, scores: nil)
             else { return }
             modelPass.remember([leader] + others, for: query, at: place)
             return await drawFresh(expanded, for: snapshot, turn: number)
@@ -734,7 +734,7 @@ final class SuggestionCoordinator {
         entering(.attest, turn: number)
         let standing = await attested(others, for: query)
         entering(.score, turn: number)
-        let standingScores = await verifier.scoreCompletions(standing, following: query.typed)
+        let standingScores = await verifier.scoreCompletions(standing)
         guard turns.isCurrent(number), !standing.isEmpty,
             let expanded = session.expandGenerated(standing, for: query, scores: standingScores)
         else { return }
