@@ -436,17 +436,22 @@ struct ClipboardStoreTests {
         #expect(try await store.setText("alt text", of: shot.id, keeping: week())[0].image != nil)
     }
 
-    /// Un-naming makes a clip history again from that moment, so the window applies at once.
-    @Test("lets an unnamed clip fall back under the window")
-    func unKeepingRestoresTheWindow() async throws {
+    /// Un-naming resets the clip's age, so the window applies from the un-keep rather than the original copy.
+    @Test("an unnamed clip starts a fresh window from the un-keep")
+    func unKeepingResetsTheWindow() async throws {
         let file = TemporaryFile()
         let store = ClipboardStore(file: file.url)
         let subject = clip("was saved", alias: "/a")
         try await store.record(subject, keeping: week())
 
         let fortnight = noon.addingTimeInterval(14 * 86_400)
-        let clips = try await store.setAlias(nil, of: subject.id, keeping: week(from: fortnight))
-        #expect(clips.isEmpty)
+        let kept = try await store.setAlias(nil, of: subject.id, keeping: week(from: fortnight))
+        #expect(kept.map(\.id) == [subject.id], "the un-keep does not also delete the clip")
+        #expect(kept.first?.copiedAt == fortnight, "the clip's age is reset from the un-keep")
+
+        let eightDaysOn = ClipRetention(days: 7, now: fortnight.addingTimeInterval(8 * 86_400))
+        let after = await ClipboardStore(file: file.url).clips(keeping: eightDaysOn)
+        #expect(after.isEmpty, "the reset window still applies after the un-keep")
     }
 
     /// An identifier that is not there is not an error; afterwards it is neither present nor changed.

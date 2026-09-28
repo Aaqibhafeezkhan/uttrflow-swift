@@ -478,7 +478,14 @@ public actor ClipboardStore {
         _ id: UUID, keeping retention: ClipRetention, _ edit: (inout Clip) -> Void
     ) throws(ClipboardStoreError) -> [Clip] {
         var clips = loaded()
-        if let index = clips.firstIndex(where: { $0.id == id }) { edit(&clips[index]) }
+        if let index = clips.firstIndex(where: { $0.id == id }) {
+            let wasKept = clips[index].isKept
+            edit(&clips[index])
+            // A clip the user just un-kept is treated as freshly copied, so the same action cannot also age it out.
+            if wasKept && !clips[index].isKept {
+                clips[index] = clips[index].recopied(at: retention.now)
+            }
+        }
         return try settled(clips, keeping: retention)
     }
 
