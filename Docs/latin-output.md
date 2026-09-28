@@ -95,13 +95,6 @@ reads no Devanagari, so it compared nothing.
   Measured on the answers issue 700 recorded: "Meeting is at four o'clock, no no, five o'clock."
   has 8 of 9 words with none and is refused; "Woh kya hai na, yaani mujhe thoda time chahiye."
   has 1 of 9 and is accepted.
-- **A changed word.** Below that, the rewrite is aligned with the romanised draft word by word,
-  in order, by `WordErrorRate.measure` over the same sound keys, with number words read as
-  their digits, fillers dropped and a word said twice in a row kept once. Any substituted,
-  dropped or added word refuses the rewrite: "Maine khana khila." for "मैंने खाना खा लिया"
-  changes the verb, and "Hum doh baje" for "हम धाई बजे" changes the time (issue 2087). A
-  loanword the model respells ("sorry" for the draft's "sauri") is refused as well, since
-  nothing here can tell a respelling from a different word; the rules' romanisation goes in.
 - **A worked example.** A rewrite of three or more words, at least 80% of them one example's
   words in order, is refused when the draft holds fewer than half of that example's words.
   This reads any script, so an English example given back for English that did not say it is
