@@ -133,6 +133,15 @@ struct SpecificsTests {
             ("a key of 1", "WHERE ", "WHERE user_id = 1"),
             ("a camel-case key of 0", "fetch(", "fetch(userId: 0)"),
             ("a quoted key of 1", "{\"", "{\"id\": 1}"),
+            (
+                "an id passed to a finder", "let user = try await repo.findById(",
+                "let user = try await repo.findById(1)"
+            ),
+            ("an id passed by name", "let order = orders.by", "let order = orders.byId(0)"),
+            ("an id passed to a getter", "let name = get", "let name = getUserId(1)"),
+            ("a quoted id passed to a finder", "find", "findById(\"1\")"),
+            ("an id list", "WHERE ", "WHERE id IN (1)"),
+            ("a key list", "WHERE user_id IN (0, ", "WHERE user_id IN (0, 1)"),
             ("a threshold of 0", "HAVING count", "HAVING count(o.id) > 0"),
             ("a threshold of 0 or more", "guard ", "guard a >= 0 else { return }"),
             ("a bound below 1", "if n ", "if n < 1 {"),

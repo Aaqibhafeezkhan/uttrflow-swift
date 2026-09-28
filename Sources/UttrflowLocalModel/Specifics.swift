@@ -118,12 +118,38 @@ enum Specifics {
             if "=!:".contains(characters[index - 1]) { operates = true }
             index -= 1
         }
+        if !operates, let open = openingParenthesis(before: index, in: characters) {
+            return namesKey(endingAt: open, in: characters, throughIn: true)
+        }
         guard operates else { return false }
+        return namesKey(endingAt: index, in: characters, throughIn: false)
+    }
+
+    /// Where the `(` of an argument list stands when this offset is inside it after `(` or `, `, as in `byId(1)` and `IN (0, 1)`.
+    static func openingParenthesis(before end: Int, in characters: [Character]) -> Int? {
+        var index = end
+        while index > 0 {
+            let character = characters[index - 1]
+            if character == "(" { return index - 1 }
+            guard isAlphanumeric(character) || " \t,._-\"'".contains(character) else { return nil }
+            index -= 1
+        }
+        return nil
+    }
+
+    /// Whether the name that ends at this offset, or the column before an `IN` there, has an id word as its last, as `findById` and `user_id IN` do.
+    static func namesKey(endingAt end: Int, in characters: [Character], throughIn: Bool) -> Bool {
+        var index = end
+        while index > 0, " \t".contains(characters[index - 1]) { index -= 1 }
         var nameStart = index
         while nameStart > 0, isAlphanumeric(characters[nameStart - 1]) || characters[nameStart - 1] == "_" {
             nameStart -= 1
         }
-        guard let last = words(of: String(characters[nameStart..<index])).last else { return false }
+        let name = String(characters[nameStart..<index])
+        if throughIn, name.lowercased() == "in" {
+            return namesKey(endingAt: nameStart, in: characters, throughIn: false)
+        }
+        guard let last = words(of: name).last else { return false }
         return keyWords.contains(last)
     }
 
