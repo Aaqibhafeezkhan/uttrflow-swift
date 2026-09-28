@@ -142,7 +142,8 @@ struct PanelThumbnailsTests {
     /// Asked for at the size it is drawn, not the size of the screenshot.
     @Test("asks for the small version")
     func asksForAThumbnail() async {
-        let (thumbnails, counter) = thumbnails()
+        // An hour, so a slow machine cannot make the miss stale and decode it twice.
+        let (thumbnails, counter) = thumbnails(retryAfter: .seconds(3600))
 
         thumbnails.prepare(file)
         await thumbnails.waitForIdle(file: file)
