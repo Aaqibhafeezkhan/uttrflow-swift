@@ -209,6 +209,9 @@ public enum FocusedFieldReader {
         let flipped = cachedPrimaryScreenMaxY.withLock { $0 }
         let marked = CompositionProbe.markedText(of: field)
         guard goOn() else { return nil }
+        // A combobox field says when its own list is open, one flag on the field itself.
+        let ownList = SurfaceProbe.integer(field, "AXExpanded") == 1
+        guard goOn() else { return nil }
         let window = element(field, kAXWindowAttribute)
         guard goOn() else { return nil }
         let document = document(of: field, in: window)
@@ -248,6 +251,7 @@ public enum FocusedFieldReader {
             isComposing: Composition.isComposing(
                 markedText: marked, inputSource: CompositionProbe.inputSourceKind()),
             markedText: marked,
+            showsOwnList: ownList,
             readMicroseconds: Int((DispatchTime.now().uptimeNanoseconds - started) / 1000),
             windowTitle: title
         )
