@@ -49,7 +49,7 @@ enum Specifics {
     /// The last words of a name that says its value picks out one record, so even a conventional number there is an invented id.
     static let keyWords: Set<String> = ["id", "ids", "pid", "uid", "uuid", "guid"]
 
-    /// Whether a specific token of code is so only by numbers that are each conventional and none the value of a key.
+    /// Whether a specific token of code is so only by numbers that are each conventional and none a chosen value.
     static func isConventionalCode(_ token: String, word: Substring, after before: Substring) -> Bool {
         guard !namesAddressOrAmount(token) else { return false }
         let characters = Array(before) + Array(word)
@@ -72,7 +72,7 @@ enum Specifics {
                 literal = "-" + literal
                 start -= 1
             }
-            guard conventionalNumbers.contains(literal), !isKeyValue(at: start, in: characters) else {
+            guard conventionalNumbers.contains(literal), !isChosenValue(at: start, in: characters) else {
                 return false
             }
             index = end
@@ -80,12 +80,13 @@ enum Specifics {
         return true
     }
 
-    /// Whether the number at this offset is assigned to or compared with a name whose last word says it is an id, as `id = 1` and `userId: 0` are and `ids[0]` is not.
-    static func isKeyValue(at start: Int, in characters: [Character]) -> Bool {
+    /// Whether the number at this offset is a threshold, as `> 0` is, or the value of a name whose last word says it is an id, as `id = 1` and `userId: 0` are and `ids[0]` is not.
+    static func isChosenValue(at start: Int, in characters: [Character]) -> Bool {
         var index = start
         var operates = false
         while index > 0, " \t=!<>:\"'`".contains(characters[index - 1]) {
-            if "=!<>:".contains(characters[index - 1]) { operates = true }
+            if "<>".contains(characters[index - 1]) { return true }
+            if "=!:".contains(characters[index - 1]) { operates = true }
             index -= 1
         }
         guard operates else { return false }

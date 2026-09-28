@@ -123,6 +123,9 @@ struct SpecificsTests {
             ("a key of 1", "WHERE ", "WHERE user_id = 1"),
             ("a camel-case key of 0", "fetch(", "fetch(userId: 0)"),
             ("a quoted key of 1", "{\"", "{\"id\": 1}"),
+            ("a threshold of 0", "HAVING count", "HAVING count(o.id) > 0"),
+            ("a threshold of 0 or more", "guard ", "guard a >= 0 else { return }"),
+            ("a bound below 1", "if n ", "if n < 1 {"),
             ("an amount", "let fee = ", "let fee = $0"),
             ("a share", "let cut = ", "let cut = 0%"),
         ])
