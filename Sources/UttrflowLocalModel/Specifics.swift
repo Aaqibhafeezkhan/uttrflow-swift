@@ -72,12 +72,41 @@ enum Specifics {
                 literal = "-" + literal
                 start -= 1
             }
-            guard conventionalNumbers.contains(literal), !isChosenValue(at: start, in: characters) else {
+            guard conventionalNumbers.contains(literal), isOperand(at: start, in: characters),
+                !isChosenValue(at: start, in: characters)
+            else {
                 return false
             }
             index = end
         }
         return true
+    }
+
+    /// The characters after which a number is an operand of code: an assignment, a bracket, a separator, an operator or a member.
+    static let operandOpeners: Set<Character> = [
+        "=", "(", "[", "{", ",", ":", ";", "+", "-", "*", "/", "%", "<", ">", "!", "&", "|", "?", ".", "$",
+    ]
+
+    /// The words after which a number is an operand of code or a query rather than an argument a command acts on.
+    static let operandKeywords: Set<String> = [
+        "return", "in", "case", "yield", "else", "then", "when", "and", "or", "not", "is", "of", "to", "step",
+        "limit", "offset", "select", "top",
+    ]
+
+    /// Whether the number at this offset is an operand of code, as in `= 0` or `return 1`, and not an argument a command acts on, as in `kill 1` or `HEAD~1`.
+    static func isOperand(at start: Int, in characters: [Character]) -> Bool {
+        var index = start
+        while index > 0, " \t\"'`".contains(characters[index - 1]) { index -= 1 }
+        guard index > 0 else { return false }
+        if operandOpeners.contains(characters[index - 1]) { return true }
+        var wordStart = index
+        while wordStart > 0, isAlphanumeric(characters[wordStart - 1]) || characters[wordStart - 1] == "_" {
+            wordStart -= 1
+        }
+        guard wordStart < index, wordStart == 0 || " \t".contains(characters[wordStart - 1]) else {
+            return false
+        }
+        return operandKeywords.contains(String(characters[wordStart..<index]).lowercased())
     }
 
     /// Whether the number at this offset is a threshold, as `> 0` is, or the value of a name whose last word says it is an id, as `id = 1` and `userId: 0` are and `ids[0]` is not.
