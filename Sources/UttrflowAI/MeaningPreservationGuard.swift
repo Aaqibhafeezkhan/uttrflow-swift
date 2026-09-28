@@ -611,6 +611,32 @@ public struct MeaningPreservationGuard: Sendable {
         word == other || inflections(of: word).contains(other) || inflections(of: other).contains(word)
     }
 
+    /// Whether two romanised Hindi words are one word in two forms: by `sameForm`, a verb and its stem ("aata" and "aa"), or two cases of one pronoun ("yah" and "is").
+    static func sameRomanisedForm(_ word: String, _ other: String) -> Bool {
+        if sameForm(word, other) { return true }
+        let (first, second) = (Romaniser.soundKey(word), Romaniser.soundKey(other))
+        if hindiForms(of: first).contains(second) || hindiForms(of: second).contains(first) { return true }
+        guard let pronoun = hindiPronouns[first] else { return false }
+        return hindiPronouns[second] == pronoun
+    }
+
+    /// The forms Hindi inflects a verb stem or a noun into, as sound keys: tense, aspect, person, gender and plural.
+    static func hindiForms(of stem: String) -> Set<String> {
+        guard !stem.isEmpty else { return [] }
+        let endings = [
+            "ta", "ti", "te", "na", "ne", "ni", "ya", "yi", "ye", "a", "i", "e", "o", "on", "kar",
+            "unga", "ungi", "enge", "oge", "ega", "egi", "iye",
+        ]
+        return Set(endings.map { Romaniser.soundKey(stem + $0) })
+    }
+
+    /// The cases of the Hindi demonstratives by sound key, to the one they are: "yah" is "is" before a postposition, "vah" is "us".
+    static let hindiPronouns: [String: String] = Dictionary(
+        uniqueKeysWithValues: [
+            ("yah", ["yah", "yeh", "ye", "is", "in", "ise", "inhe"]),
+            ("vah", ["vah", "woh", "wo", "us", "un", "use", "unhe"]),
+        ].flatMap { pronoun, cases in Set(cases.map(Romaniser.soundKey)).map { ($0, pronoun) } })
+
     /// The forms speech inflects a word into: plural, third person, past and progressive.
     static func inflections(of word: String) -> Set<String> {
         guard word.count >= 3 else { return [] }
@@ -768,7 +794,7 @@ public struct MeaningPreservationGuard: Sendable {
     }
 
     /// Digits people dictate as words, in English and Hindi; traps on first use if the tables share a word.
-    private static let numberWords: [String: String] = Dictionary(
+    static let numberWords: [String: String] = Dictionary(
         uniqueKeysWithValues: Array(englishNumberWords) + Array(hindiNumberWords))
 
     /// Hindi number words in both scripts, without which every Hindi utterance with a number fails the guard.
