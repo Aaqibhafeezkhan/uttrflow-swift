@@ -1,5 +1,6 @@
 // The guard's checks that a rewrite is written in Latin letters, romanises rather than translates, and is not a worked example.
 import UttrflowCore
+import UttrflowDictionary
 
 extension MeaningPreservationGuard {
     /// Above this share of words with no counterpart in the romanised draft, a rewrite of Devanagari is a translation.
@@ -26,6 +27,10 @@ extension MeaningPreservationGuard {
         guard Double(strangers) <= Double(written.count) * Self.mostStrangerWords else {
             return .rejected(
                 reason: "the rewrite translated the Hindi instead of romanising it", kind: .translated)
+        }
+        if let changed = Self.changedWord(said: Romaniser.romanised(draft), written: rewritten) {
+            return .rejected(
+                reason: "the rewrite changed '\(changed)' while romanising the Hindi", kind: .lostWord)
         }
         return .accepted
     }
