@@ -11,16 +11,6 @@ Each released version is a git tag and a build at
 
 ## [Unreleased]
 
-### Changed
-- **Uttrflow needs you to sign in before anything opens.** Without a session only the sign-in
-  window shows: the main window, Settings, the menu bar popover, the floating button, the
-  clipboard panel, suggestions and dictation all wait for it. Signing out, or a session that
-  has ended, closes them and returns to sign-in. A signed-in Mac still works offline.
-
-### Removed
-- **Working on this Mac without an account.** A Mac that used it is asked to sign in after
-  updating; its transcripts, dictionary and snippets stay where they are.
-
 ## [26.0926.0] — 2026-09-27
 
 The first release numbered `YY.MMDD.REVISION`. Nothing about updating changes: an installed
@@ -58,6 +48,10 @@ copy of 2026.9.14 is offered this release like any other.
   (#1810).
 
 ### Changed
+- **Uttrflow needs you to sign in before anything opens.** Without a session only the sign-in
+  window shows: the main window, Settings, the menu bar popover, the floating button, the
+  clipboard panel, suggestions and dictation all wait for it. Signing out, or a session that
+  has ended, closes them and returns to sign-in. A signed-in Mac still works offline.
 - **A new install dictates with ⌃⌥ held.** Hold Control and Option, talk, and let go. Installs
   that finished onboarding on an earlier build keep ⌥Space, and a shortcut already chosen in
   Settings is left as it is (#1986).
@@ -199,6 +193,10 @@ copy of 2026.9.14 is offered this release like any other.
   listed.** The six-rows-per-group cap no longer hides a match that typing more could not reach (#898).
 - **Copying one enormous decorated character no longer hangs clipboard history.** Text with tens
   of KB of combining marks or joined emoji in a single character is classified in milliseconds (#896).
+
+### Removed
+- **Working on this Mac without an account.** A Mac that used it is asked to sign in after
+  updating; its transcripts, dictionary and snippets stay where they are.
 
 ## [2026.9.14] — 2026-09-14
 
