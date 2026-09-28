@@ -466,8 +466,9 @@ struct GrammarGuardTests {
     @Test("rejects a rewrite that reworded too many small words in one sentence")
     func rejectsFunctionChurn() {
         #expect(
-            verdict("me and him went to the office", "He and I went towards an office.")
-                == .rejected(reason: "the rewrite changed 7 small words", kind: .smallWordChurn))
+            verdict(
+                "the cat and the dog and the fish", "A cat and a dog and the fish."
+            ) == .rejected(reason: "the rewrite changed 4 small words", kind: .smallWordChurn))
     }
 
     @Test("gives every sentence of a longer rewrite its own churn allowance")
@@ -1117,5 +1118,56 @@ struct AccentedDraftGuardTests {
         let devanagari = MeaningPreservationGuard.grammarTokens("नमस्ते")
         #expect(accented.count == 3 && accented.allSatisfy { $0.isPlain })
         #expect(!devanagari.isEmpty && !devanagari.contains { $0.isPlain })
+    }
+
+    /// A draft's pronoun, modal or directional preposition must be checked for survival like a content word.
+    @Test(
+        "rejects a rewrite that drops a meaning-bearing small word",
+        arguments: [
+            (
+                "i told him the plan yesterday", "Told him the plan yesterday.",
+                "a dropped pronoun subject is rejected"
+            ),
+            (
+                "they asked us to wait", "They asked to wait.",
+                "a dropped pronoun object is rejected"
+            ),
+            (
+                "you should call the doctor", "You call the doctor.",
+                "a dropped modal is rejected"
+            ),
+            (
+                "it might rain", "It rain.",
+                "a dropped modal is rejected"
+            ),
+            (
+                "we drove without the kids", "We drove the kids.",
+                "a dropped directional preposition is rejected"
+            ),
+            (
+                "send the money from john to mary", "Send the money john to mary.",
+                "a dropped 'from' is rejected"
+            ),
+            (
+                "send the money from john to mary", "Send the money from john mary.",
+                "a dropped 'to' is rejected"
+            ),
+            (
+                "they asked us to wait", "They asked we to wait.",
+                "a dropped pronoun object via swap is rejected"
+            ),
+            (
+                "i told him the plan yesterday", "She told him the plan yesterday.",
+                "a swapped pronoun subject is rejected"
+            ),
+        ]
+    )
+    func rejectsDroppedMeaningBearingSmallWord(
+        original: String, rewritten: String, hint: Comment
+    ) {
+        let draft = Draft(text: original)
+        #expect(
+            !sut.verdict(draft: draft, rewritten: rewritten).isAccepted,
+            hint)
     }
 }
