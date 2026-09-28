@@ -262,16 +262,6 @@ message at all (`SlowFields.isQuiet`). A click, an application switch, Tab, Esca
 shortcut may have moved focus, so each ends the quiet; the next read asks for the focus once,
 and a field that still rests quiets the application again for the rest of its rest.
 
-**What one keystroke costs the application.** A read of an ordinary field asks for the
-focused element (two messages, four where the system-wide answer is not a text field), the
-field's names in one batched message, its selection, its value around the caret (two), the
-type at the caret, any marked text, its frame (two) and the caret (one to five, and two more
-text-marker questions in web content): about a dozen messages. The window's element, frame
-and title and the field's document are five or six more. Typing does not change them, so
-they are kept for one second per field (`SteadyWindowAnswers`), and a burst of keys asks for
-them once a second rather than on every key. The field's names are never kept, because a
-field can turn secure without losing focus, and the secure test comes before every value read.
-
 ### One ghost, and only while it is true
 
 **There is one panel for the process** (`SuggestionPanelController.shared`), so a loop
