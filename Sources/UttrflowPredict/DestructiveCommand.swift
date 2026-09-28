@@ -280,9 +280,10 @@ public enum DestructiveCommand {
         "trino", "presto", "spark-sql", "hive", "beeline", "cqlsh", "impala-shell", "vsql", "redshift",
     ]
 
-    /// Whether a git clause throws work away for good: a forced, deleting, mirroring or pruning push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, or changes discarded by a checkout, switch or restore.
+    /// Whether a git clause throws work away for good: a forced, deleting, mirroring or pruning push, a hard reset, a forced clean, a forced branch deletion, a dropped stash, changes discarded by a checkout, switch or restore, or history rewritten or pruned.
     private static func matchesDestructiveGit(_ arguments: [String]) -> Bool {
         let head = subcommandIndex(arguments)
+        if let head, historyDestroyers.contains(arguments[head]) { return true }
         // The flags of the clause's own subcommand, so the same word as a message or path is not one.
         func flags(after subcommand: String) -> ArraySlice<String>? {
             guard let head, arguments[head] == subcommand else { return nil }
@@ -329,8 +330,22 @@ public enum DestructiveCommand {
         if let flags = flags(after: "restore"), !flags.contains("--staged") || flags.contains("--worktree") {
             return true
         }
+        if let flags = flags(after: "update-ref"), flags.contains("-d") || flags.contains("--delete") {
+            return true
+        }
+        if let flags = flags(after: "reflog"), flags.first == "expire" || flags.first == "delete" {
+            return true
+        }
+        if let flags = flags(after: "gc"),
+            flags.contains(where: { ["--prune=now", "--prune=all"].contains($0) })
+        {
+            return true
+        }
         return false
     }
+
+    /// Git subcommands that rewrite every commit or drop unreachable objects whatever their flags.
+    private static let historyDestroyers: Set<String> = ["filter-branch", "filter-repo", "prune"]
 
     /// Whether a cluster of short flags holds this one, read only up to the first flag whose value runs on in the same word.
     private static func shortFlags(

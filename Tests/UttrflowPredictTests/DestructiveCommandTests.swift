@@ -348,4 +348,32 @@ struct DestructiveCommandTests {
     func cloudReadsAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "A git command that rewrites history or deletes its recovery path is destructive.",
+        arguments: [
+            "git filter-branch --force --index-filter 'git rm --cached secret' HEAD",
+            "git filter-branch -f HEAD",
+            "git filter-repo --path secret --invert-paths", "git update-ref -d refs/heads/feature",
+            "git update-ref --delete refs/heads/feature", "git reflog expire --expire=now --all",
+            "git reflog delete HEAD@{1}", "git gc --prune=now", "git gc --aggressive --prune=all",
+            "git prune",
+            "git -C repo reflog expire --expire=now --all", "git -C repo filter-repo --invert-paths --path a",
+            "git -C repo gc --prune=now",
+        ])
+    func historyDestroyingGitIsDestructive(_ line: String) {
+        #expect(
+            DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A git command that only reads or tidies history is ordinary.",
+        arguments: [
+            "git gc", "git gc --aggressive", "git reflog", "git reflog show main",
+            "git update-ref refs/heads/x HEAD",
+            "git remote prune origin", "git worktree prune", "git log --grep filter-branch",
+        ])
+    func historyReadingGitIsOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
+    }
 }
