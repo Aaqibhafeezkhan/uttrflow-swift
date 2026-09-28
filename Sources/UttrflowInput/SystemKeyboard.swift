@@ -9,8 +9,15 @@ public final class SystemKeyboard: KeyboardEventSource {
     /// The sink the tap reads; internal so tests can see a restart forget the old tap's disables.
     let delivery = Delivery()
     private let running = Mutex<RunningTap?>(nil)
+    /// Builds the tap's port; `nil` is the real session tap, and tests pass a plain port.
+    private let makePort: (@Sendable (UnsafeMutableRawPointer, Bool) -> CFMachPort?)?
 
-    public init() {}
+    public init() { makePort = nil }
+
+    /// Takes the port maker, so a test can run the real tap thread without Accessibility.
+    init(makePort: @escaping @Sendable (UnsafeMutableRawPointer, Bool) -> CFMachPort?) {
+        self.makePort = makePort
+    }
 
     public func start(
         _ deliver: @escaping @Sendable (KeyStroke) -> Void,
@@ -19,7 +26,7 @@ public final class SystemKeyboard: KeyboardEventSource {
         stop()
         delivery.set(deliver)
         delivery.setConsumeKeyDown(consumeKeyDown)
-        guard let tap = RunningTap.create(delivery: delivery, consume: consumeKeyDown)
+        guard let tap = RunningTap.create(delivery: delivery, consume: consumeKeyDown, makePort: makePort)
         else { throw .refused }
         tap.run()
         running.withLock { $0 = tap }
@@ -277,8 +284,8 @@ final class RunningTap: @unchecked Sendable {
     }
 }
 
-/// The tap's callback, which reads an event into the domain and hands it on.
-private func systemKeyboardCallback(
+/// The tap's callback, which reads an event into the domain and hands it on; internal so tests can drive it.
+func systemKeyboardCallback(
     proxy: CGEventTapProxy, type: CGEventType, event: CGEvent, userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
     guard let userInfo else { return Unmanaged.passUnretained(event) }
