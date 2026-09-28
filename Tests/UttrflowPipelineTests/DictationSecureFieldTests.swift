@@ -221,7 +221,7 @@ struct DictationSecureFieldTests {
             recordings: recordings, clock: ManualClock(),
             windowing: SpeechWindowing(
                 minimumLength: 1, sentencePause: 0.3, comfortableLength: 2, anyPause: 0.2,
-                maximumLength: 5))
+                maximumLength: 5, minimumSpeech: 0.2))
 
         let state = await dictate(with: pipeline)
 
