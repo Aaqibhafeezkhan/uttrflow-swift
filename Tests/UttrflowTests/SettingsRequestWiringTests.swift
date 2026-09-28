@@ -410,6 +410,8 @@ struct SettingsCapabilityProbeTests {
 
         controller.refreshCapabilities()
         let first = try #require(controller.capabilityRefresh)
+        // The first probe queues before the second starts, so the gate holds them in start order.
+        while await gate.pending() < 1 { await Task.yield() }
         controller.refreshCapabilities()
         let second = try #require(controller.capabilityRefresh)
         while await gate.pending() < 2 { await Task.yield() }
