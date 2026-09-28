@@ -1,7 +1,5 @@
 // How long one read of the focused field may run, and how long a field that ran past it is left alone.
 
-import CoreGraphics
-
 private import Synchronization
 
 /// One read's allowance in all, counted on the uptime clock, since each message's own timeout only stops the waiting. See `Docs/predict.md`.
@@ -92,39 +90,5 @@ final class SlowFields: Sendable {
             state.rests[key] = nil
             state.quiet[key.process] = nil
         }
-    }
-}
-
-/// What a field's window says that typing does not change: the document, the window's frame and its title.
-struct WindowAnswers: Sendable, Equatable {
-    let document: String?
-    let frame: CGRect?
-    let title: String?
-}
-
-/// The last focused field's window answers, kept for a moment so a burst of keys asks its application for them once. See `Docs/predict.md`.
-final class SteadyWindowAnswers: Sendable {
-    /// How long answers are kept after they were asked for, short enough that a renamed window or a moved one is soon seen.
-    static let lifetimeInNanoseconds: UInt64 = 1_000_000_000
-
-    private struct Held {
-        let key: SlowFields.Key
-        let answers: WindowAnswers
-        let until: UInt64
-    }
-
-    private let held = Mutex<Held?>(nil)
-
-    /// The field's answers from the last read of it within the lifetime, else those `fetch` asks for, kept unless it gave up.
-    func answers(for key: SlowFields.Key, at now: UInt64, fetch: () -> WindowAnswers?) -> WindowAnswers? {
-        if let kept = held.withLock({ $0 }), kept.key == key, kept.until > now { return kept.answers }
-        guard let fresh = fetch() else { return nil }
-        held.withLock { $0 = Held(key: key, answers: fresh, until: now + Self.lifetimeInNanoseconds) }
-        return fresh
-    }
-
-    /// Drops what is kept, for a click, a switch or a key that may have moved focus or changed the window.
-    func forget() {
-        held.withLock { $0 = nil }
     }
 }

@@ -1,6 +1,5 @@
 // Tests that a field read stops at its budget and that a field that ran over is left alone for a while.
 
-import CoreGraphics
 import Testing
 
 @testable import UttrflowContext
@@ -125,46 +124,5 @@ struct SlowFieldsTests {
         slow.ranOver(field, at: second)
         slow.answered(other)
         #expect(!slow.isQuiet(field.process, at: second))
-    }
-}
-
-@Suite("A field's window answers kept through a burst of keys")
-struct SteadyWindowAnswersTests {
-    private static let answers = WindowAnswers(
-        document: "https://example.com/compose", frame: CGRect(x: 0, y: 0, width: 800, height: 600),
-        title: "Compose")
-
-    @Test("A steady burst of ten keys a second in one field asks for the window answers once a second")
-    func aBurstAsksOnce() {
-        let steady = SteadyWindowAnswers()
-        var asked = 0
-        for key in 0..<30 {
-            let now = second + UInt64(key) * second / 10
-            let found = steady.answers(for: field, at: now) {
-                asked += 1
-                return Self.answers
-            }
-            #expect(found == Self.answers)
-        }
-        #expect(asked == 3)
-    }
-
-    @Test("Another field, a forgotten answer or a read that gave up asks again")
-    func newFieldsAndGiveUpsAskAgain() {
-        let steady = SteadyWindowAnswers()
-        var asked = 0
-        let fetch = { () -> WindowAnswers? in
-            asked += 1
-            return Self.answers
-        }
-        _ = steady.answers(for: field, at: second, fetch: fetch)
-        _ = steady.answers(for: other, at: second, fetch: fetch)
-        #expect(asked == 2)
-        steady.forget()
-        _ = steady.answers(for: other, at: second, fetch: fetch)
-        #expect(asked == 3)
-        #expect(steady.answers(for: field, at: second) { nil } == nil)
-        _ = steady.answers(for: field, at: second, fetch: fetch)
-        #expect(asked == 4)
     }
 }

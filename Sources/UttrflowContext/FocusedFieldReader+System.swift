@@ -150,7 +150,6 @@ public enum FocusedFieldReader {
     /// Lets an application quieted by a resting field be asked again, for a click, a switch or a key that may move focus.
     public static func focusMayHaveMoved() {
         slowFields.focusMayHaveMoved()
-        windowAnswers.forget()
     }
 
     /// The same reading, synchronously, for the queue above and for the capability probe; the identity is read on main.
@@ -213,16 +212,17 @@ public enum FocusedFieldReader {
         // A combobox field says when its own list is open, one flag on the field itself.
         let ownList = SurfaceProbe.integer(field, "AXExpanded") == 1
         guard goOn() else { return nil }
-        let key = SlowFields.Key(process: app.processIdentifier, element: CFHash(field))
-        guard
-            let around = windowAnswers.answers(
-                for: key, at: DispatchTime.now().uptimeNanoseconds,
-                fetch: { windowAnswers(of: field, while: goOn) }),
-            goOn()
-        else { return nil }
+        let window = element(field, kAXWindowAttribute)
+        guard goOn() else { return nil }
+        let document = document(of: field, in: window)
+        guard goOn() else { return nil }
         let fieldRect = frame(of: field)
         guard goOn() else { return nil }
         let caretRect = caret(field, at: range, frame: fieldRect, pointSize: style?.size, while: goOn)
+        guard goOn() else { return nil }
+        let windowRect = window.flatMap { frame(of: $0) }
+        guard goOn() else { return nil }
+        let title = window.flatMap { SurfaceProbe.string($0, kAXTitleAttribute) }
         guard goOn() else { return nil }
         // An editor that draws its own text keeps an empty input at the caret, so its line is read off the rendered text.
         let hidden =
@@ -236,11 +236,11 @@ public enum FocusedFieldReader {
             identifier: identity.identifier,
             placeholder: identity.placeholder,
             accessibilityDescription: identity.description,
-            document: around.document,
+            document: document,
             value: secure ? nil : hidden.map { $0.before + $0.after } ?? value,
             selection: hidden.map { NSRange(location: $0.before.utf16.count, length: 0) } ?? read.selection,
             caret: (hidden?.caret ?? caretRect).map { flip($0, below: flipped) },
-            window: around.frame.map { flip($0, below: flipped) },
+            window: windowRect.map { flip($0, below: flipped) },
             field: (hidden?.line ?? fieldRect).flatMap {
                 FocusedFieldSnapshot.isCaretShaped($0) ? nil : flip($0, below: flipped)
             },
@@ -253,23 +253,8 @@ public enum FocusedFieldReader {
             markedText: marked,
             showsOwnList: ownList,
             readMicroseconds: Int((DispatchTime.now().uptimeNanoseconds - started) / 1000),
-            windowTitle: around.title
+            windowTitle: title
         )
-    }
-
-    /// The focused field's window answers, which a burst of keys in one field asks for once.
-    private static let windowAnswers = SteadyWindowAnswers()
-
-    /// The document, the window's frame and its title, asked of the application, or nothing once `goOn` says stop.
-    private static func windowAnswers(of field: AXUIElement, while goOn: () -> Bool) -> WindowAnswers? {
-        let window = element(field, kAXWindowAttribute)
-        guard goOn() else { return nil }
-        let document = document(of: field, in: window)
-        guard goOn() else { return nil }
-        let windowFrame = window.flatMap { frame(of: $0) }
-        guard goOn() else { return nil }
-        let title = window.flatMap { SurfaceProbe.string($0, kAXTitleAttribute) }
-        return WindowAnswers(document: document, frame: windowFrame, title: title)
     }
 
     /// The caret's line read off an editor's rendered text, for the empty caret-sized input such an editor keeps focused.
