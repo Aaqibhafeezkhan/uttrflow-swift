@@ -77,6 +77,16 @@ struct SuggestionUndoTests {
         #expect(try draw(&left, typing: "git c", candidates: exact)?.suggestion.accepting == "git commit -m")
     }
 
+    @Test("A taken line sent by a click or a send shortcut empties the field without counting as an undo.")
+    func sentWithoutReturnIsStillOffered() throws {
+        var session = try taking(exact, over: "git c")
+        session.invalidate()
+        _ = try draw(&session, typing: "", candidates: [])
+        #expect(session.undoneHere.isEmpty)
+        #expect(
+            try draw(&session, typing: "git c", candidates: exact)?.suggestion.accepting == "git commit -m")
+    }
+
     @Test("Only the undone line is silenced, so another line in the same field is still offered.")
     func onlyTheUndoneLineIsSilenced() throws {
         var session = try taking(exact, over: "git c")

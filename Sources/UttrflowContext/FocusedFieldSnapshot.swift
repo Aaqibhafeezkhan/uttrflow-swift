@@ -44,6 +44,8 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
     public let isComposing: Bool
     /// What the field itself says about an input method's marked text, before any guess from the input source.
     public let markedText: MarkedText
+    /// Whether the field says its own list of choices is open, as an expanded combobox does, whose keys belong to that list.
+    public let showsOwnList: Bool
     /// How long the whole reading took, in microseconds.
     public let readMicroseconds: Int
     /// The title of the window holding the field, which names the conversation, the note or the thread the field belongs to.
@@ -73,6 +75,7 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
         isSecure: Bool = false,
         isComposing: Bool = false,
         markedText: MarkedText = .unanswered,
+        showsOwnList: Bool = false,
         readMicroseconds: Int = 0,
         windowTitle: String? = nil
     ) {
@@ -95,6 +98,7 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
         self.isSecure = isSecure
         self.isComposing = isComposing
         self.markedText = markedText
+        self.showsOwnList = showsOwnList
         self.readMicroseconds = readMicroseconds
         self.windowTitle = windowTitle
         let prose = role == Self.proseRole && !TerminalApplications.contains(bundleIdentifier)

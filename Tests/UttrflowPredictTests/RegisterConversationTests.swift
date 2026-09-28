@@ -161,6 +161,29 @@ struct RegisterConversationTests {
         #expect(Register.speaker(of: "\(label.uppercased()): value") == nil)
     }
 
+    @Test(
+        "A label headed by a field's word is a field, not a speaker.",
+        arguments: [
+            "Expected result", "Actual result", "Expected behavior", "Actual behavior", "Steps to reproduce",
+            "Due date", "Start date", "Assigned to", "Reported by", "Created at",
+        ])
+    func multiWordFieldLabelsAreNotSpeakers(label: String) {
+        #expect(Register.speaker(of: "\(label): value") == nil)
+    }
+
+    @Test("A bug report template repeated twice reads as a record, not two speakers taking turns.")
+    func bugReportTemplateIsNotAConversation() {
+        let report = [
+            "Expected result: the list scrolls", "Actual result: it jumps to the top",
+            "Expected result: the badge clears", "Actual result: it stays",
+        ]
+        #expect(!Register.isConversation(report))
+        #expect(
+            Register.isConversation([
+                "Priya: on my way", "Neha (PM): confirmed", "Priya: see you", "Neha (PM): ok",
+            ]))
+    }
+
     @Test("A time of day is one or two digits, a colon and two digits, wherever it sits in the line.")
     func clockTimesAreFound() {
         #expect(Register.showsClockTime("10:31 AM"))

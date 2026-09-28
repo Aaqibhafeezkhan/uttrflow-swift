@@ -32,10 +32,15 @@ enum HiddenInputLine {
     /// How far apart two edges may be and still meet, in points.
     static let tolerance: CGFloat = 3
 
-    /// Whether a focused field is the empty, caret-sized input an editor that draws its own text keeps focused.
-    static func isStub(value: String?, frame: CGRect?) -> Bool {
+    /// The tallest a wide text area may be and still be an editor's hidden input: one bare line of type, with no padding.
+    static let wideStubHeight: CGFloat = 18
+
+    /// Whether a focused field is the empty input an editor that draws its own text keeps at the caret: caret-sized, or a bare one-line text area.
+    static func isStub(value: String?, frame: CGRect?, role: String? = nil) -> Bool {
         guard let frame, (value ?? "").isEmpty else { return false }
-        return frame.width <= stubWidth && frame.height <= stubHeight
+        if frame.width <= stubWidth { return frame.height <= stubHeight }
+        // WebKit gets an editor's hidden text area widened to keep pasting fast, so there its bare line height is the tell.
+        return role == "AXTextArea" && frame.height > 0 && frame.height <= wideStubHeight
     }
 
     /// The caret's line around an input stub at `stub`, or nothing when no rendered line sits where the stub is.
@@ -81,7 +86,12 @@ enum HiddenInputLine {
                     guard let bounds, bounds.height < frame.height * 1.8 else { break }
                     container = ancestor
                 }
-                if let index = rows.firstIndex(where: { $0.container == container }) {
+                // WebKit lays a line's runs straight into the tall editor, so there they share a row by their parent and their band.
+                let flat = container == element
+                if flat, let parent = here.dropLast().last?.0 { container = parent }
+                if let index = rows.firstIndex(where: {
+                    $0.container == container && (!flat || sharesBand($0.row.frame, frame))
+                }) {
                     rows[index].row.runs.append((text, frame))
                 } else {
                     rows.append((container, Row(runs: [(text, frame)])))
@@ -92,6 +102,11 @@ enum HiddenInputLine {
             for child in tree.children(of: element).reversed() { stack.append((child, here)) }
         }
         return rows.map(\.row)
+    }
+
+    /// Whether a run sits on the same line as a row, its top and height alike.
+    static func sharesBand(_ row: CGRect, _ run: CGRect) -> Bool {
+        abs(row.minY - run.minY) <= tolerance && abs(row.height - run.height) <= tolerance
     }
 
     /// The row the stub is parked on, split at the stub, or nothing when none lines up with it.

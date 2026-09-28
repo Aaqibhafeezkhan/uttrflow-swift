@@ -441,6 +441,8 @@ public struct SuggestionSession: Sendable, Equatable {
         // The read that shows the taken line in place is still inside the watch.
         guard line != whole else { return }
         self.taken = nil
+        // A field emptied after a take was sent by a button or shortcut the tap never sees, which is not an undo.
+        guard !line.isEmpty else { return }
         // A fuzzy line rewrote what was typed, so its undo lands on the typo rather than inside the line.
         if whole.hasScalarPrefix(line) || taken.over.lowercased().hasScalarPrefix(line) {
             undoneHere.insert(whole)
@@ -455,7 +457,7 @@ public struct SuggestionSession: Sendable, Equatable {
             millisecondsSinceKeystroke: moment.millisecondsSinceKeystroke,
             isEnabledHere: isEnabled && !isSilencedHere, isMinimised: isMinimised,
             rejectionsThisSession: rejectionsHere, canDraw: moment.canDraw, markedText: moment.markedText,
-            isCommandLine: moment.isCommandLine)
+            isCommandLine: moment.isCommandLine, showsOwnList: moment.showsOwnList)
     }
 
     /// Records what is now on screen and reports it with the keys it claims and, when nothing is offered, why.

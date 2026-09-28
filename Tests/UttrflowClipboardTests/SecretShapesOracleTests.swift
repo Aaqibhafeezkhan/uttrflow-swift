@@ -336,7 +336,8 @@ enum BacktrackingPatterns {
     /// `SecretShapes.matches` as it read before the readers, with the unchanged rules borrowed from it.
     static func matches(_ text: String) -> Bool {
         text.contains("-----BEGIN") || hasJSONWebToken(text) || hasCredentialledURL(text)
-            || SecretShapes.hasBearerURL(text)
+            || SecretShapes.hasBearerURL(text) || SecretShapes.hasTokenUserinfoURL(text)
+            || SecretShapes.hasCommandCredential(text)
             || text.firstMatch(of: SecretShapes.vendorKey) != nil || hasNamedSecret(text)
             || hasCardNumber(text)
             || SecretShapes.hasHighEntropyToken(text)
