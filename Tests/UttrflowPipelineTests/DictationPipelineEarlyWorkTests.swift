@@ -297,7 +297,8 @@ private enum Take {
 
 /// Windows short enough for a test recording to have several.
 private let quick = SpeechWindowing(
-    minimumLength: 1, sentencePause: 0.3, comfortableLength: 2, anyPause: 0.2, maximumLength: 5)
+    minimumLength: 1, sentencePause: 0.3, comfortableLength: 2, anyPause: 0.2, maximumLength: 5,
+    minimumSpeech: 0.2)
 
 extension DictationState {
     fileprivate var outcome: DictationOutcome? {
