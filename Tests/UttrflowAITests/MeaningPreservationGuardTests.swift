@@ -340,8 +340,7 @@ struct GrammarGuardTests {
         ]
     )
     func rejectsDroppedNegation(kept: String, rewritten: String) {
-        // The negation is gone; the rejected reason may be `.negationDropped` or `.lostWord`
-        // if another check (a tense-change in "want" → "wants") fires first.
+        // The rejected reason may be `.negationDropped` or `.lostWord` if another check fires first.
         let v = verdict(kept, rewritten)
         #expect(!v.isAccepted)
     }
