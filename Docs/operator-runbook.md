@@ -131,7 +131,7 @@ and this repository is public:
 ./Scripts/fetch-provider-marks.sh
 ```
 
-That places Google's four-colour G at `Sources/Uttrflow/Resources/GoogleMark.png`, which
+That places Google's four-colour G at `Sources/Uttrflow/Resources/GoogleG.png`, which
 `.gitignore` keeps out of the repository. Shipping the mark inside an app that implements
 Google Sign-In is what Google publishes it for; redistributing it in public source is a
 different act, and not one the asset terms clearly allow.

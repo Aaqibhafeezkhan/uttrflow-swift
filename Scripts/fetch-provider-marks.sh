@@ -20,15 +20,19 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$ROOT/Sources/Uttrflow/Resources"
-GOOGLE_MARK="$DEST/GoogleMark.png"
+GOOGLE_MARK="$DEST/GoogleG.png"
+# The boxed tile an older fetch saved; the app no longer reads it.
+STALE_MARK="$DEST/GoogleMark.png"
 
 GOOGLE_ASSETS="https://developers.google.com/static/identity/images/signin-assets.zip"
 GITHUB_ASSETS="https://brand.github.com/GitHub_Logos.zip"
 
 note() { printf '  %s\n' "$*"; }
 
+rm -f "$STALE_MARK"
+
 if [[ -f "$GOOGLE_MARK" ]]; then
-    note "GoogleMark.png is already here; nothing to fetch."
+    note "GoogleG.png is already here; nothing to fetch."
     exit 0
 fi
 
@@ -60,8 +64,14 @@ if [[ -z "$MARK" ]]; then
 fi
 
 mkdir -p "$DEST"
-cp "$MARK" "$GOOGLE_MARK"
-note "saved $(basename "$MARK") -> Sources/Uttrflow/Resources/GoogleMark.png"
+DARK="$("$ROOT/Scripts/select-google-mark.sh" "$TMP/google" Dark)"
+# A light and a dark tile of one mark lift the bare G off its tile; a pack with a bare G is copied.
+if [[ "$MARK" == *"Theme=Light"* && "$DARK" == *"Theme=Dark"* ]]; then
+    swift "$ROOT/Scripts/lift-google-mark.swift" "$MARK" "$DARK" "$GOOGLE_MARK"
+else
+    cp "$MARK" "$GOOGLE_MARK"
+fi
+note "saved $(basename "$MARK") -> Sources/Uttrflow/Resources/GoogleG.png"
 
 printf '\nGitHub'"'"'s Invertocat is not fetched automatically.\n'
 note "Its pack is a designed set rather than a predictable archive: $GITHUB_ASSETS"
