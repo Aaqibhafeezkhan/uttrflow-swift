@@ -79,7 +79,7 @@ struct OnboardingProviderMark: View {
     let size: CGFloat
 
     var body: some View {
-        if provider == .google, let mark = Bundle.module.image(forResource: "GoogleMark") {
+        if provider == .google, let mark = Bundle.module.image(forResource: "GoogleG") {
             Image(nsImage: mark)
                 .resizable()
                 .interpolation(.high)

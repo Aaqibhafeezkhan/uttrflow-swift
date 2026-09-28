@@ -188,7 +188,7 @@ struct AccountFactGlyph: View {
 
     var body: some View {
         if kind == .signIn, providerID == .google,
-            let mark = Bundle.module.image(forResource: "GoogleMark")
+            let mark = Bundle.module.image(forResource: "GoogleG")
         {
             Image(nsImage: mark)
                 .resizable()
