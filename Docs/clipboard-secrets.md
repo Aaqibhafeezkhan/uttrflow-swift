@@ -84,6 +84,14 @@ A URL whose userinfo is one generated token with no colon (`https://<40 hex>@hos
 masked too, by the statistical rule below applied to the userinfo; `https://readonly@host`
 stays a link.
 
+### Lines learned before the rules widened
+
+The suggestion corpus may already hold a line a newer rule recognises. At launch
+`CaptureGate.sweepSecrets` asks `PredictStore.sweep` to delete every stored line, every
+retirement pointing at one, and every succession naming one that `SecretShapes.matches` now
+recognises. The corpus records the version it was swept with in its `sweep` table, so the pass
+runs once per `CaptureGate.secretRulesVersion`; raise that constant whenever a shape is added.
+
 ## Reading in linear time
 
 Every copy is read for a credential inside the pasteboard watcher's loop, before the next copy

@@ -55,6 +55,13 @@ enum Schema {
           PRIMARY KEY (surface_id, previous, next)
         )
         """,
+        // The version of each refusal rule the stored lines were last swept with.
+        """
+        CREATE TABLE IF NOT EXISTS sweep (
+          name    TEXT PRIMARY KEY,
+          version INTEGER NOT NULL
+        )
+        """,
     ]
 
     /// Brings an open database up to ``version``, creating it if it is empty.
