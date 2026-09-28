@@ -87,10 +87,30 @@ named, a remembered line may teach the model this person's voice but may never b
 line itself. Fixtures for it: a corpus holding another thread's lines, where the right answer uses
 none of them.
 
-**P6 — Say how sure it is.** The 32 wrong lines that remain are prose: notes at 89.8 % precision
+**P6 — Say how sure it is. Done.** The 32 wrong lines that remain are prose: notes at 89.8 % precision
 is now the worst category, and no list can vouch for a sentence. The scorer already reads a line's likelihood; a generated line is
 drawn today without ever being scored. Scoring it and drawing only what clears a floor turns
-precision into a dial rather than an argument. Measured last, because it costs a second pass.
+precision into a dial rather than an argument.
+
+A generated line is now scored in context before any is drawn, and a line below a set floor is
+not drawn. A line that is drawn as `.certain` has cleared a stricter floor than a line offered
+in a `.choice`. The two floors live in `Verification`:
+
+| Floor | Value | What clears it |
+|---|---|---|
+| `choiceFloor` | −6.0 | a line offered as one of several in a `.choice` |
+| `certainFloor` | −3.0 | the leader drawn alone as `.certain` |
+
+The gap between real and nonsense scores in [`Docs/predict.md`](predict.md) is [−9.15, −4.65]
+on gemma-3-4b-it-qat-4bit: the weakest real line scored −4.65 (`git c` → `git checkout main`)
+and the nearest nonsense −9.15 (`ls --zzqx-bogus`). `choiceFloor` at −6.0 is the established
+plausibility floor; `certainFloor` at −3.0 sits 1.65 above the weakest measured real line and
+rules out every score between −6.0 and −3.0 that was being drawn `.certain` today. Precision
+and coverage at the two floors are recorded by `uttrflow-bakeoff complete --fixtures` once
+the runner's scoring gate is wired into the fixture harness in a follow-up; until then, the
+unit tests in `SuggestionScoringTests` pin the contract — a single line below `certainFloor`
+leaves the turn quiet, the same line below `choiceFloor` with an alternative that clears the
+choice floor becomes a `.choice`, and all lines below the choice floor quiet the turn.
 
 **P7 — A generated line keeps to this person's shape. Done, not yet measured.** Both models'
 lines pass through `CompletionText.finished`, so the rules hold on either path. Prose — a reply
