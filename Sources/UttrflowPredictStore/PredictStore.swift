@@ -493,6 +493,41 @@ public actor PredictStore: PredictionStore {
         leaveNothingBehind()
     }
 
+    /// Removes every stored line `refuses` matches, once for each new `version` of the rule called `name`, and counts the lines removed.
+    @discardableResult
+    public func sweep(
+        _ name: String, version: Int, removing refuses: @Sendable (String) -> Bool
+    ) throws(PredictStoreError) -> Int {
+        let swept = try database.rows("SELECT version FROM sweep WHERE name = ?", { $0.bind(1, name) }) {
+            $0.integer(0)
+        }
+        if let swept = swept.first, swept >= version { return 0 }
+        var removed = 0
+        try database.transaction { () throws(PredictStoreError) in
+            let entries = try database.rows("SELECT id, text, superseded_by FROM entry", { _ in }) {
+                (Int64($0.integer(0)), $0.text(1), $0.optionalText(2))
+            }
+            for (id, text, replacement) in entries where refuses(text) || replacement.map(refuses) == true {
+                try database.run("DELETE FROM entry WHERE id = ?") { $0.bind(1, id) }
+                removed += 1
+            }
+            let successions = try database.rows("SELECT rowid, previous, next FROM succession", { _ in }) {
+                (Int64($0.integer(0)), $0.text(1), $0.text(2))
+            }
+            for (row, previous, next) in successions where refuses(previous) || refuses(next) {
+                try database.run("DELETE FROM succession WHERE rowid = ?") { $0.bind(1, row) }
+            }
+            try database.run(
+                "INSERT INTO sweep (name, version) VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET version = excluded.version",
+                {
+                    $0.bind(1, name)
+                    $0.bind(2, Int64(version))
+                })
+        }
+        if removed > 0 { leaveNothingBehind() }
+        return removed
+    }
+
     /// Empties the write-ahead log when no reader holds it, and reports whether it did; the delete has already committed either way.
     @discardableResult
     private func leaveNothingBehind() -> Bool {
