@@ -81,7 +81,7 @@ evidence there. A bakeoff of framings is still owed; the rule above is the defau
 ## The sentence around the words is the surprise
 
 The words are offered inside `" The words used here are …"` (`VocabularyPrompt.opening`), closed
-with `"."` (`closing`), and that framing is not decoration: it is the single most surprising thing
+with `". and the rest of what was said is in the usual lower case."` (`closing`), and that framing is not decoration: it is the single most surprising thing
 measured here.
 
 | Prompt                                 | What the decoder heard |
@@ -93,6 +93,13 @@ The sentence worked with three words in the list and again with fourteen. Whispe
 trained as the *transcript that came before*, so text shaped like a transcript is what it
 knows how to condition on; a glossary is not. It is closed with a full stop for the same
 reason it is opened like a sentence.
+
+The closing sentence is in lower case on purpose. A prompt that ends on a run of capitalised
+names is continued as one: with about thirty listed names the decoder wrote "The KPLR Report"
+where the same clip unprompted gave "The KPLR report" (23 capitalised common words against 3
+over the 60 term clips). Ending the prompt on ordinary lower-case prose cut that to 8 with the
+term hit rate unchanged (42/60 against 43/60); no closing tried reached the unprompted 3. The
+closing sentence takes a few tokens of the 111 from the words.
 
 ## The words are spaced, not punctuated
 
