@@ -2422,7 +2422,6 @@
     "UttrflowDictionary func key": 1,
     "UttrflowDictionary func keys": 1,
     "UttrflowDictionary func learn": 1,
-    "UttrflowDictionary func learnEdit": 1,
     "UttrflowDictionary func merge": 1,
     "UttrflowDictionary func preferred": 1,
     "UttrflowDictionary func project": 2,
@@ -5801,7 +5800,6 @@
     "UttrflowUX let uid": 1,
     "UttrflowUX let unavailability": 2,
     "UttrflowUX let unavailableReason": 1,
-    "UttrflowUX let unconditionedRun": 1,
     "UttrflowUX let underlinesGhost": 1,
     "UttrflowUX let undo": 2,
     "UttrflowUX let undoAnnouncement": 1,
@@ -6198,5 +6196,5 @@
     "UttrflowUX var weeks": 1,
     "UttrflowUX var words": 2
   },
-  "total": 8809
+  "total": 8807
 }
