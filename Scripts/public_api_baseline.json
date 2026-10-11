@@ -1745,6 +1745,7 @@
     "UttrflowCore let isMultiline": 1,
     "UttrflowCore let isOnByDefault": 1,
     "UttrflowCore let isOnCaretLine": 1,
+    "UttrflowCore let isSecret": 1,
     "UttrflowCore let isSecure": 1,
     "UttrflowCore let json": 1,
     "UttrflowCore let keepAlwaysDays": 1,
@@ -5625,7 +5626,7 @@
     "UttrflowUX let isReading": 2,
     "UttrflowUX let isReady": 1,
     "UttrflowUX let isRetired": 1,
-    "UttrflowUX let isSecret": 2,
+    "UttrflowUX let isSecret": 5,
     "UttrflowUX let isSelected": 4,
     "UttrflowUX let isShifted": 1,
     "UttrflowUX let isSuggesting": 1,
@@ -5772,6 +5773,7 @@
     "UttrflowUX let retentionNotice": 1,
     "UttrflowUX let retry": 1,
     "UttrflowUX let retrying": 1,
+    "UttrflowUX let revealed": 1,
     "UttrflowUX let rowExplanation": 1,
     "UttrflowUX let rowHint": 1,
     "UttrflowUX let rowLabel": 1,
@@ -5789,6 +5791,7 @@
     "UttrflowUX let search": 2,
     "UttrflowUX let searchPlaceholder": 7,
     "UttrflowUX let secondaryLine": 1,
+    "UttrflowUX let secretPhrases": 2,
     "UttrflowUX let section": 1,
     "UttrflowUX let seeAll": 1,
     "UttrflowUX let segmentReliability": 1,
@@ -6248,6 +6251,7 @@
     "UttrflowUX var salutation": 1,
     "UttrflowUX var scope": 1,
     "UttrflowUX var screenTextUnavailable": 1,
+    "UttrflowUX var secretPhrases": 1,
     "UttrflowUX var selected": 1,
     "UttrflowUX var selectedRow": 1,
     "UttrflowUX var selection": 1,
@@ -6294,5 +6298,5 @@
     "UttrflowUX var weeks": 1,
     "UttrflowUX var words": 2
   },
-  "total": 8936
+  "total": 8944
 }
