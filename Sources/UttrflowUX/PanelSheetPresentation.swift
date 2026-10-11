@@ -1,6 +1,7 @@
 // The sheet over the panel's list, ready to draw, and the presenter that words each kind.
 import Foundation
 public import UttrflowClipboard
+import UttrflowCore
 
 /// One collection offered in the move popover, with its count so two similar names can be told apart.
 public struct PanelCollectionOption: Sendable, Equatable, Identifiable {
@@ -35,6 +36,7 @@ public struct PanelSheetPresentation: Sendable, Equatable {
         case formatting
         case reindenting
         case editing
+        case confirmingPaste
     }
 
     /// Which sheet this is.
@@ -46,7 +48,9 @@ public struct PanelSheetPresentation: Sendable, Equatable {
     public var takesTyping: Bool {
         switch kind {
         case .aliasing, .moving, .renamingCategory, .editing: true
-        case .confirmingDelete, .confirmingMakeNote, .deletingCategory, .formatting, .reindenting: false
+        case .confirmingDelete, .confirmingMakeNote, .deletingCategory, .formatting, .reindenting,
+            .confirmingPaste:
+            false
         }
     }
     /// What the field holds, exactly as typed, never the corrected form.
@@ -232,6 +236,18 @@ extension PanelPresenter {
                 conflict: nil,
                 collections: [],
                 confirmTitle: "Make note",
+                isConfirmEnabled: true)
+
+        case .confirmingPaste(_, _, let reason):
+            return PanelSheetPresentation(
+                kind: .confirmingPaste,
+                title: reason.title,
+                draft: "",
+                placeholder: "",
+                note: reason.note,
+                conflict: nil,
+                collections: [],
+                confirmTitle: "Paste",
                 isConfirmEnabled: true)
 
         case .confirmingDelete:

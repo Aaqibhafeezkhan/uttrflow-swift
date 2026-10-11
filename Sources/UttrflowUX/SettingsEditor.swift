@@ -103,7 +103,7 @@ public enum SettingsEditor {
         case .checkForUpdatesNow, .chooseApplicationToTurnOffSuggestions, .chooseApplicationForDestination,
             .chooseApplicationForContextLevel, .retrySuggestionModel, .exportPersonalData,
             .importPersonalData, .manageClipboardExclusions,
-            .pauseClipboardCapture, .openSystemSettings, .openPage:
+            .pauseClipboardCapture, .confirmMultilinePaste, .openSystemSettings, .openPage:
             // Named rather than left to a `default`, which would swallow the next case added.
             break
         }
@@ -139,6 +139,7 @@ public enum SettingsEditor {
         case .suggestionsEnabled: settings.suggestions.isEnabled = isOn
         case .quietSuggestions: settings.suggestions.isQuiet = isOn
         case .learnsFromDictation: settings.learnsFromDictation = isOn
+        case .confirmsHiddenClipPaste: settings.confirmsHiddenClipPaste = isOn
         }
     }
 
@@ -178,7 +179,7 @@ public enum SettingsEditor {
             capabilities.canCheckForUpdates
                 ? nil
                 : "This build has no update feed, so there is nothing to check."
-        case .suggestionsEnabled, .sendsCrashReports, .learnsFromDictation:
+        case .suggestionsEnabled, .sendsCrashReports, .learnsFromDictation, .confirmsHiddenClipPaste:
             nil
         case .quietSuggestions:
             settings.suggestions.isEnabled ? nil : suggestionsAreOff
