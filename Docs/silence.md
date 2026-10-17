@@ -72,11 +72,19 @@ The second test is bounded by the speaking level on purpose. It cannot tell a st
 steady hiss, and getting that wrong in one direction costs a dictation while the other costs a
 stray line, so anything at a speaking level is kept whatever its shape.
 
-The same pass returns *where* the speech is: from the first to the last run of at least
-`minimumSpeech` above the threshold, with `margin` either side so no onset is clipped. Only that
+The same pass returns *where* the speech is: from the first to the last stretch of speech
+above the threshold, with `margin` either side so no onset is clipped. Only that
 span is transcribed, and segment timings are shifted back by the trimmed lead-in so they still
 describe the recording the user made. A loud, modulated recording with no run long enough to
 point at is kept whole.
+
+A word is not always `minimumSpeech` long: "put", "set", "book" and "a" are shorter, and a run that
+short is a click on its own. So the trim joins runs that are no more than `margin` of quiet apart
+into one stretch of speech, and the stretch counts when any run in it is a word. A short first or
+last word within `margin` of the next one is kept; one with more quiet than that around it is still
+a click. Before the join, the first word of a phrase of short words ("put the keys back") sat more than
+`margin` from the first long run and was cut off, and the recogniser wrote "the keys back".
+[speech-engines.md](speech-engines.md#short-words-at-the-head-of-a-phrase) has the measurement.
 
 The loudness a frame must reach is one expression, `VoiceActivity.threshold(forFloor:)`, and both
 readers of it (the trim here and the pause `SpeechWindowing` cuts a piece at) ask it rather than

@@ -826,6 +826,86 @@ struct NumberFormsPassTests {
         #expect(output.filter(\.isNumber) == "8005550199")
     }
 
+    /// After a label word the digits run together; a scale then a string of single digits is the scale and the digits.
+    @Test(
+        "keeps the two zeros of a toll-free prefix after a label word",
+        arguments: [
+            (
+                "the toll free line is one eight hundred nine nine nine eight eight eight seven",
+                "the toll free line is 18009998887"
+            ),
+            (
+                "the number is one eight hundred five five five oh one two three",
+                "the number is 18005550123"
+            ),
+            ("the number is one eight hundred five five five one two one two", "the number is 18005551212"),
+            ("the number is two hundred five five five", "the number is 200555"),
+            ("my room number is three oh four", "my room number is 304"),
+        ]
+    )
+    func tollFreeAfterLabel(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test(
+        "writes a decimal with no whole part before a scale word as a fraction of that scale",
+        arguments: [
+            ("point five million", "0.5 million"),
+            ("it grew by point five million users", "it grew by 0.5 million users"),
+            ("about point two five billion people", "about 0.25 billion people"),
+            ("point seven five thousand", "0.75 thousand"),
+            ("zero point five million", "0.5 million"),
+            ("five million", "5,000,000"),
+        ]
+    )
+    func decimalBeforeScale(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test(
+        "keeps the words plus or minus and writes only the number after them",
+        arguments: [
+            ("plus or minus two percent", "plus or minus 2%"),
+            ("within plus or minus ten", "within plus or minus 10"),
+            ("a margin of plus or minus twelve", "a margin of plus or minus 12"),
+            ("it dropped to minus fourteen", "it dropped to -14"),
+            ("minus twelve point five degrees", "-12.5 degrees"),
+        ]
+    )
+    func plusOrMinus(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test(
+        "writes a plural decade or century said as two number words as one year ending in s",
+        arguments: [
+            ("the nineteen hundreds", "the 1900s"),
+            ("the twenty tens", "the 2010s"),
+            ("in the nineteen tens and twenties", "in the 1910s and twenties"),
+            ("the nineteen eighties", "the 1980s"),
+            ("the twenty twenties", "the 2020s"),
+        ]
+    )
+    func pluralDecades(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test(
+        "writes a code or status number said in two halves as one number, not a clock time",
+        arguments: [
+            ("exit code one twenty seven", "exit code 127"),
+            ("error code one twenty seven", "error code 127"),
+            ("return code two fifty five", "return code 255"),
+            ("exit status one twenty eight", "exit status 128"),
+            ("exit code two thirty", "exit code 230"),
+            ("route one twenty eight", "route 128"),
+            ("the meeting is at one twenty seven", "the meeting is at 1:27"),
+        ]
+    )
+    func codeNumbersAreNotClockTimes(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
     @Test("keeps the unit in a cardinal before a currency")
     func scaleCardinalBeforeCurrency() {
         #expect(cleaned("eight hundred five dollars", by: sut) == "805 dollars")
@@ -1306,6 +1386,24 @@ struct NumberWordsTests {
     }
 
     @Test(
+        "leaves a scale word as said when a numeral already counts it, rather than adding its value beside the numeral",
+        arguments: [
+            ("mujhe 5 hazaar rupaye chahiye", "mujhe 5 hazaar rupaye chahiye"),
+            ("ye 3 lakh rupaye ka hai", "ye 3 lakh rupaye ka hai"),
+            ("mere 3 sau rupaye hain", "mere 3 sau rupaye hain"),
+            ("total 3 crore rupaye hai", "total 3 crore rupaye hai"),
+            ("bill 2.5 lakh rupaye hai", "bill 2.5 lakh rupaye hai"),
+            ("it is 4 crore rupees", "it is 4 crore rupees"),
+            ("is 12 lakh rupees", "is 12 lakh rupees"),
+            ("5 do hazaar rupaye", "5 2,000 rupaye"),
+            ("mujhe hazaar rupaye chahiye", "mujhe 1,000 rupaye chahiye"),
+        ]
+    )
+    func scaleWordAfterANumeral(input: String, expected: String) {
+        #expect(cleaned(input, by: NumberFormsPass()) == expected)
+    }
+
+    @Test(
         "keeps a Hindi number word before a unit English shares when the sentence around it is English",
         arguments: [
             ("it costs about sau rupees each", "it costs about sau rupees each"),
@@ -1317,6 +1415,20 @@ struct NumberWordsTests {
         ]
     )
     func hindiNumberInAnEnglishSentence(input: String, expected: String) {
+        #expect(cleaned(input, by: NumberFormsPass()) == expected)
+    }
+
+    @Test(
+        "keeps the words when a Hindi number before baje is larger than any clock shows",
+        arguments: [
+            ("kal subah saath baje utna hai", "kal subah saath baje utna hai"),
+            ("pachaas baje", "pachaas baje"),
+            ("mujhe saath baje uthna hai", "mujhe saath baje uthna hai"),
+            ("saat baje uthna hai", "7 baje uthna hai"),
+            ("chaubees baje tak", "24 baje tak"),
+        ]
+    )
+    func hindiClockPastTwentyFour(input: String, expected: String) {
         #expect(cleaned(input, by: NumberFormsPass()) == expected)
     }
 

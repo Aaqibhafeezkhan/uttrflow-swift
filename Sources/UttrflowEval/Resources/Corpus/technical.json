@@ -1428,5 +1428,83 @@
     "expected": "We hash passwords with SHA 256 and encrypt the file with AES 128.",
     "mustKeep": ["256", "128"],
     "addedFor": 8011
+  },
+  {
+    "id": "dev-mark-names-listed-in-a-sentence",
+    "note": "punctuation marks named in a sentence about them stay words when they are listed with and",
+    "spoken": "the ternary operator uses question mark and colon and the statement ends with a semicolon",
+    "expected": "The ternary operator uses question mark and colon and the statement ends with a semicolon.",
+    "mustKeep": ["question mark", "colon", "semicolon"],
+    "addedFor": 8012
+  },
+  {
+    "id": "shell-option-said-as-one-word-tar",
+    "note": "a short option said as one word of three letters keeps its dash at a command line",
+    "spoken": "tar dash xzf backup dot tar dot gz",
+    "expected": "tar -xzf backup.tar.gz",
+    "mustKeep": ["-xzf", "backup.tar.gz"],
+    "context": {
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal"
+    },
+    "destination": "terminal",
+    "expectedExact": "tar -xzf backup.tar.gz",
+    "addedFor": 8014
+  },
+  {
+    "id": "shell-option-said-as-one-word-java",
+    "note": "a short option said as one whole word after the program keeps its dash at a command line",
+    "spoken": "java dash version",
+    "expected": "java -version",
+    "mustKeep": ["-version"],
+    "context": {
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal"
+    },
+    "destination": "terminal",
+    "expectedExact": "java -version",
+    "addedFor": 8014
+  },
+  {
+    "id": "shell-go-package-pattern",
+    "note": "a package pattern said as dot slash and three dots is written whole, not as an ellipsis or a lost dot",
+    "spoken": "go test dot slash dot dot dot",
+    "expected": "go test ./...",
+    "mustKeep": ["./..."],
+    "context": {
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal"
+    },
+    "destination": "terminal",
+    "expectedExact": "go test ./...",
+    "addedFor": 8013
+  },
+  {
+    "id": "shell-chmod-symbolic-mode",
+    "note": "a symbolic permission mode said after chmod is one word with its operator",
+    "spoken": "chmod u plus x deploy dot sh",
+    "expected": "chmod u+x deploy.sh",
+    "mustKeep": ["u+x", "deploy.sh"],
+    "context": {
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal"
+    },
+    "destination": "terminal",
+    "expectedExact": "chmod u+x deploy.sh",
+    "addedFor": 8015
+  },
+  {
+    "id": "shell-chmod-marked-subject-not-joined",
+    "note": "a mark after the subject of a symbolic mode is the speaker's, so the words are not joined",
+    "spoken": "chmod u, plus x deploy dot sh",
+    "expected": "chmod u plus x deploy.sh",
+    "mustKeep": ["plus", "deploy.sh"],
+    "context": {
+      "applicationName": "Terminal",
+      "bundleIdentifier": "com.apple.Terminal"
+    },
+    "destination": "terminal",
+    "expectedExact": "chmod u plus x deploy.sh",
+    "addedFor": 8015
   }
 ]

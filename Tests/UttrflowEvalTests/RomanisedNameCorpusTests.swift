@@ -30,11 +30,11 @@ struct RomanisedNameCorpusTests {
         }
     }
 
-    @Test("a name no owned source holds stays lower case, and nothing else gains a capital")
+    @Test("a listed name is written right, any other stays lower case, and nothing else gains a capital")
     func unownedAndControl() async throws {
         let score = try await RomanisedNameCorpus.score(Self.run)
         #expect(score.nameAccuracy(.owned) == 1)
-        #expect(score.nameAccuracy(.unowned) == 0)
+        #expect(abs((score.nameAccuracy(.unowned) ?? 0) - 2.0 / 3.0) < 1e-9)
         #expect(score.lowerCaseAccuracy == 1)
     }
 }

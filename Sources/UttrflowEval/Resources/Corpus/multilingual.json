@@ -230,5 +230,85 @@
     "expected": "Kal ka match dekha kya, time pe office aa jaana, error aaya to mujhe batana.",
     "mustKeep": ["match", "time", "office", "error"],
     "mustNotAdd": ["maich", "taim", "ophis", "erar"]
+  },
+  {
+    "id": "hinglish-digit-before-hazaar",
+    "note": "A scale word after a numeral stays as said; its value is not written beside the numeral.",
+    "language": "hi",
+    "addedFor": 8016,
+    "spoken": "mujhe 5 hazaar rupaye chahiye",
+    "expected": "Mujhe 5 hazaar rupaye chahiye.",
+    "mustKeep": ["hazaar"],
+    "mustNotAdd": ["1,000"]
+  },
+  {
+    "id": "hinglish-digit-before-crore",
+    "note": "A scale word after a numeral stays as said in a sentence the word is does not make English.",
+    "language": "hi",
+    "addedFor": 8016,
+    "spoken": "ye flat 3 crore rupaye ka hai",
+    "expected": "Ye flat 3 crore rupaye ka hai.",
+    "mustKeep": ["crore"],
+    "mustNotAdd": ["10,000,000"]
+  },
+  {
+    "id": "hinglish-devanagari-loanwords-credit-shift-complete",
+    "note": "More English words the recogniser writes in Devanagari come out in English spelling, not by sound.",
+    "language": "hi",
+    "addedFor": 8021,
+    "spoken": "सैलरी क्रेडिट हो गई और शिफ्ट पर टेस्टिंग कम्प्लीट करनी है",
+    "expected": "Salary credit ho gayi aur shift par testing complete karni hai.",
+    "mustKeep": ["credit", "shift", "complete"],
+    "mustNotAdd": ["kredit", "shipht", "kampleet"]
+  },
+  {
+    "id": "hinglish-devanagari-loanwords-invoice-reply-restart",
+    "note": "Business and device words in Devanagari keep their English spelling.",
+    "language": "hi",
+    "addedFor": 8021,
+    "spoken": "इन्वॉइस का रिपलाइ भेजो और ब्राउजर रीस्टार्ट करो",
+    "expected": "Invoice ka reply bhejo aur browser restart karo.",
+    "mustKeep": ["invoice", "reply", "browser", "restart"],
+    "mustNotAdd": ["inwois", "riplai", "brauzar", "reestaart"]
+  },
+  {
+    "id": "hinglish-saath-baje-not-sixty",
+    "note": "A number no clock shows is not written before baje; the recogniser's word stays.",
+    "language": "hi",
+    "addedFor": 8017,
+    "spoken": "kal subah saath baje utna hai",
+    "expected": "Kal subah saath baje utna hai.",
+    "mustKeep": ["saath", "baje"],
+    "mustNotAdd": ["60"]
+  },
+  {
+    "id": "hinglish-devanagari-cities",
+    "note": "Cities the recogniser writes in Devanagari come out as people type them, not by sound.",
+    "language": "hi",
+    "addedFor": 8018,
+    "spoken": "मैं मुंबई और हैदराबाद जा रहा हूँ",
+    "expected": "Main Mumbai aur Hyderabad ja raha hoon.",
+    "mustKeep": ["Mumbai", "Hyderabad"],
+    "mustNotAdd": ["munbai", "haidrabaad"]
+  },
+  {
+    "id": "hinglish-devanagari-common-names",
+    "note": "Common given names and surnames in Devanagari keep their typed spelling and capital.",
+    "language": "hi",
+    "addedFor": 8018,
+    "spoken": "राहुल ने गुप्ता जी को फोन किया",
+    "expected": "Rahul ne Gupta ji ko phone kiya.",
+    "mustKeep": ["Rahul", "Gupta"],
+    "mustNotAdd": ["raahul"]
+  },
+  {
+    "id": "hinglish-devanagari-english-months",
+    "note": "English month names the recogniser writes in Devanagari come out as people type them, not by sound.",
+    "language": "hi",
+    "addedFor": 8046,
+    "spoken": "प्रोजेक्ट की डेडलाइन 15 मार्च है और रिलीज़ सितंबर में है",
+    "expected": "Project ki deadline 15 March hai aur release September mein hai.",
+    "mustKeep": ["March", "September"],
+    "mustNotAdd": ["maarch", "sitanbar"]
   }
 ]

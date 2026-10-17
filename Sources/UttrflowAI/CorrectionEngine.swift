@@ -256,7 +256,12 @@ public struct WordCorrectionEngine: Sendable {
     private static func mayBeNonWord(_ letters: String) -> Bool {
         // Capitals past the first letter are a form written on purpose, as "YOYO" is, not a word misheard.
         !letters.isEmpty && letters.allSatisfy(\.isLetter) && letters.dropFirst().allSatisfy(\.isLowercase)
-            && !GeneralVocabulary.isOrdinary(letters)
+            && !GeneralVocabulary.isOrdinary(letters) && isPronounceableAsAName(letters)
+    }
+
+    /// Whether the letters could be a name half heard: a spelled letter, or a run with no vowel such as `ls` or `kb`, is a code, never a name.
+    private static func isPronounceableAsAName(_ letters: String) -> Bool {
+        letters.count > 1 && letters.contains { "aeiouyAEIOUY".contains($0) }
     }
 
     /// Whether any word of the utterance is listed romanised Hindi that is not also English, as "kar" is and "main" is not.
@@ -305,12 +310,19 @@ public struct WordCorrectionEngine: Sendable {
     static func spells(_ entry: DictionaryEntry, asHeard heard: String) -> Bool {
         if WordShape.words(heard).count > 1 {
             return entry.readings.contains { MeaningPreservationGuard.isWritten(heard, in: $0) }
-                || reads(entry, as: heard)
+                || (!spellsLetters(heard) && reads(entry, as: heard))
         }
         // The spelling or any pronunciation the user wrote for it, which is what that list is for.
         return entry.readings.contains {
             ReadingRestraint.closedUp($0) == ReadingRestraint.closedUp(heard)
                 || ReadingRestraint.soundsNear($0, heard: heard)
+        }
+    }
+
+    /// Whether a run holds a letter spoken as its name, as "p s" and "e g" do; "a" and "I" are words as well.
+    static func spellsLetters(_ run: String) -> Bool {
+        WordShape.words(run).contains {
+            $0.count == 1 && $0.first?.isLetter == true && !["a", "i"].contains($0.lowercased())
         }
     }
 

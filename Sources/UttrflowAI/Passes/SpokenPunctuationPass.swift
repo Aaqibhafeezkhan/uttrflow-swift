@@ -87,6 +87,11 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
                 position += 1
                 continue
             }
+            if let next = replaceSymbolicMode(at: position, in: &live, of: &draft) {
+                sentenceEnd = nil
+                position = next
+                continue
+            }
             if sentenceEnd.map({ position >= $0 }) ?? true {
                 sentenceEnd = draft.sentenceEnd(from: position, in: live)
             }
@@ -494,6 +499,64 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
     /// The most letters one spoken short-option cluster joins: `tar -xzvf` and a little more.
     static let clusterLimit = 6
 
+    /// The most letters one option said as a single word may have at a shell prompt: `-configuration`.
+    static let optionWordLimit = 16
+
+    /// Whether every word before `position` names a program, at a shell prompt: only then is a hyphen between words not the name's own.
+    private func followsOnlyPrograms(before position: Int, in live: [Int], of draft: Draft) -> Bool {
+        destination == .terminal && position > 0
+            && live[..<position].allSatisfy { Self.commands[draft.shape(at: $0).key] != nil }
+    }
+
+    /// The signs a symbolic permission mode is said with, and what each writes.
+    private static let modeSigns: [String: String] = ["plus": "+", "minus": "-"]
+
+    /// The letters that name whose permissions a mode changes, and those that name the permissions.
+    private static let modeWho = "ugoa"
+    private static let modePermissions = "rwxXst"
+
+    /// Writes a symbolic mode said after chmod as one word: "u plus x" is `u+x` and "plus rwx" is `+rwx`; returns the position to go on from.
+    private func replaceSymbolicMode(at position: Int, in live: inout [Int], of draft: inout Draft) -> Int? {
+        guard destination == .terminal, position > 0, position + 1 < live.count,
+            let sign = Self.modeSigns[draft.shape(at: live[position]).key],
+            draft.shape(at: live[position]).prefix.isEmpty, draft.shape(at: live[position]).suffix.isEmpty
+        else { return nil }
+        // A mark on the command word or the subject is the speaker's, and a join would delete it.
+        let unmarked = (0..<position).allSatisfy { index in
+            let shape = draft.shape(at: live[index])
+            return shape.prefix.isEmpty && shape.suffix.isEmpty
+        }
+        guard unmarked else { return nil }
+        let before = (0..<position).map { draft.shape(at: live[$0]).key }
+        let who = before.last.flatMap { word in
+            word.count <= 4 && !word.isEmpty && word.allSatisfy(Self.modeWho.contains) ? word : nil
+        }
+        let command = who == nil ? before : before.dropLast()
+        // chmod opens the line, alone or after sudo, and no mark or flag stands between it and the mode.
+        guard command.last == "chmod", command.count <= 2, command.first == "chmod" || command.first == "sudo"
+        else { return nil }
+        var permissions = ""
+        var next = position + 1
+        while next < live.count, permissions.count < 4 {
+            let shape = draft.shape(at: live[next])
+            let word = shape.core
+            guard shape.prefix.isEmpty, !word.isEmpty, word.count <= 3,
+                word.allSatisfy(Self.modePermissions.contains)
+            else { break }
+            permissions += word
+            next += 1
+            if !shape.suffix.isEmpty { break }
+        }
+        guard !permissions.isEmpty else { return nil }
+        let closing = draft.shape(at: live[next - 1]).suffix
+        let token = (who ?? "") + sign + permissions + closing
+        let head = who == nil ? position : position - 1
+        draft.replace(at: live[head], with: token, by: Self.id)
+        for index in live[(head + 1)..<next] { draft.remove(at: index, by: Self.id) }
+        live.removeSubrange((head + 1)..<next)
+        return head + 1
+    }
+
     /// Writes a short option and its spelled letters or spoken number as one token: `ls -la`, `rm -rf`, `head -20`.
     private func replaceShortFlag(at position: Int, in live: inout [Int], of draft: inout Draft) -> Bool {
         guard position + 1 < live.count, position > 0,
@@ -504,7 +567,9 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
                 at: position, spanning: 1, in: live, of: draft,
                 reach: MentionGuard.phraseReach, kind: .joining),
             let (option, length) =
-                letterCluster(after: position, in: live, of: draft)
+                letterCluster(
+                    after: position, in: live, of: draft,
+                    wholeWord: followsOnlyPrograms(before: position, in: live, of: draft))
                 ?? numericOption(after: position, in: live, of: draft)
         else { return false }
         // The option keeps the mark its last word carried, so a spoken stop or comma survives the join.
@@ -516,7 +581,9 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
     }
 
     /// The letters spelled after an option marker, each one spoken alone or after "capital", and how many words said them.
-    private func letterCluster(after position: Int, in live: [Int], of draft: Draft) -> (String, Int)? {
+    private func letterCluster(
+        after position: Int, in live: [Int], of draft: Draft, wholeWord allowsLongWord: Bool = false
+    ) -> (String, Int)? {
         var letters = ""
         var next = position + 1
         while next < live.count, letters.count < Self.clusterLimit {
@@ -524,10 +591,17 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
             let capital = said.key == "capital" && said.suffix.isEmpty && next + 1 < live.count
             let shape = capital ? draft.shape(at: live[next + 1]) : said
             // A one-word option said whole, "dash la", is its own cluster and ends it.
-            let limit = letters.isEmpty && !capital ? 2 : 1
+            let wholeWord = letters.isEmpty && !capital
+            let limit = wholeWord ? (allowsLongWord ? Self.optionWordLimit : 2) : 1
             guard shape.prefix.isEmpty, (1...limit).contains(shape.core.utf8.count),
                 Self.isLatinLetters(shape.core)
             else { break }
+            // A word of three letters or more is an option such as `-version` only when it is no function word and no number.
+            if wholeWord, shape.core.utf8.count > 2,
+                isFunctionWordEvidence(shape.key) || NumberWords.isNumber(shape.key)
+            {
+                break
+            }
             // A letter that a slash, a dot or an underscore carries on starts a path or a name, not another option.
             let carried = next + (capital ? 2 : 1)
             if !letters.isEmpty, shape.suffix.isEmpty, carried < live.count,
@@ -610,8 +684,8 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
     /// Names that stand between two phrases, where the noun "comma" or "colon" would instead be the object or modifier of the word before.
     static let seamNames: Set<[String]> = [["comma"], ["colon"]]
 
-    /// Word classes after which the noun reading takes the name as an object or modifier: "has colon trouble", "from colon cancer".
-    private static let nounTakers: Set<NLTag> = [.verb, .preposition, .adjective, .determiner]
+    /// Word classes after which the noun reading takes the name as an object or modifier: "has colon trouble", "from colon cancer", "and colon cancer".
+    private static let nounTakers: Set<NLTag> = [.verb, .preposition, .adjective, .determiner, .conjunction]
 
     /// Whether a spoken comma or colon follows a word that closes a phrase, so it is not the object or modifier of that word and does not join the word after it into a compound.
     private func closesAPhrase(_ words: [String], at position: Int, in live: [Int], of draft: Draft) -> Bool {
@@ -725,6 +799,15 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
             || LayoutWordsPass.opensList(at: next, in: live, of: draft)
     }
 
+    /// The word with the spoken mark on its end; a question mark and an exclamation mark, in either order, make a pair.
+    private static func marked(_ text: String, with mark: String) -> String {
+        // The character before the last one keeps an existing "?!" or "!?" from taking a third mark.
+        guard mark == "?" || mark == "!", let last = text.last, "?!".contains(last), String(last) != mark,
+            !"?!".contains(text.dropLast().last ?? " ")
+        else { return WordShape.marked(text, with: mark) }
+        return text + mark
+    }
+
     /// Fixes the mark to its neighbour and drops the spoken name, or refuses when the neighbour is missing.
     private func attach(
         _ mark: String, kind: SpokenMarkKind, at position: Int, spanning length: Int,
@@ -754,8 +837,8 @@ public struct SpokenPunctuationPass: PieceCleaningPass {
             live.remove(at: after)
         } else {
             let previous = live[position - 1]
-            draft.replace(
-                at: previous, with: WordShape.marked(draft.words[previous].text, with: mark), by: Self.id)
+            let written = Self.marked(draft.words[previous].text, with: mark)
+            draft.replace(at: previous, with: written, by: Self.id)
         }
         // A mark written onto the name, as "at sign" writes onto "open paren", moves on rather than going with it.
         for index in live[position..<after] {

@@ -33,6 +33,42 @@ struct RomaniserTests {
     }
 
     @Test(
+        "writes more English words the recogniser spells in Devanagari as people type them",
+        arguments: [
+            ("कम्प्लीट", "complete"), ("क्रेडिट", "credit"), ("शिफ्ट", "shift"),
+            ("रीस्टार्ट", "restart"), ("क्वार्टर", "quarter"), ("ग्लास", "glass"), ("सेकंड", "second"),
+            ("रिपलाइ", "reply"), ("स्लो", "slow"), ("डाउन", "down"), ("डिप्लॉयमेंट", "deployment"),
+            ("इन्वॉइस", "invoice"), ("इनवाइट", "invite"), ("स्टैंडअप", "standup"), ("कॉन्फ़िगर", "configure"),
+            ("ब्राउजर", "browser"), ("पासपोर्ट", "passport"), ("वीज़ा", "visa"), ("सर्टिफिकेट", "certificate"),
+        ])
+    func moreLoanwords(devanagari: String, typed: String) {
+        #expect(Romaniser.romanised(devanagari) == typed)
+    }
+
+    @Test(
+        "writes the best known Indian cities and common names as people type them, with their capital",
+        arguments: [
+            ("मुंबई", "Mumbai"), ("बैंगलोर", "Bangalore"), ("बेंगलुरु", "Bengaluru"), ("हैदराबाद", "Hyderabad"),
+            ("अहमदाबाद", "Ahmedabad"), ("चेन्नई", "Chennai"), ("कोलकाता", "Kolkata"), ("पुणे", "Pune"),
+            ("जयपुर", "Jaipur"), ("गोवा", "Goa"), ("राहुल", "Rahul"), ("कोहली", "Kohli"), ("गुप्ता", "Gupta"),
+            ("अंजलि", "Anjali"), ("ऐश्वर्या", "Aishwarya"), ("सिद्धार्थ", "Siddharth"),
+        ])
+    func citiesAndNames(devanagari: String, typed: String) {
+        #expect(Romaniser.romanised(devanagari) == typed)
+    }
+
+    @Test(
+        "writes the English month names as people type them, and keeps the Hindi-form months as spoken",
+        arguments: [
+            ("मार्च", "March"), ("अप्रैल", "April"), ("जून", "June"), ("जुलाई", "July"), ("सितंबर", "September"),
+            ("अक्टूबर", "October"), ("नवंबर", "November"), ("दिसंबर", "December"), ("दिसम्बर", "December"),
+            ("जनवरी", "janvari"), ("फरवरी", "farvari"), ("अगस्त", "agast"),
+        ])
+    func monthNames(devanagari: String, typed: String) {
+        #expect(Romaniser.romanised(devanagari) == typed)
+    }
+
+    @Test(
         "drops the unwritten vowel at the end of a word and between syllables, and keeps it before a conjunct",
         arguments: [
             ("करना", "karna"), ("समझना", "samajhna"), ("निकलने", "nikalne"), ("भागदौड़", "bhaagdaud"),

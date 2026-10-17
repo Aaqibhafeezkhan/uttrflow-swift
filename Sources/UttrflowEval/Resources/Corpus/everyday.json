@@ -571,6 +571,62 @@
     "mustNotAdd": ["?"]
   },
   {
+    "id": "toll-free-prefix-keeps-its-zeros-after-a-label",
+    "addedFor": 8004,
+    "spoken": "our toll free number is one eight hundred two two two three three three four",
+    "expected": "Our toll free number is 18002223334.",
+    "mustKeep": ["18002223334"],
+    "mustNotAdd": ["1802223334"]
+  },
+  {
+    "id": "decimal-without-whole-part-before-a-scale-word",
+    "addedFor": 8005,
+    "spoken": "the pilot reached point five million households by the end of march",
+    "expected": "The pilot reached 0.5 million households by the end of March.",
+    "mustKeep": ["0.5 million", "households"],
+    "mustNotAdd": ["5,000,000", "point"]
+  },
+  {
+    "id": "plus-or-minus-keeps-its-words-before-a-percentage",
+    "addedFor": 8006,
+    "spoken": "the tolerance on every unit is plus or minus two percent",
+    "expected": "The tolerance on every unit is plus or minus 2%.",
+    "mustKeep": ["plus or minus", "2%"],
+    "mustNotAdd": ["-2%"]
+  },
+  {
+    "id": "article-stays-apart-from-a-number-and-a-unit-letter",
+    "addedFor": 8007,
+    "spoken": "she is a ten x engineer on the platform team",
+    "expected": "She is a 10 x engineer on the platform team.",
+    "mustKeep": ["a 10 x engineer", "platform"],
+    "mustNotAdd": ["A10X"]
+  },
+  {
+    "id": "plural-century-and-decade-said-as-two-number-words",
+    "addedFor": 8009,
+    "spoken": "the mill opened in the nineteen hundreds and was rebuilt in the twenty tens",
+    "expected": "The mill opened in the 1900s and was rebuilt in the 2010s.",
+    "mustKeep": ["1900s", "2010s"],
+    "mustNotAdd": ["19 hundreds", "20 tens"]
+  },
+  {
+    "id": "exit-code-said-in-two-halves-is-not-a-clock-time",
+    "addedFor": 8035,
+    "spoken": "the script exited with code one twenty seven after the migration step",
+    "expected": "The script exited with code 127 after the migration step.",
+    "mustKeep": ["code 127", "migration"],
+    "mustNotAdd": ["1:27"]
+  },
+  {
+    "id": "spoken-question-and-exclamation-mark-make-a-pair",
+    "addedFor": 8008,
+    "spoken": "you moved the whole schedule question mark exclamation mark without telling anyone",
+    "expected": "You moved the whole schedule?! Without telling anyone.",
+    "mustKeep": ["schedule?!", "anyone"],
+    "mustNotAdd": ["schedule!"]
+  },
+  {
     "id": "year-after-by-not-a-clock-time",
     "spoken": "we had fifty customers and by twenty twenty four we had five thousand",
     "expected": "We had 50 customers and by 2024 we had 5000.",
@@ -1741,5 +1797,69 @@
     "expected": "The score was two two at half time.",
     "mustKeep": ["two two"],
     "addedFor": 7851
+  },
+  {
+    "id": "wrapped-subject-appositive-stays-a-statement",
+    "note": "A subject interrupted by an aside and finished by its predicate is a statement, not an inverted question.",
+    "spoken": "the winner, john, was the youngest player",
+    "expected": "The winner, John, was the youngest player.",
+    "mustKeep": ["winner", "youngest player"],
+    "addedFor": 8019
+  },
+  {
+    "id": "wrapped-subject-relative-clause-stays-a-statement",
+    "spoken": "the road, which was closed, is the shortest way",
+    "expected": "The road, which was closed, is the shortest way.",
+    "mustKeep": ["road", "shortest way"],
+    "addedFor": 8019
+  },
+  {
+    "id": "wrapped-subject-spoken-commas-stays-a-statement",
+    "spoken": "the cafe by the station comma which opens early comma is the best one",
+    "expected": "The cafe by the station, which opens early, is the best one.",
+    "mustKeep": ["cafe", "best one"],
+    "addedFor": 8019
+  },
+  {
+    "id": "letter-a-label-keeps-its-comma-and-case",
+    "note": "A capital A inside a sentence is the letter of a label, not the article: it keeps its capital and the comma the speaker paused on.",
+    "spoken": "Part A, part B, and part C are due Monday.",
+    "expected": "Part A, part B, and part C are due Monday.",
+    "expectedExact": "Part A, part B, and part C are due Monday.",
+    "mustKeep": ["Part A,", "part B"],
+    "addedFor": 8042
+  },
+  {
+    "id": "letter-a-answer-choice-keeps-case",
+    "spoken": "Ask the question, then answer A, B, or C.",
+    "expected": "Ask the question, then answer A, B, or C.",
+    "expectedExact": "Ask the question, then answer A, B, or C.",
+    "mustKeep": ["answer A, B"],
+    "addedFor": 8042
+  },
+  {
+    "id": "title-of-a-work-keeps-its-capitals",
+    "note": "A title the recogniser capitalised is a run of capitalised words, which is the speaker's and not a stray capital.",
+    "spoken": "I just finished reading The Lord of the Rings and now I want to watch the films.",
+    "expected": "I just finished reading The Lord of the Rings and now I want to watch the films.",
+    "expectedExact": "I just finished reading The Lord of the Rings and now I want to watch the films.",
+    "mustKeep": ["The Lord of the Rings"],
+    "addedFor": 8047
+  },
+  {
+    "id": "institution-name-keeps-its-capitals",
+    "spoken": "I booked a room at the Grand Hotel on Park Avenue for Friday.",
+    "expected": "I booked a room at the Grand Hotel on Park Avenue for Friday.",
+    "expectedExact": "I booked a room at the Grand Hotel on Park Avenue for Friday.",
+    "mustKeep": ["Grand Hotel", "Park Avenue"],
+    "addedFor": 8047
+  },
+  {
+    "id": "product-name-keeps-its-capitals",
+    "spoken": "Please open Visual Studio Code and then the Terminal app.",
+    "expected": "Please open Visual Studio Code and then the Terminal app.",
+    "expectedExact": "Please open Visual Studio Code and then the Terminal app.",
+    "mustKeep": ["Visual Studio Code"],
+    "addedFor": 8047
   }
 ]

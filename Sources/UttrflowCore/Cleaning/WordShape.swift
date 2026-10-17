@@ -29,6 +29,9 @@ public struct WordShape: Equatable, Sendable {
     /// Whether the word closes a clause or a sentence.
     public var endsClause: Bool { suffix.contains(where: { ",.;:!?".contains($0) }) }
 
+    /// Whether the word is the capital letter A, a label ("Part A", "Grade A") where the article is written "a".
+    package var isLetterA: Bool { core == "A" }
+
     /// Whether the word is a command option such as "-i" or "--force", whose letters are case-sensitive.
     public var isOption: Bool {
         (prefix == "-" || prefix == "--") && core.first.map { $0.isLetter || $0.isNumber } == true
@@ -268,7 +271,9 @@ public struct WordShape: Equatable, Sendable {
         let quoted = trailingQuotes(of: text)
         let body = String(text.dropLast(quoted.count))
         // A word that is only a dot is the current directory, never a stop.
-        guard body != ".", body.hasSuffix("."), !body.hasSuffix("..") else { return text }
+        guard body != ".", body.hasSuffix(".") else { return text }
+        // A path ending in the `/...` wildcard keeps its three dots and loses only the stop after them.
+        guard !body.hasSuffix("..") || body.hasSuffix("/....") else { return text }
         return String(body.dropLast()) + quoted
     }
 

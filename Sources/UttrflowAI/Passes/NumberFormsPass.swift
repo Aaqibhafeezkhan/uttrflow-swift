@@ -388,7 +388,8 @@ public struct NumberFormsPass: PieceCleaningPass {
             return amount
         }
         if (keys[position] == "negative" || keys[position] == "minus"), joined(position + 1, shapes),
-            !subtracts(at: position, keys: keys, shapes: shapes)
+            !subtracts(at: position, keys: keys, shapes: shapes),
+            !completesPlusOrMinus(at: position, keys: keys, shapes: shapes)
         {
             return negative(at: position, keys: keys, shapes: shapes, policy: policy, digits: digits)
         }
@@ -642,11 +643,17 @@ public struct NumberFormsPass: PieceCleaningPass {
             return Phrase(text: text, count: end + following.count + 1 - position)
         }
         var text = item.text
-        while joined(end, shapes),
-            let group = NumberWords.cardinal(unbroken(from: end, keys: keys, shapes: shapes))
-        {
-            text += String(group.value)
-            end += group.count
+        // A scale then single digits is the scale and the digits, as it is outside a context, so a toll-free prefix keeps its zeros.
+        while joined(end, shapes) {
+            if let group = digitStringAware(at: end, keys: keys, shapes: shapes) {
+                text += String(group.value)
+                end += group.count
+            } else if let step = digitStep(at: end, keys: keys, shapes: shapes) {
+                text += step.text
+                end += step.count
+            } else {
+                break
+            }
         }
         return end == position + item.count ? nil : Phrase(text: text, count: end - position)
     }
@@ -952,6 +959,12 @@ public struct NumberFormsPass: PieceCleaningPass {
             || NumberWords.scales[previous] != nil
     }
 
+    /// Whether "minus" here ends "plus or minus", a tolerance whose number is not negative.
+    private static func completesPlusOrMinus(at position: Int, keys: [String], shapes: [WordShape]) -> Bool {
+        keys[position] == "minus" && position > 1 && joined(position - 1, shapes) && joined(position, shapes)
+            && keys[position - 1] == "or" && keys[position - 2] == "plus"
+    }
+
     /// The written magnitude of a lone "k", "m" or "b" at `index`: "m" and "b" count only after a decimal or before a noun, else nil.
     private static func magnitudeMark(
         at index: Int, after position: Int, decimal: Bool, keys: [String], shapes: [WordShape]
@@ -996,6 +1009,11 @@ public struct NumberFormsPass: PieceCleaningPass {
     /// Units after which a decimal with no whole part reads as a number; "second" is safe after digits.
     static let leadingDecimalUnits = measures.union(currencies).union(["second", "seconds", "minute", "hour"])
 
+    /// Whether the word is a scale of a thousand or more, which a bare decimal before it is a fraction of.
+    private static func isBigScale(_ key: String) -> Bool {
+        NumberWords.scales[key].map { $0 >= 1000 } ?? false
+    }
+
     /// "point five percent", "minus point two": a decimal with no whole part, cued by a sign before or a unit after.
     private static func leadingDecimal(at position: Int, keys: [String], shapes: [WordShape]) -> Phrase? {
         guard keys[position] == "point", let group = digitGroup(at: position + 1, keys: keys, shapes: shapes)
@@ -1009,7 +1027,7 @@ public struct NumberFormsPass: PieceCleaningPass {
             position > 0 && joined(position, shapes) && ["negative", "minus"].contains(keys[position - 1])
         // An adjective before "point" makes it the noun, as in "a good point five minutes ago".
         let measured =
-            joined(end, shapes) && leadingDecimalUnits.contains(keys[end])
+            joined(end, shapes) && (leadingDecimalUnits.contains(keys[end]) || isBigScale(keys[end]))
             && (position == 0 || LexicalClass.tag(ofWordAt: position - 1, in: keys) != .adjective)
         guard signed || measured else { return nil }
         return Phrase(text: text, count: end - position)
@@ -1024,6 +1042,14 @@ public struct NumberFormsPass: PieceCleaningPass {
         if let digits = NumberWords.digits(keys[position]) {
             return Item(value: Int(digits), text: digits, count: 1, spoken: false)
         }
+        guard let reading = digitStringAware(at: position, keys: keys, shapes: shapes) else { return nil }
+        return Item(value: reading.value, text: String(reading.value), count: reading.count, spoken: true)
+    }
+
+    /// The longest cardinal at `position`, shortened by its last unit when that unit starts a string of single digits, so "eight hundred" and the digits after it stay apart.
+    private static func digitStringAware(
+        at position: Int, keys: [String], shapes: [WordShape]
+    ) -> (value: Int, count: Int)? {
         guard let parsed = NumberWords.cardinal(unbroken(from: position, keys: keys, shapes: shapes)) else {
             return nil
         }
@@ -1035,9 +1061,9 @@ public struct NumberFormsPass: PieceCleaningPass {
             joined(last, shapes), joined(last + 1, shapes), singleDigit(keys[last + 1]) != nil,
             let shorter = NumberWords.cardinal(keys[position..<last]), shorter.count == parsed.count - 1
         {
-            return Item(value: shorter.value, text: String(shorter.value), count: shorter.count, spoken: true)
+            return (shorter.value, shorter.count)
         }
-        return Item(value: parsed.value, text: String(parsed.value), count: parsed.count, spoken: true)
+        return (parsed.value, parsed.count)
     }
 
     /// Whether a meridiem stands at `index`, written as one word or said as its two letters, "p m".
@@ -1104,8 +1130,14 @@ public struct NumberFormsPass: PieceCleaningPass {
             if !shapes[end - 1].suffix.isEmpty { break }
         }
         guard let read = NumberWords.hindiCardinal(keys[start..<end]) else { return nil }
+        // A scale word straight after a numeral multiplies it ("5 hazaar") and is not an amount of its own.
+        let scaleOnly = NumberWords.hindi[keys[start]].map { $0 >= 100 } ?? false
+        guard !(scaleOnly && start > 0 && joined(start, shapes) && keys[start - 1].first?.isNumber == true)
+        else { return nil }
         let unit = start + read.count
         guard joined(unit, shapes) else { return nil }
+        // No clock shows past 24, so a larger number before a clock word is another word the recogniser misheard.
+        guard !(hindiClockWords.contains(keys[unit]) && read.value > 24) else { return nil }
         let shared = sharedMeasures.contains(keys[unit])
         guard
             hindiMeasures.contains(keys[unit])
@@ -1408,13 +1440,22 @@ public struct NumberFormsPass: PieceCleaningPass {
         guard let century = NumberWords.teens[keys[position]] ?? NumberWords.tens[keys[position]],
             [19, 20].contains(century),
             joined(position + 1, shapes),
-            let decade = NumberWords.tens.first(where: {
-                $0.value >= 20 && $0.value <= 90
-                    && ($0.key.hasSuffix("y") ? String($0.key.dropLast()) + "ies" : $0.key + "s")
-                        == keys[position + 1]
-            })?.value
+            let decade = decadeValue(of: keys[position + 1])
         else { return nil }
         return Phrase(text: "\(century * 100 + decade)s", count: 2)
+    }
+
+    /// The tens a plural decade word stands for: "eighties" is 80, "tens" is 10, and "hundreds" is the century's own 0.
+    private static func decadeValue(of key: String) -> Int? {
+        switch key {
+        case "hundreds": return 0
+        case "tens": return 10
+        default:
+            return NumberWords.tens.first(where: {
+                $0.value >= 20 && $0.value <= 90
+                    && ($0.key.hasSuffix("y") ? String($0.key.dropLast()) + "ies" : $0.key + "s") == key
+            })?.value
+        }
     }
 
     /// Keeps fixed spoken idioms intact so their number words are not partially rewritten.
