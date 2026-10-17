@@ -378,10 +378,10 @@
       "licence": "MIT",
       "redistribution": true,
       "note": "written for this repository, copied from no list; read through DataTable; see Docs/data-tables.md",
-      "sha256": "97cee72c2bcf8a5d22bd0766ba5f03da830c2b8b4ab86e61db6b57d207d94f3f",
+      "sha256": "ca8b3bca3e7a23ecc3688efbf73ade0547919af51038d5905d1039c5c50f2bb4",
       "path": "Sources/UttrflowCore/Resources/Tables/technical-lexicon.json",
       "origin": "authored",
-      "bytes": 32339
+      "bytes": 36120
     },
     {
       "licence": "MIT",
@@ -639,11 +639,11 @@
     },
     {
       "note": "evaluation cases read through CorpusFile",
-      "sha256": "be6672cf372dbe1e7212c4481678045573db5d96eb1ff41fa9f24b78af2b86b3",
+      "sha256": "bdf7b0795d657044d4285cfdcf32dd419859c3c12ec8497f811b2c0fc51f64a0",
       "path": "Sources/UttrflowEval/Resources/Corpus/technical.json",
       "origin": "authored",
       "redistribution": true,
-      "bytes": 47913,
+      "bytes": 49248,
       "licence": "MIT"
     },
     {
