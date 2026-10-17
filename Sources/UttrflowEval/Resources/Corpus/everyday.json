@@ -1677,5 +1677,27 @@
     "expected": "Type open quote yes close quote.",
     "mustKeep": ["open quote", "close quote"],
     "addedFor": 7967
+  },
+  {
+    "id": "doubled-number-year-kept",
+    "note": "A repeated number mid-sentence is kept: a year, a score or an even split cannot be told from a stammer by the number alone.",
+    "spoken": "it was twenty twenty and then covid",
+    "expected": "It was 2020 and then covid.",
+    "mustKeep": ["2020", "covid"],
+    "addedFor": 7851
+  },
+  {
+    "id": "doubled-number-even-split-kept",
+    "spoken": "a fifty fifty chance",
+    "expected": "A fifty fifty chance.",
+    "mustKeep": ["fifty fifty"],
+    "addedFor": 7851
+  },
+  {
+    "id": "doubled-number-score-kept",
+    "spoken": "the score was two two at half time",
+    "expected": "The score was two two at half time.",
+    "mustKeep": ["two two"],
+    "addedFor": 7851
   }
 ]
