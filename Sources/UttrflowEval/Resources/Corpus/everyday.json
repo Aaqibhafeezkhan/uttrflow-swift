@@ -551,6 +551,13 @@
     "mustNotAdd": ["red", "strike"]
   },
   {
+    "id": "repeated-correction-restart-opens-clause",
+    "spoken": "I'll take the red one, no, the blue one, no actually the green one is better",
+    "expected": "I'll take the blue one no actually the green one is better.",
+    "mustKeep": ["take", "green one is better"],
+    "mustNotAdd": ["red"]
+  },
+  {
     "id": "strike-that-as-an-order-kept",
     "spoken": "strike that match and light the candle",
     "expected": "Strike that match and light the candle.",
@@ -632,6 +639,20 @@
     "expected": "We had 50 customers and by 2024 we had 5000.",
     "mustKeep": ["2024", "5000"],
     "mustNotAdd": ["20:24"]
+  },
+  {
+    "id": "weekday-and-ordinal-date-restated",
+    "spoken": "see you on tuesday the fourteenth no wait wednesday the fifteenth",
+    "expected": "See you on Wednesday the fifteenth.",
+    "mustKeep": ["Wednesday the fifteenth"],
+    "mustNotAdd": ["Tuesday", "fourteenth"]
+  },
+  {
+    "id": "weekday-and-spoken-date-restated-with-make-that",
+    "spoken": "by friday the twenty third actually make that monday the twenty sixth",
+    "expected": "By Monday the 26th.",
+    "mustKeep": ["Monday the 26th"],
+    "mustNotAdd": ["Friday", "20"]
   },
   {
     "id": "or-rather-before-a-negation-kept",
@@ -1861,5 +1882,28 @@
     "expectedExact": "Please open Visual Studio Code and then the Terminal app.",
     "mustKeep": ["Visual Studio Code"],
     "addedFor": 8047
+    },
+  {
+    "id": "range-shares-hundred",
+    "note": "The one scale said after a range belongs to both ends.",
+    "spoken": "we sold five or six hundred copies",
+    "expected": "We sold 500 or 600 copies.",
+    "mustKeep": ["500", "600"],
+    "addedFor": 7936
+  },
+  {
+    "id": "range-shares-thousand",
+    "spoken": "the crowd was two to three thousand people",
+    "expected": "The crowd was 2000 to 3000 people.",
+    "mustKeep": ["2000", "3000"],
+    "addedFor": 7936
+  },
+  {
+    "id": "range-keeps-its-own-scales",
+    "note": "Each end that carries its own scale is already complete and stays.",
+    "spoken": "we expect two hundred to three hundred people",
+    "expected": "We expect 200 to 300 people.",
+    "mustKeep": ["200", "300"],
+    "addedFor": 7936
   }
 ]
