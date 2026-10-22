@@ -81,6 +81,8 @@ struct PeakMemoryTests {
         ) {
             // Advances only once the poller is actually asleep, so the count of polls is exact.
             for _ in 0..<3 { await clock.advanceWhenSomethingIsWaiting(by: .milliseconds(1)) }
+            // Asleep again only once it has read after the last advance, so that reading is never cancelled away.
+            await clock.waitUntilSomethingIsWaiting()
             return "done"
         }
         #expect(value == "done")
@@ -120,6 +122,28 @@ struct PeakMemoryTests {
                 throw Boom()
             }
         }
+    }
+
+    /// A poller still waiting for a thread when the work starts leaves a test on the injected clock waiting on the scheduler.
+    @Test("the poller is asleep on the clock before the work starts")
+    func pollerSleepsBeforeTheWork() async {
+        let clock = ManualClock()
+        let asleep = await PeakMemory.observed(interval: .seconds(60), read: { nil }, clock: clock) {
+            clock.advanceIfSomethingIsWaiting(exactly: .seconds(60))
+        }.value
+        #expect(asleep)
+    }
+
+    /// A sleep of no time never suspends, so a poller started on the caller would loop there and the work never run.
+    @Test("a zero interval reads only before and after the work")
+    func zeroIntervalNeverPolls() async {
+        let readings = ScriptedReadings([100, 200])
+        let (value, peak) = await PeakMemory.observed(
+            interval: .zero, read: readings.read, clock: ManualClock()
+        ) { 7 }
+        #expect(value == 7)
+        #expect(peak?.footprintBytes == 200)
+        #expect(readings.callCount == 2)
     }
 
     /// The poller must never spin: on a clock that never advances, cancelling it must not need a second reading.
